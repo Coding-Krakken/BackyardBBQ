@@ -50,17 +50,41 @@ enum PaymentStatus {
   refunded
 }
 
+enum ReferralStatus {
+  pending
+  signed_up
+  rewarded
+  expired
+}
+
+enum NotificationType {
+  order_update
+  booking_update
+  payment_update
+  referral_reward
+  promotional
+}
+
 model Customer {
-  id           String            @id @default(cuid())
-  email        String            @unique
-  firstName    String?
-  lastName     String?
-  phone        String?
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-  orders       Order[]
-  bookings     CateringBooking[]
-  payments     PaymentTransaction[]
+  id                    String            @id @default(cuid())
+  email                 String            @unique
+  passwordHash          String?
+  firstName             String?
+  lastName              String?
+  phone                 String?
+  emailVerified         Boolean           @default(false)
+  preferredLocationId   String?
+  dietaryPreferences    Json?
+  notificationSettings  Json?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  orders                Order[]
+  bookings              CateringBooking[]
+  payments              PaymentTransaction[]
+  addresses             Address[]
+  referralsSent         Referral[]        @relation("ReferrerRelation")
+  referralsReceived     Referral[]        @relation("RefereeRelation")
+  notifications         Notification[]
 }
 
 model Location {
@@ -169,4 +193,57 @@ model IntegrationEvent {
   order         Order?    @relation(fields: [orderId], references: [id])
 
   @@index([channel, eventType])
+}
+
+model Address {
+  id          String   @id @default(cuid())
+  customerId  String
+  label       String?
+  street      String
+  city        String
+  state       String
+  zip         String
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+}
+
+model Referral {
+  id            String         @id @default(cuid())
+  referrerId    String
+  refereeEmail  String?
+  refereeId     String?
+  referralCode  String         @unique
+  status        ReferralStatus @default(pending)
+  rewardCents   Int            @default(0)
+  rewardClaimed Boolean        @default(false)
+  claimedAt     DateTime?
+  expiresAt     DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  referrer      Customer       @relation("ReferrerRelation", fields: [referrerId], references: [id], onDelete: Cascade)
+  referee       Customer?      @relation("RefereeRelation", fields: [refereeId], references: [id], onDelete: Cascade)
+
+  @@index([referrerId])
+  @@index([refereeId])
+  @@index([referralCode])
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  customerId  String
+  type        NotificationType
+  title       String
+  message     String
+  read        Boolean          @default(false)
+  actionUrl   String?
+  metadata    Json?
+  createdAt   DateTime         @default(now())
+  customer    Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, read])
+  @@index([createdAt])
 }

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useSession } from "next-auth/react";
 import { orderingLinks } from "../config/content";
 
 const navLinks = [
@@ -20,8 +21,7 @@ const ctaLinks = [
   { href: orderingLinks.orderOnlineUrl, label: "Order Online", variant: "primary" },
   { href: orderingLinks.cateringInquiryUrl, label: "Catering", variant: "secondary" },
   { href: orderingLinks.doordashUrl, label: "DoorDash", variant: "ghost" },
-  { href: orderingLinks.uberEatsUrl, label: "Uber Eats", variant: "ghost" },
-  { href: "/dashboard", label: "Dashboard", variant: "ghost" }
+  { href: orderingLinks.uberEatsUrl, label: "Uber Eats", variant: "ghost" }
 ] as const;
 
 function isExternalUrl(url: string) {
@@ -29,6 +29,7 @@ function isExternalUrl(url: string) {
 }
 
 export function SiteNavbar() {
+  const { data: session, status } = useSession();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
 
@@ -56,6 +57,16 @@ export function SiteNavbar() {
     return classes.join(" ");
   }, [isScrolled, mobileOpen]);
 
+  const authLink = useMemo(() => {
+    if (status === "loading") {
+      return null;
+    }
+    if (session) {
+      return { href: "/dashboard", label: "Dashboard" };
+    }
+    return { href: "/auth/login", label: "Sign In" };
+  }, [session, status]);
+
   return (
     <header className={`site-nav-shell ${navStateClass}`}>
       <nav className="site-nav page-shell" aria-label="Primary navigation">
@@ -82,6 +93,11 @@ export function SiteNavbar() {
               {item.label}
             </a>
           ))}
+          {authLink && (
+            <Link href={authLink.href}>
+              {authLink.label}
+            </Link>
+          )}
         </div>
 
         <div className="site-nav-ctas">
@@ -104,9 +120,11 @@ export function SiteNavbar() {
           <Link href="/checkout" onClick={() => setMobileOpen(false)}>
             Checkout
           </Link>
-          <Link href="/dashboard" onClick={() => setMobileOpen(false)}>
-            Dashboard
-          </Link>
+          {authLink && (
+            <Link href={authLink.href} onClick={() => setMobileOpen(false)}>
+              {authLink.label}
+            </Link>
+          )}
         </div>
 
         <div className="mobile-nav-ctas">

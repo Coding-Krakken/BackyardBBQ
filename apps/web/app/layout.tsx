@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import { Cormorant_Garamond, Manrope } from "next/font/google";
+import { SessionProvider } from "./components/SessionProvider";
 
 const displayFont = Cormorant_Garamond({
   subsets: ["latin"],
@@ -53,10 +54,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className={`${displayFont.variable} ${bodyFont.variable}`}>
-        <a className="skip-link" href="#main-content">
-          Skip to content
-        </a>
-        {children}
+        <SessionProvider>
+          <a className="skip-link" href="#main-content">
+            Skip to content
+          </a>
+          {children}
+        </SessionProvider>
       </body>
     </html>
   );
