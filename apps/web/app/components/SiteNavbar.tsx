@@ -48,6 +48,34 @@ export function SiteNavbar() {
     };
   }, []);
 
+  // Prevent body scroll when mobile menu is open
+  useEffect(() => {
+    if (mobileOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [mobileOpen]);
+
+  // Close mobile menu on Escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && mobileOpen) {
+        setMobileOpen(false);
+      }
+    };
+
+    if (mobileOpen) {
+      window.addEventListener('keydown', handleEscape);
+      return () => {
+        window.removeEventListener('keydown', handleEscape);
+      };
+    }
+  }, [mobileOpen]);
+
   const navStateClass = useMemo(() => {
     const classes = [];
     if (mobileOpen) {
@@ -182,6 +210,18 @@ export function SiteNavbar() {
               exit={{ x: "100%" }}
               transition={springs.layout}
             >
+              <button
+                className="mobile-nav-close"
+                type="button"
+                aria-label="Close navigation menu"
+                onClick={() => setMobileOpen(false)}
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+
             <div className="mobile-nav-links">
               {navLinks.map((item) => (
                 <a key={item.label} href={item.href} onClick={() => setMobileOpen(false)}>
