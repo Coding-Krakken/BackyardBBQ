@@ -242,7 +242,7 @@ export function StorySection() {
       transition={{ duration: durations.verySlow, ease: easings.easeOut }}
     >
       <div className="story-image-shell">
-        <Image src={siteImages.story.src} alt={siteImages.story.alt} fill sizes="(max-width: 980px) 100vw, 45vw" />
+        <Image src={siteImages.story.src} alt={siteImages.story.alt} fill sizes="(max-width: 980px) 100vw, 45vw" priority />
         <motion.div
           className="story-image-badges"
           aria-hidden="true"
