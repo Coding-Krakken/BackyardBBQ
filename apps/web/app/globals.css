@@ -456,35 +456,56 @@ input:focus-visible {
 }
 
 .mobile-nav-drawer {
-  max-height: 0;
-  overflow: hidden;
-  transition: max-height 280ms ease;
-  border-top: 1px solid transparent;
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(360px, 85vw);
+  background: var(--bg);
+  border-left: 1px solid var(--line-soft);
+  z-index: 99;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding-top: 5rem;
 }
 
 .site-nav-shell.is-open .mobile-nav-drawer {
-  max-height: 540px;
-  border-top-color: var(--line-soft);
+  /* Handled by Framer Motion AnimatePresence */
 }
 
 .mobile-nav-links,
 .mobile-nav-ctas {
-  width: min(1200px, 92vw);
-  margin: 0 auto;
+  width: 100%;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
 }
 
 .mobile-nav-links {
-  padding: 1rem 0 0.3rem;
+  padding-top: 1rem;
+  padding-bottom: 0.3rem;
   display: grid;
   gap: 0.7rem;
   color: var(--warm-gray);
 }
 
+.mobile-nav-links a {
+  font-size: 1.1rem;
+  padding: 0.5rem 0;
+  transition: color 200ms ease;
+}
+
+.mobile-nav-links a:hover {
+  color: var(--cream);
+}
+
 .mobile-nav-ctas {
-  padding: 0.85rem 0 1.2rem;
+  padding-top: 1.5rem;
+  padding-bottom: 1.2rem;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.55rem;
+  margin-top: auto;
 }
 
 .hero-stage {
