@@ -8,6 +8,8 @@ import { DashboardHeader, DashboardSidebar } from "../components/DashboardLayout
 import { AnalyticsChartsSkeleton } from "../components/SkeletonLoader";
 import { CountUpStat } from "../components/CountUpStat";
 import { durations, easings } from "../../lib/animations";
+import { ErrorBoundary } from "../../components/ErrorBoundary";
+import { ANIMATION_CONSTANTS, ERROR_MESSAGES } from "../../lib/constants";
 
 // Lazy load Tremor charts for better performance
 const AreaChart = lazy(() => import("@tremor/react").then(m => ({ default: m.AreaChart })));
@@ -54,9 +56,9 @@ export default function AnalyticsPage() {
   const categoryChartRef = useRef(null);
   const frequencyChartRef = useRef(null);
   
-  const isTrendInView = useInView(trendChartRef, { once: true, margin: "-100px" });
-  const isCategoryInView = useInView(categoryChartRef, { once: true, margin: "-100px" });
-  const isFrequencyInView = useInView(frequencyChartRef, { once: true, margin: "-100px" });
+  const isTrendInView = useInView(trendChartRef, { once: true, margin: ANIMATION_CONSTANTS.SCROLL_TRIGGER_MARGIN });
+  const isCategoryInView = useInView(categoryChartRef, { once: true, margin: ANIMATION_CONSTANTS.SCROLL_TRIGGER_MARGIN });
+  const isFrequencyInView = useInView(frequencyChartRef, { once: true, margin: ANIMATION_CONSTANTS.SCROLL_TRIGGER_MARGIN });
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -191,14 +193,15 @@ export default function AnalyticsPage() {
                   </p>
                 </div>
 
-                <Suspense fallback={<div style={{ height: "300px" }} />}>
-                  <motion.div
-                    initial={{ opacity: 0, scaleY: 0.8 }}
-                    animate={isTrendInView ? { opacity: 1, scaleY: 1 } : { opacity: 0, scaleY: 0.8 }}
-                    transition={{ duration: durations.normal, delay: 0.2, ease: easings.easeOut }}
-                    style={{ transformOrigin: "bottom" }}
-                  >
-                    <Card
+                <ErrorBoundary fallback={<div style={{ height: "300px", padding: "2rem", textAlign: "center" }}>Unable to load chart</div>}>
+                  <Suspense fallback={<div style={{ height: "300px" }} />}>
+                    <motion.div
+                      initial={{ opacity: 0, scaleY: 0.8 }}
+                      animate={isTrendInView ? { opacity: 1, scaleY: 1 } : { opacity: 0, scaleY: 0.8 }}
+                      transition={{ duration: durations.normal, delay: ANIMATION_CONSTANTS.DELAY_MEDIUM, ease: easings.easeOut }}
+                      style={{ transformOrigin: "bottom" }}
+                    >
+                      <Card
                       style={{
                         marginTop: "1.5rem",
                         background: "var(--panel)",
@@ -218,9 +221,10 @@ export default function AnalyticsPage() {
                           curveType="natural"
                         />
                       </div>
-                    </Card>
-                  </motion.div>
-                </Suspense>
+                      </Card>
+                    </motion.div>
+                  </Suspense>
+                </ErrorBoundary>
               </motion.section>
 
               {/* Category Breakdown and Order Frequency */}
@@ -241,14 +245,15 @@ export default function AnalyticsPage() {
 
                   {categories && categories.categoryData.length > 0 ? (
                     <>
-                      <Suspense fallback={<div style={{ height: "240px" }} />}>
-                        <motion.div
-                          style={{ marginTop: "1.5rem", height: "240px" }}
-                          initial={{ opacity: 0, scale: 0.9 }}
-                          animate={isCategoryInView ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.9 }}
-                          transition={{ duration: durations.normal, delay: 0.3, ease: easings.easeOut }}
-                        >
-                          <DonutChart
+                      <ErrorBoundary fallback={<div style={{ height: "240px", padding: "2rem", textAlign: "center" }}>Unable to load chart</div>}>
+                        <Suspense fallback={<div style={{ height: "240px" }} />}>
+                          <motion.div
+                            style={{ marginTop: "1.5rem", height: "240px" }}
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={isCategoryInView ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.9 }}
+                            transition={{ duration: durations.normal, delay: ANIMATION_CONSTANTS.DELAY_LARGE, ease: easings.easeOut }}
+                          >
+                            <DonutChart
                             data={categories.categoryData}
                             category="spending"
                             index="category"
@@ -302,14 +307,15 @@ export default function AnalyticsPage() {
 
                   {frequency && frequency.frequencyData.length > 0 ? (
                     <>
-                      <Suspense fallback={<div style={{ height: "240px" }} />}>
-                        <motion.div
-                          style={{ marginTop: "1.5rem", height: "240px", transformOrigin: "bottom" }}
-                          initial={{ opacity: 0, scaleY: 0.8 }}
-                          animate={isFrequencyInView ? { opacity: 1, scaleY: 1 } : { opacity: 0, scaleY: 0.8 }}
-                          transition={{ duration: durations.normal, delay: 0.4, ease: easings.easeOut }}
-                        >
-                          <BarChart
+                      <ErrorBoundary fallback={<div style={{ height: "240px", padding: "2rem", textAlign: "center" }}>Unable to load chart</div>}>
+                        <Suspense fallback={<div style={{ height: "240px" }} />}>
+                          <motion.div
+                            style={{ marginTop: "1.5rem", height: "240px", transformOrigin: "bottom" }}
+                            initial={{ opacity: 0, scaleY: 0.8 }}
+                            animate={isFrequencyInView ? { opacity: 1, scaleY: 1 } : { opacity: 0, scaleY: 0.8 }}
+                            transition={{ duration: durations.normal, delay: ANIMATION_CONSTANTS.DELAY_XL, ease: easings.easeOut }}
+                          >
+                            <BarChart
                             data={frequency.frequencyData}
                             index="day"
                             categories={["orders"]}

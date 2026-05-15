@@ -15,7 +15,12 @@
     "dev:workers": "npm run dev -w @bbq/workers",
     "build": "turbo run build",
     "lint": "turbo run lint",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "turbo run typecheck",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:ci": "jest --ci --coverage --maxWorkers=2",
+    "analyze": "cross-env ANALYZE=true turbo run build --filter=@bbq/web"
   },
   "devDependencies": {
     "turbo": "^2.0.12",

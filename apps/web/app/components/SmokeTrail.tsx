@@ -66,7 +66,7 @@ export function SmokeTrail({
     let resizeTimer: ReturnType<typeof setTimeout>;
     const debouncedResize = () => {
       clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(resize, 200);
+      resizeTimer = setTimeout(resize, PERFORMANCE_CONSTANTS.DEBOUNCE_RESIZE);
     };
     window.addEventListener("resize", debouncedResize);
 
@@ -98,7 +98,7 @@ export function SmokeTrail({
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       // Emit new particles (throttled)
-      if (time - lastEmitRef.current > 50 && particlesRef.current.length < maxParticles) {
+      if (time - lastEmitRef.current > ANIMATION_CONSTANTS.SMOKE_EMIT_THROTTLE_MS && particlesRef.current.length < maxParticles) {
         particlesRef.current.push({
           x: mouseRef.current.x,
           y: mouseRef.current.y,
@@ -140,7 +140,7 @@ export function SmokeTrail({
     };
   }, [disabled, maxParticles, particleLifespan]);
 
-  if (disabled) {
+  if (disabled || !UI_CONSTANTS.ENABLE_PREMIUM_ANIMATIONS) {
     return null;
   }
 
@@ -154,7 +154,7 @@ export function SmokeTrail({
         width: "100%",
         height: "100%",
         pointerEvents: "none",
-        zIndex: 50,
+        zIndex: UI_CONSTANTS.Z_INDEX.SMOKE_TRAIL,
         mixBlendMode: "screen",
       }}
     />

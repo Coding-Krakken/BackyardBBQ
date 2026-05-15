@@ -17,8 +17,8 @@ interface EmberParticlesProps {
  * Optimized for performance with slim tsParticles bundle
  */
 export function EmberParticles({ 
-  density = 25, 
-  speed = 0.5,
+  density = ANIMATION_CONSTANTS.PARTICLE_COUNT_DEFAULT, 
+  speed = ANIMATION_CONSTANTS.PARTICLE_SPEED_DEFAULT,
   disabled = false 
 }: EmberParticlesProps) {
   const [engineReady, setEngineReady] = useState(false);
@@ -135,4 +135,10 @@ export function EmberParticles({
       }}
     />
   );
+}
+
+// Feature flag check
+if (!UI_CONSTANTS.ENABLE_PREMIUM_ANIMATIONS) {
+  // Override to always return null if animations are disabled
+  EmberParticles.prototype.render = function() { return null; };
 }
