@@ -166,11 +166,15 @@ export function SiteNavbar() {
               </motion.a>
             ))}
             {authLink && (
-              <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.95 }}>
+              <motion.span
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.95 }}
+                style={{ display: "inline-flex", alignItems: "center" }}
+              >
                 <Link href={authLink.href}>
                   {authLink.label}
                 </Link>
-              </motion.div>
+              </motion.span>
             )}
           </div>
 
