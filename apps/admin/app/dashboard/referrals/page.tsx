@@ -2,211 +2,110 @@
 
 import { useState } from 'react';
 import useSWR from 'swr';
-import {
-  Card,
-  TabGroup,
-  TabList,
-  Tab,
-  TabPanels,
-  TabPanel,
-  Button,
-  Badge,
-} from '@tremor/react';
 import { PageHeader } from '@/components/PageHeader';
 import { DataTable } from '@/components/DataTable';
-import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { StatusBadge } from '@/components/StatusBadge';
 import { RoleGate } from '@/components/RoleGate';
-
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+import { AnimatedPage } from '@/components/AnimatedPage';
+import { useToast } from '@/components/Toast';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { fetcher, formatCurrency, formatDate } from '@/lib/utils';
 
 interface Referral {
   id: string;
-  referralCode: string;
-  refereeEmail?: string | null;
-  referrerId: string;
-  refereeId?: string;
+  referrerEmail: string;
+  refereeEmail: string;
   status: string;
   rewardCents: number;
-  expiresAt?: string;
   createdAt: string;
-  referrer?: { email: string; firstName?: string | null; lastName?: string | null };
-  referee?: { email: string; firstName?: string | null; lastName?: string | null };
 }
 
-const REFERRAL_TAB_FILTERS = ['all', 'pending', 'completed', 'rewarded', 'expired'] as const;
-const REFERRAL_STATUSES = ['pending', 'completed', 'rewarded', 'expired'] as const;
+const REFERRAL_STATUSES = ['pending', 'completed', 'rewarded', 'expired'];
 
 export default function ReferralsPage() {
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [selectedReferral, setSelectedReferral] = useState<string | null>(null);
-  const [newStatus, setNewStatus] = useState<'rewarded' | 'expired' | null>(null);
-  const [isUpdating, setIsUpdating] = useState(false);
+  const [activeTab, setActiveTab] = useState('all');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<{ id: string; action: 'reward' | 'expire' } | null>(null);
+  const { addToast } = useToast();
 
-  const { data, mutate } = useSWR<{ data: Referral[] }>(
-    statusFilter === 'all'
-      ? '/api/admin/referrals'
-      : `/api/admin/referrals?status=${statusFilter}`,
-    fetcher
+  const { data, mutate, isLoading } = useSWR<{ data: Referral[] }>('/api/admin/referrals', fetcher);
+
+  const filteredReferrals = (data?.data ?? []).filter((r) =>
+    activeTab === 'all' ? true : r.status === activeTab
   );
 
-  const formatCurrency = (cents: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(cents / 100);
-  };
-
-  const formatDate = (dateString: string | undefined) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  };
-
-  const handleUpdateStatus = async () => {
-    if (!selectedReferral || !newStatus) return;
-
-    setIsUpdating(true);
+  const handleAction = async (id: string, action: 'reward' | 'expire') => {
+    setIsProcessing(true);
     try {
-      const response = await fetch(`/api/admin/referrals/${selectedReferral}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-      });
-
+      const response = await fetch(`/api/admin/referrals/${id}/${action}`, { method: 'POST' });
       if (response.ok) {
+        addToast({ type: 'success', message: `Referral ${action === 'reward' ? 'rewarded' : 'expired'}` });
         await mutate();
-        setSelectedReferral(null);
-        setNewStatus(null);
+      } else {
+        addToast({ type: 'error', message: 'Action failed' });
       }
-    } catch (error) {
-      console.error('Failed to update referral status:', error);
+    } catch {
+      addToast({ type: 'error', message: 'An error occurred' });
     } finally {
-      setIsUpdating(false);
+      setIsProcessing(false);
+      setConfirmTarget(null);
     }
   };
 
-  const getStatusBadgeColor = (status: string) => {
-    const colors: Record<string, any> = {
-      pending: 'yellow',
-      completed: 'blue',
-      rewarded: 'green',
-      expired: 'red',
-    };
-    return colors[status] || 'gray';
-  };
-
   return (
-    <RoleGate allowedRoles={['owner', 'admin']}>
-    <div className="p-6">
-      <PageHeader
-        title="Referrals"
-        subtitle="Manage customer referral program"
-      />
+    <RoleGate allowedRoles={['owner', 'admin', 'manager']}>
+      <AnimatedPage>
+        <PageHeader title="Referrals" subtitle="Manage customer referral rewards" />
 
-      <Card>
-        <TabGroup
-          index={REFERRAL_TAB_FILTERS.indexOf(statusFilter as (typeof REFERRAL_TAB_FILTERS)[number])}
-          onIndexChange={(index) => setStatusFilter(REFERRAL_TAB_FILTERS[index] ?? 'all')}
-        >
-          <TabList>
-            <Tab>All</Tab>
-            <Tab>Pending</Tab>
-            <Tab>Completed</Tab>
-            <Tab>Rewarded</Tab>
-            <Tab>Expired</Tab>
-          </TabList>
-          <TabPanels>
-            {/* All and individual status tabs show same table with different filters */}
-            {[...Array(REFERRAL_STATUSES.length + 1)].map((_, idx) => (
-              <TabPanel key={idx}>
-                <DataTable
-                  columns={[
-                    { header: 'Code', accessor: (row: Referral) => row.referralCode },
-                    {
-                      header: 'Referrer',
-                      accessor: (row: Referral) => {
-                        const fullName = [row.referrer?.firstName, row.referrer?.lastName]
-                          .filter(Boolean)
-                          .join(' ')
-                          .trim();
-                        return fullName || row.referrer?.email || 'N/A';
-                      },
-                    },
-                    {
-                      header: 'Referee',
-                      accessor: (row: Referral) => row.referee?.email || row.refereeEmail || 'Not used',
-                    },
-                    {
-                      header: 'Status',
-                      accessor: (row: Referral) => (
-                        <Badge color={getStatusBadgeColor(row.status)}>{row.status}</Badge>
-                      ),
-                    },
-                    {
-                      header: 'Reward',
-                      accessor: (row: Referral) => formatCurrency(row.rewardCents),
-                    },
-                    {
-                      header: 'Expires',
-                      accessor: (row: Referral) => formatDate(row.expiresAt),
-                    },
-                    {
-                      header: 'Actions',
-                      accessor: (row: Referral) =>
-                        row.status === 'completed' ? (
-                          <div className="flex gap-2">
-                            <Button
-                              size="xs"
-                              color="green"
-                              variant="secondary"
-                              onClick={() => {
-                                setSelectedReferral(row.id);
-                                setNewStatus('rewarded');
-                              }}
-                            >
-                              Mark Rewarded
-                            </Button>
-                            <Button
-                              size="xs"
-                              color="red"
-                              variant="secondary"
-                              onClick={() => {
-                                setSelectedReferral(row.id);
-                                setNewStatus('expired');
-                              }}
-                            >
-                              Mark Expired
-                            </Button>
-                          </div>
-                        ) : null,
-                    },
-                  ]}
-                  data={data?.data ?? []}
-                />
-              </TabPanel>
-            ))}
-          </TabPanels>
-        </TabGroup>
-      </Card>
+        <div className="tabs mb-lg">
+          <button className={`tab ${activeTab === 'all' ? 'tab-active' : ''}`} onClick={() => setActiveTab('all')}>All</button>
+          {REFERRAL_STATUSES.map((s) => (
+            <button key={s} className={`tab ${activeTab === s ? 'tab-active' : ''}`} onClick={() => setActiveTab(s)}>
+              {s.charAt(0).toUpperCase() + s.slice(1)}
+            </button>
+          ))}
+        </div>
 
-      {/* Update Confirmation */}
-      <ConfirmDialog
-        isOpen={selectedReferral !== null}
-        onClose={() => {
-          setSelectedReferral(null);
-          setNewStatus(null);
-        }}
-        onConfirm={handleUpdateStatus}
-        title={`Mark Referral as ${newStatus}`}
-        message={`Are you sure you want to mark this referral as ${newStatus}?`}
-        confirmText="Update"
-        variant={newStatus === 'expired' ? 'destructive' : 'primary'}
-        isLoading={isUpdating}
-      />
-    </div>
+        <div className="panel">
+          <DataTable
+            columns={[
+              { header: 'ID', accessor: (row: Referral) => row.id.slice(0, 8) },
+              { header: 'Referrer', accessor: (row: Referral) => row.referrerEmail, sortKey: (row: Referral) => row.referrerEmail },
+              { header: 'Referee', accessor: (row: Referral) => row.refereeEmail, sortKey: (row: Referral) => row.refereeEmail },
+              { header: 'Status', accessor: (row: Referral) => <StatusBadge status={row.status} />, sortKey: (row: Referral) => row.status },
+              { header: 'Reward', accessor: (row: Referral) => formatCurrency(row.rewardCents), sortKey: (row: Referral) => row.rewardCents },
+              { header: 'Created', accessor: (row: Referral) => formatDate(row.createdAt), sortKey: (row: Referral) => row.createdAt },
+              { header: 'Actions', accessor: (row: Referral) => (
+                row.status === 'completed' ? (
+                  <div className="flex-gap-sm">
+                    <button className="btn btn-primary btn-xs" onClick={() => setConfirmTarget({ id: row.id, action: 'reward' })} disabled={isProcessing}>
+                      Mark Rewarded
+                    </button>
+                    <button className="btn btn-danger btn-xs" onClick={() => setConfirmTarget({ id: row.id, action: 'expire' })} disabled={isProcessing}>
+                      Expire
+                    </button>
+                  </div>
+                ) : null
+              )},
+            ]}
+            data={filteredReferrals}
+            isLoading={isLoading}
+          />
+        </div>
+
+        <ConfirmDialog
+          isOpen={!!confirmTarget}
+          onClose={() => setConfirmTarget(null)}
+          onConfirm={() => confirmTarget && handleAction(confirmTarget.id, confirmTarget.action)}
+          title={confirmTarget?.action === 'reward' ? 'Mark Referral Rewarded' : 'Expire Referral'}
+          message={confirmTarget?.action === 'reward'
+            ? 'This will mark the referral as rewarded and trigger the reward payout. Continue?'
+            : 'This will expire the referral and it can no longer be rewarded. Continue?'}
+          confirmText={confirmTarget?.action === 'reward' ? 'Mark Rewarded' : 'Expire'}
+          variant={confirmTarget?.action === 'expire' ? 'destructive' : 'primary'}
+          isLoading={isProcessing}
+        />
+      </AnimatedPage>
     </RoleGate>
   );
 }

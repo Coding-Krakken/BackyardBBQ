@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
       select: { id: true }
     });
 
-    const notifications = customers.map(c => ({
+    const notifications = customers.map((c: typeof customers[number]) => ({
       customerId: c.id,
       type: body.type,
       title: body.title,

@@ -1,8 +1,6 @@
-import { Badge } from '@tremor/react';
-
 type OrderStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'completed' | 'cancelled';
 type BookingStatus = 'draft' | 'pending_approval' | 'approved' | 'declined' | 'cancelled';
-type PaymentStatus = 
+type PaymentStatus =
   | 'requires_payment_method'
   | 'requires_confirmation'
   | 'requires_action'
@@ -19,33 +17,24 @@ interface StatusBadgeProps {
   type?: 'order' | 'booking' | 'payment';
 }
 
-export function StatusBadge({ status, type }: StatusBadgeProps) {
-  const getColor = () => {
-    // Order statuses
-    if (status === 'pending') return 'yellow';
-    if (status === 'confirmed') return 'blue';
-    if (status === 'preparing') return 'indigo';
-    if (status === 'ready') return 'green';
-    if (status === 'completed') return 'emerald';
-    if (status === 'cancelled') return 'red';
-
-    // Booking statuses
-    if (status === 'draft') return 'gray';
-    if (status === 'pending_approval') return 'yellow';
-    if (status === 'approved') return 'green';
-    if (status === 'declined') return 'red';
-
-    // Payment statuses
-    if (status === 'succeeded') return 'green';
-    if (status === 'processing') return 'blue';
-    if (status === 'failed' || status === 'canceled') return 'red';
-    if (status === 'partially_refunded' || status === 'refunded') return 'orange';
-    if (status.startsWith('requires_')) return 'yellow';
-
-    return 'gray';
+export function StatusBadge({ status }: StatusBadgeProps) {
+  const getVariant = (): string => {
+    // Success states
+    if (['completed', 'approved', 'succeeded', 'rewarded'].includes(status)) return 'badge-success';
+    // Active/processing states
+    if (['confirmed', 'preparing', 'processing'].includes(status)) return 'badge-info';
+    // Ready / attention states
+    if (['ready'].includes(status)) return 'badge-ember';
+    // Pending states
+    if (['pending', 'pending_approval', 'draft'].includes(status) || status.startsWith('requires_')) return 'badge-warning';
+    // Cancelled / failed states
+    if (['cancelled', 'canceled', 'declined', 'failed', 'expired'].includes(status)) return 'badge-danger';
+    // Refund states
+    if (['partially_refunded', 'refunded'].includes(status)) return 'badge-brass';
+    return 'badge-default';
   };
 
-  const formatStatus = () => {
+  const formatStatus = (): string => {
     return status
       .replace(/_/g, ' ')
       .split(' ')
@@ -54,8 +43,8 @@ export function StatusBadge({ status, type }: StatusBadgeProps) {
   };
 
   return (
-    <Badge color={getColor()} size="sm">
+    <span className={`badge ${getVariant()}`}>
       {formatStatus()}
-    </Badge>
+    </span>
   );
 }

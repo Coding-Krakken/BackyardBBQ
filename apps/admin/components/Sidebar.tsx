@@ -3,82 +3,141 @@
 import { useSession, signOut } from 'next-auth/react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Badge } from '@tremor/react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useSidebar } from '@/app/dashboard/DashboardShell';
 
 interface NavItem {
   label: string;
   href: string;
-  roles: string[]; // Which roles can see this nav item
+  roles: string[];
+  icon: string;
+  section?: string;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Overview', href: '/dashboard', roles: ['owner', 'admin', 'manager', 'staff', 'accounting'] },
-  { label: 'Orders', href: '/dashboard/orders', roles: ['owner', 'admin', 'manager', 'staff'] },
-  { label: 'Bookings', href: '/dashboard/bookings', roles: ['owner', 'admin', 'manager', 'staff'] },
-  { label: 'Customers', href: '/dashboard/customers', roles: ['owner', 'admin', 'manager'] },
-  { label: 'Menu', href: '/dashboard/menu', roles: ['owner', 'admin', 'manager'] },
-  { label: 'Analytics', href: '/dashboard/analytics', roles: ['owner', 'admin', 'manager'] },
-  { label: 'Accounting', href: '/dashboard/accounting', roles: ['owner', 'admin', 'accounting'] },
-  { label: 'Payments', href: '/dashboard/payments', roles: ['owner', 'admin', 'accounting'] },
-  { label: 'Integrations', href: '/dashboard/integrations', roles: ['owner', 'admin'] },
-  { label: 'Notifications', href: '/dashboard/notifications', roles: ['owner', 'admin'] },
-  { label: 'Referrals', href: '/dashboard/referrals', roles: ['owner', 'admin'] },
+  { label: 'Overview', href: '/dashboard', roles: ['owner', 'admin', 'manager', 'staff', 'accounting'], icon: '◉', section: 'Main' },
+  { label: 'Orders', href: '/dashboard/orders', roles: ['owner', 'admin', 'manager', 'staff'], icon: '⊞', section: 'Main' },
+  { label: 'Bookings', href: '/dashboard/bookings', roles: ['owner', 'admin', 'manager', 'staff'], icon: '◈', section: 'Main' },
+  { label: 'Customers', href: '/dashboard/customers', roles: ['owner', 'admin', 'manager'], icon: '◎', section: 'Main' },
+  { label: 'Menu', href: '/dashboard/menu', roles: ['owner', 'admin', 'manager'], icon: '☰', section: 'Manage' },
+  { label: 'Analytics', href: '/dashboard/analytics', roles: ['owner', 'admin', 'manager'], icon: '◑', section: 'Manage' },
+  { label: 'Accounting', href: '/dashboard/accounting', roles: ['owner', 'admin', 'accounting'], icon: '◇', section: 'Finance' },
+  { label: 'Payments', href: '/dashboard/payments', roles: ['owner', 'admin', 'accounting'], icon: '◆', section: 'Finance' },
+  { label: 'Integrations', href: '/dashboard/integrations', roles: ['owner', 'admin'], icon: '⊕', section: 'System' },
+  { label: 'Notifications', href: '/dashboard/notifications', roles: ['owner', 'admin'], icon: '◌', section: 'System' },
+  { label: 'Referrals', href: '/dashboard/referrals', roles: ['owner', 'admin'], icon: '⊛', section: 'System' },
 ];
 
 export function Sidebar() {
   const { data: session } = useSession();
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '';
+  const { mobileOpen, setMobileOpen, collapsed, setCollapsed } = useSidebar();
   const userRole = (session?.user as { role?: string })?.role || 'staff';
+  const userName = session?.user?.name || 'User';
+  const initials = userName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
 
-  const visibleItems = NAV_ITEMS.filter(item => item.roles.includes(userRole));
+  const visibleItems = NAV_ITEMS.filter((item) => item.roles.includes(userRole));
 
-  const getRoleBadgeColor = (role: string) => {
-    switch (role) {
-      case 'owner': return 'purple';
-      case 'admin': return 'blue';
-      case 'manager': return 'green';
-      case 'accounting': return 'amber';
-      default: return 'gray';
+  // Group items by section
+  const sections: { label: string; items: NavItem[] }[] = [];
+  let lastSection = '';
+  for (const item of visibleItems) {
+    const section = item.section || '';
+    if (section !== lastSection) {
+      sections.push({ label: section, items: [item] });
+      lastSection = section;
+    } else {
+      sections[sections.length - 1]!.items.push(item);
     }
-  };
+  }
 
-  return (
-    <div className="flex h-screen w-64 flex-col border-r border-gray-800 bg-gray-950 p-4">
-      <div className="mb-8">
-        <h1 className="text-xl font-bold text-bbq-light">BBQ Admin</h1>
-        <div className="mt-2 flex items-center gap-2">
-          <span className="text-sm text-gray-400">{session?.user?.name}</span>
-          <Badge color={getRoleBadgeColor(userRole)} size="xs">
-            {userRole}
-          </Badge>
-        </div>
+  const sidebarContent = (
+    <nav className={`sidebar ${collapsed ? 'collapsed' : ''} ${mobileOpen ? 'mobile-open' : ''}`} aria-label="Main navigation">
+      {/* Brand */}
+      <div className="sidebar-brand">
+        <div className="sidebar-brand-icon">🔥</div>
+        <span className="sidebar-brand-text">BBQ Admin</span>
       </div>
 
-      <nav className="flex-1 space-y-1">
-        {visibleItems.map((item) => {
-          const isActive = pathname === item.href;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`block rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                isActive
-                  ? 'bg-bbq-orange text-white'
-                  : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-              }`}
-            >
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
-
+      {/* Collapse toggle (desktop only) */}
       <button
-        onClick={() => signOut({ callbackUrl: '/auth/login' })}
-        className="mt-4 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800"
+        className="sidebar-collapse-btn"
+        onClick={() => setCollapsed(!collapsed)}
+        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        title={collapsed ? 'Expand' : 'Collapse'}
       >
-        Sign Out
+        {collapsed ? '›' : '‹'}
       </button>
-    </div>
+
+      {/* Navigation */}
+      <div className="sidebar-nav">
+        {sections.map((section, sectionIdx) => (
+          <div key={section.label || sectionIdx}>
+            {sectionIdx > 0 && <div className="sidebar-divider" />}
+            {!collapsed && section.label && sectionIdx > 0 && (
+              <div className="sidebar-section-label">{section.label}</div>
+            )}
+            {section.items.map((item) => {
+              const isActive =
+                pathname === item.href ||
+                (item.href !== '/dashboard' && pathname.startsWith(item.href + '/'));
+
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`sidebar-nav-item ${isActive ? 'active' : ''}`}
+                  onClick={() => setMobileOpen(false)}
+                  title={collapsed ? item.label : undefined}
+                  aria-current={isActive ? 'page' : undefined}
+                >
+                  <span className="sidebar-nav-icon">{item.icon}</span>
+                  <span className="sidebar-nav-label">{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+
+      {/* Footer */}
+      <div className="sidebar-footer">
+        <div className="sidebar-user">
+          <div className="sidebar-avatar">{initials}</div>
+          <div className="sidebar-user-info">
+            <div className="sidebar-user-name">{userName}</div>
+            <div className="sidebar-user-role">{userRole}</div>
+          </div>
+        </div>
+        {!collapsed && (
+          <button
+            onClick={() => signOut({ callbackUrl: '/auth/login' })}
+            className="btn btn-ghost btn-sm w-full sidebar-signout"
+          >
+            Sign Out
+          </button>
+        )}
+      </div>
+    </nav>
+  );
+
+  return (
+    <>
+      {/* Mobile overlay */}
+      <AnimatePresence>
+        {mobileOpen && (
+          <motion.div
+            className="sidebar-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={() => setMobileOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {sidebarContent}
+    </>
   );
 }

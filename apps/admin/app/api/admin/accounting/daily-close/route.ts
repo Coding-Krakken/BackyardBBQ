@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
     }
   });
 
-  const grossSalesCents = orders.reduce((sum, o) => sum + o.totalCents, 0);
+  const grossSalesCents = orders.reduce((sum: number, o: { totalCents: number }) => sum + o.totalCents, 0);
   const refundedCents = refundedAgg._sum.amountCents ?? 0;
 
   const bySourceMap: Record<string, { orders: number; totalCents: number }> = {};

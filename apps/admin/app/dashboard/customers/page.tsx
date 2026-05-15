@@ -1,126 +1,78 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
-import { Card, TextInput, Badge } from '@tremor/react';
 import { PageHeader } from '@/components/PageHeader';
 import { DataTable } from '@/components/DataTable';
 import { RoleGate } from '@/components/RoleGate';
-
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+import { AnimatedPage } from '@/components/AnimatedPage';
+import { fetcher, formatDate } from '@/lib/utils';
 
 interface Customer {
   id: string;
+  name: string | null;
   email: string;
-  name?: string;
-  phone?: string | null;
-  role: string;
-  ordersCount: number;
-  bookingsCount: number;
-  memberSince: string;
+  phone: string | null;
+  createdAt: string;
+  _count?: { orders: number; bookings: number };
 }
 
 export default function CustomersPage() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedQuery, setDebouncedQuery] = useState('');
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedQuery(searchQuery);
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
+  const [page, setPage] = useState(1);
+  const limit = 20;
+  const offset = (page - 1) * limit;
 
   const { data, isLoading } = useSWR<{ data: Customer[] }>(
-    debouncedQuery
-      ? `/api/admin/customers?q=${encodeURIComponent(debouncedQuery)}`
-      : '/api/admin/customers?limit=50',
+    `/api/admin/customers?limit=${limit}&offset=${offset}&search=${encodeURIComponent(searchQuery)}`,
     fetcher
   );
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  };
-
-  const getRoleBadgeColor = (role: string) => {
-    const colors: Record<string, any> = {
-      owner: 'red',
-      admin: 'orange',
-      manager: 'blue',
-      staff: 'green',
-      accounting: 'purple',
-      customer: 'gray',
-    };
-    return colors[role] || 'gray';
-  };
-
   return (
     <RoleGate allowedRoles={['owner', 'admin', 'manager']}>
-    <div className="p-6">
-      <PageHeader
-        title="Customers"
-        subtitle="Search and manage customer accounts"
-      />
-
-      {/* Search */}
-      <Card className="mb-6">
-        <TextInput
-          placeholder="Search by email or name..."
-          value={searchQuery}
-          onValueChange={setSearchQuery}
+      <AnimatedPage>
+        <PageHeader
+          title="Customers"
+          subtitle="View and manage your customer base"
         />
-      </Card>
 
-      {/* Customers Table */}
-      <Card>
-        <DataTable
-          columns={[
-            {
-              header: 'Name',
-              accessor: (row: Customer) => row.name || 'N/A',
-            },
-            { header: 'Email', accessor: (row: Customer) => row.email },
-            {
-              header: 'Role',
-              accessor: (row: Customer) => (
-                <Badge color={getRoleBadgeColor(row.role)}>{row.role}</Badge>
-              ),
-            },
-            {
-              header: 'Total Orders',
-              accessor: (row: Customer) => row.ordersCount,
-            },
-            {
-              header: 'Total Bookings',
-              accessor: (row: Customer) => row.bookingsCount,
-            },
-            {
-              header: 'Member Since',
-              accessor: (row: Customer) => formatDate(row.memberSince),
-            },
-            {
-              header: 'Actions',
-              accessor: (row: Customer) => (
-                <Link
-                  href={`/dashboard/customers/${row.id}`}
-                  className="inline-flex items-center rounded-md border border-gray-700 px-2 py-1 text-xs text-gray-200 hover:bg-gray-800"
-                >
-                  View
-                </Link>
-              ),
-            },
-          ]}
-          data={data?.data ?? []}
-          isLoading={isLoading}
-        />
-      </Card>
-    </div>
+        <div className="panel mb-lg">
+          <div className="form-group">
+            <label className="form-label">Search</label>
+            <input
+              className="input"
+              placeholder="Search by name or email..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="panel">
+          <DataTable
+            columns={[
+              { header: 'Name', accessor: (row: Customer) => row.name ?? 'N/A', sortKey: (row: Customer) => row.name ?? '' },
+              { header: 'Email', accessor: (row: Customer) => row.email, sortKey: (row: Customer) => row.email },
+              { header: 'Phone', accessor: (row: Customer) => row.phone ?? 'N/A' },
+              { header: 'Orders', accessor: (row: Customer) => row._count?.orders ?? 0, sortKey: (row: Customer) => row._count?.orders ?? 0 },
+              { header: 'Bookings', accessor: (row: Customer) => row._count?.bookings ?? 0, sortKey: (row: Customer) => row._count?.bookings ?? 0 },
+              { header: 'Joined', accessor: (row: Customer) => formatDate(row.createdAt), sortKey: (row: Customer) => row.createdAt },
+              {
+                header: 'Actions',
+                accessor: (row: Customer) => (
+                  <Link href={`/dashboard/customers/${row.id}`} className="btn btn-ghost btn-xs">View</Link>
+                ),
+              },
+            ]}
+            data={data?.data ?? []}
+            currentPage={page}
+            totalPages={Math.max(1, Math.ceil((data?.data.length ?? 0) / limit))}
+            onPageChange={setPage}
+            isLoading={isLoading}
+          />
+        </div>
+      </AnimatedPage>
     </RoleGate>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
-import { Dialog, DialogPanel, Button } from '@tremor/react';
+import { useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -27,30 +28,63 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const handleConfirm = () => {
     onConfirm();
-    if (!isLoading) {
-      onClose();
-    }
   };
 
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape' && !isLoading) {
+      onClose();
+    }
+  }, [onClose, isLoading]);
+
+  useEffect(() => {
+    if (isOpen) {
+      document.addEventListener('keydown', handleKeyDown);
+      return () => document.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [isOpen, handleKeyDown]);
+
   return (
-    <Dialog open={isOpen} onClose={onClose}>
-      <DialogPanel className="max-w-md">
-        <h3 className="text-lg font-semibold text-bbq-light">{title}</h3>
-        <p className="mt-2 text-sm text-gray-400">{message}</p>
-        <div className="mt-6 flex justify-end gap-3">
-          <Button size="sm" variant="secondary" onClick={onClose} disabled={isLoading}>
-            {cancelText}
-          </Button>
-          <Button
-            size="sm"
-            color={variant === 'destructive' ? 'red' : 'orange'}
-            onClick={handleConfirm}
-            disabled={isLoading}
+    <AnimatePresence>
+      {isOpen && (
+        <div className="overlay" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+          <motion.div
+            className="overlay-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={!isLoading ? onClose : undefined}
+          />
+          <motion.div
+            className="modal modal-sm"
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
           >
-            {isLoading ? 'Processing...' : confirmText}
-          </Button>
+            <h3 id="confirm-title" className="modal-title">{title}</h3>
+            <p className="text-muted mt-sm">
+              {message}
+            </p>
+            <div className="modal-actions">
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={onClose}
+                disabled={isLoading}
+              >
+                {cancelText}
+              </button>
+              <button
+                className={`btn btn-sm ${variant === 'destructive' ? 'btn-danger' : 'btn-primary'}`}
+                onClick={handleConfirm}
+                disabled={isLoading}
+                autoFocus
+              >
+                {isLoading ? 'Processing...' : confirmText}
+              </button>
+            </div>
+          </motion.div>
         </div>
-      </DialogPanel>
-    </Dialog>
+      )}
+    </AnimatePresence>
   );
 }

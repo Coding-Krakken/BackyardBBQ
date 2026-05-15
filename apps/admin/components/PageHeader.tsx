@@ -1,4 +1,7 @@
+'use client';
+
 import { ReactNode } from 'react';
+import { motion } from 'framer-motion';
 
 interface PageHeaderProps {
   title: string;
@@ -8,12 +11,17 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, subtitle, action }: PageHeaderProps) {
   return (
-    <div className="mb-6 flex items-start justify-between">
+    <motion.div
+      className="page-header"
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+    >
       <div>
-        <h1 className="text-3xl font-bold text-bbq-light">{title}</h1>
-        {subtitle && <p className="mt-2 text-sm text-gray-400">{subtitle}</p>}
+        <h1 className="page-header-title">{title}</h1>
+        {subtitle && <p className="page-header-subtitle">{subtitle}</p>}
       </div>
-      {action && <div className="flex items-center gap-2">{action}</div>}
-    </div>
+      {action && <div className="page-header-actions">{action}</div>}
+    </motion.div>
   );
 }

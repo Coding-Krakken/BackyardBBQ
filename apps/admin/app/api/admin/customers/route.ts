@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     skip: offset
   });
 
-  const data = customers.map(c => ({
+  const data = customers.map((c: typeof customers[number]) => ({
     id: c.id,
     email: c.email,
     name: `${c.firstName || ''} ${c.lastName || ''}`.trim() || 'Unknown',

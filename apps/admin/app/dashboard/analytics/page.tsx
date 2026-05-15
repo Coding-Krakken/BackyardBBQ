@@ -2,206 +2,172 @@
 
 import { useState } from 'react';
 import useSWR from 'swr';
-import {
-  Card,
-  Metric,
-  Text,
-  Select,
-  SelectItem,
-  TabGroup,
-  TabList,
-  Tab,
-  TabPanels,
-  TabPanel,
-  AreaChart,
-  DonutChart,
-  LineChart,
-  Callout,
-  Badge,
-  Button,
-} from '@tremor/react';
 import { PageHeader } from '@/components/PageHeader';
-import { DataTable } from '@/components/DataTable';
+import { StatCard } from '@/components/StatCard';
+import { ChartCard } from '@/components/ChartCard';
+import { BBQAreaChart } from '@/components/charts/AreaChart';
+import { BBQDonutChart } from '@/components/charts/DonutChart';
+import { CardSkeleton } from '@/components/LoadingSkeleton';
 import { RoleGate } from '@/components/RoleGate';
+import { AnimatedPage } from '@/components/AnimatedPage';
+import { fetcher, formatCurrency } from '@/lib/utils';
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+interface AnalyticsData {
+  kpis: {
+    totalRevenueCents: number;
+    totalOrders: number;
+    avgOrderValueCents: number;
+    conversionRate: number;
+  };
+  revenueOverTime: { date: string; revenue: number }[];
+  sourceBreakdown: { source: string; count: number }[];
+  topItems: { name: string; count: number; revenue: number }[];
+  forecast?: { date: string; predicted: number }[];
+  anomalies?: { date: string; metric: string; actual: number; expected: number }[];
+}
 
 export default function AnalyticsPage() {
-  const [days, setDays] = useState('14');
-
-  const { data: salesData } = useSWR(
-    `/api/admin/analytics/sales?days=${days}`,
-    fetcher
-  );
-
-  const { data: forecastData } = useSWR(
-    '/api/admin/analytics/forecast?days=7',
-    fetcher
-  );
-
-  const { data: anomaliesData } = useSWR(
-    '/api/admin/analytics/anomalies?days=21',
-    fetcher
-  );
-
-  const formatCurrency = (cents: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(cents / 100);
-  };
-
-  const handleExport = async (type: 'sales' | 'forecast') => {
-    const url = type === 'sales' 
-      ? `/api/admin/analytics/sales/export?days=${days}`
-      : '/api/admin/analytics/forecast/export?days=7';
-    
-    window.location.href = url;
-  };
+  const [activeTab, setActiveTab] = useState<'overview' | 'forecast' | 'anomalies'>('overview');
+  const { data, isLoading } = useSWR<AnalyticsData>('/api/admin/analytics', fetcher);
 
   return (
     <RoleGate allowedRoles={['owner', 'admin', 'manager']}>
-    <div className="p-6">
-      <PageHeader
-        title="Analytics"
-        subtitle="Sales performance, forecasting, and anomaly detection"
-        action={
-          <Select value={days} onValueChange={setDays}>
-            <SelectItem value="7">Last 7 Days</SelectItem>
-            <SelectItem value="14">Last 14 Days</SelectItem>
-            <SelectItem value="30">Last 30 Days</SelectItem>
-            <SelectItem value="90">Last 90 Days</SelectItem>
-          </Select>
-        }
-      />
+      <AnimatedPage>
+        <PageHeader title="Analytics" subtitle="Business performance and insights" />
 
-      {/* KPI Cards */}
-      <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Card>
-          <Text>Total Orders</Text>
-          <Metric>{salesData?.totals.orders ?? 0}</Metric>
-        </Card>
-        <Card>
-          <Text>Gross Revenue</Text>
-          <Metric>{formatCurrency(salesData?.totals.grossSalesCents ?? 0)}</Metric>
-        </Card>
-        <Card>
-          <Text>Average Order Value</Text>
-          <Metric>{formatCurrency(salesData?.totals.averageOrderValueCents ?? 0)}</Metric>
-        </Card>
-      </div>
+        {/* KPI Cards */}
+        <div className="grid-cards grid-cards-4 mb-xl">
+          {isLoading ? (
+            <><CardSkeleton /><CardSkeleton /><CardSkeleton /><CardSkeleton /></>
+          ) : (
+            <>
+              <StatCard
+                label="Total Revenue"
+                value={(data?.kpis.totalRevenueCents ?? 0) / 100}
+                prefix="$"
+                decimals={2}
+                icon={<span>◆</span>}
+              />
+              <StatCard
+                label="Total Orders"
+                value={data?.kpis.totalOrders ?? 0}
+                icon={<span>⊞</span>}
+              />
+              <StatCard
+                label="Avg Order Value"
+                value={(data?.kpis.avgOrderValueCents ?? 0) / 100}
+                prefix="$"
+                decimals={2}
+                icon={<span>≡</span>}
+              />
+              <StatCard
+                label="Conversion Rate"
+                value={data?.kpis.conversionRate ?? 0}
+                suffix="%"
+                decimals={1}
+                icon={<span>↗</span>}
+              />
+            </>
+          )}
+        </div>
 
-      {/* Charts */}
-      <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card>
-          <h3 className="mb-4 text-lg font-semibold text-bbq-light">Daily Trends</h3>
-          <AreaChart
-            className="h-80"
-            data={salesData?.daily ?? []}
-            index="date"
-            categories={['orders', 'grossSalesCents']}
-            colors={['orange', 'blue']}
-            valueFormatter={(value) => 
-              value > 1000 ? formatCurrency(value) : value.toString()
-            }
-          />
-        </Card>
-        <Card>
-          <h3 className="mb-4 text-lg font-semibold text-bbq-light">Revenue by Source</h3>
-          <DonutChart
-            className="h-80"
-            data={salesData?.bySource ?? []}
-            category="grossSalesCents"
-            index="source"
-            valueFormatter={formatCurrency}
-            colors={['orange', 'blue', 'green', 'purple', 'yellow']}
-          />
-        </Card>
-      </div>
+        {/* Tabs */}
+        <div className="tabs mb-lg">
+          <button className={`tab ${activeTab === 'overview' ? 'tab-active' : ''}`} onClick={() => setActiveTab('overview')}>Overview</button>
+          <button className={`tab ${activeTab === 'forecast' ? 'tab-active' : ''}`} onClick={() => setActiveTab('forecast')}>Forecast</button>
+          <button className={`tab ${activeTab === 'anomalies' ? 'tab-active' : ''}`} onClick={() => setActiveTab('anomalies')}>Anomalies</button>
+        </div>
 
-      {/* Top Items */}
-      <Card className="mb-8">
-        <h3 className="mb-4 text-lg font-semibold text-bbq-light">Top 10 Menu Items</h3>
-        <DataTable
-          columns={[
-            { header: 'Item Name', accessor: (row: any) => row.name },
-            { header: 'Quantity Sold', accessor: (row: any) => row.quantity },
-            {
-              header: 'Revenue',
-              accessor: (row: any) => formatCurrency(row.revenueCents),
-            },
-          ]}
-          data={salesData?.topItems ?? []}
-        />
-      </Card>
-
-      {/* Tabs for Forecast and Anomalies */}
-      <Card>
-        <TabGroup>
-          <div className="flex items-center justify-between">
-            <TabList>
-              <Tab>Sales Data</Tab>
-              <Tab>Forecast (7d)</Tab>
-              <Tab>Anomalies (21d)</Tab>
-            </TabList>
-          </div>
-          <TabPanels>
-            <TabPanel>
-              <div className="mt-4">
-                <Button size="sm" onClick={() => handleExport('sales')}>
-                  Export CSV
-                </Button>
-              </div>
-            </TabPanel>
-            <TabPanel>
-              <div className="mt-4">
-                <LineChart
-                  className="h-80"
-                  data={forecastData?.forecast ?? []}
+        {activeTab === 'overview' && (
+          <>
+            <div className="grid-cards grid-cards-2 mb-lg">
+              <ChartCard title="Revenue Over Time">
+                <BBQAreaChart
+                  data={data?.revenueOverTime ?? []}
                   index="date"
-                  categories={['predictedOrders', 'predictedSalesCents']}
-                  colors={['orange', 'blue']}
-                  valueFormatter={(value) => 
-                    value > 1000 ? formatCurrency(value) : value.toString()
-                  }
+                  categories={['revenue']}
+                  valueFormatter={(v) => formatCurrency(v * 100)}
                 />
-                <div className="mt-4 flex gap-2">
-                  <Badge color="gray">
-                    Baseline: {forecastData?.baseline.trailingAverageOrders.toFixed(1)} orders/day
-                  </Badge>
-                  <Button size="sm" onClick={() => handleExport('forecast')}>
-                    Export CSV
-                  </Button>
-                </div>
-              </div>
-            </TabPanel>
-            <TabPanel>
-              <div className="mt-4 space-y-3">
-                {anomaliesData?.summary && (
-                  <div className="mb-4 flex gap-3">
-                    <Badge color="red">Critical: {anomaliesData.summary.critical}</Badge>
-                    <Badge color="yellow">Warning: {anomaliesData.summary.warning}</Badge>
-                    <Badge color="blue">Info: {anomaliesData.summary.info}</Badge>
-                  </div>
-                )}
-                {anomaliesData?.anomalies.map((anomaly: any, idx: number) => (
-                  <Callout
-                    key={idx}
-                    title={anomaly.title}
-                    color={anomaly.severity === 'critical' ? 'red' : anomaly.severity === 'warning' ? 'yellow' : 'blue'}
-                  >
-                    {anomaly.detail}
-                  </Callout>
-                ))}
-                {(!anomaliesData?.anomalies || anomaliesData.anomalies.length === 0) && (
-                  <p className="text-gray-400">No anomalies detected in the last 21 days.</p>
-                )}
-              </div>
-            </TabPanel>
-          </TabPanels>
-        </TabGroup>
-      </Card>
-    </div>
+              </ChartCard>
+              <ChartCard title="Order Sources">
+                <BBQDonutChart
+                  data={data?.sourceBreakdown ?? []}
+                  category="count"
+                  index="source"
+                />
+              </ChartCard>
+            </div>
+
+            <div className="panel">
+              <h4 className="mb-md">Top Items</h4>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th>Orders</th>
+                    <th>Revenue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data?.topItems ?? []).map((item) => (
+                    <tr key={item.name}>
+                      <td>{item.name}</td>
+                      <td>{item.count}</td>
+                      <td>{formatCurrency(item.revenue)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {activeTab === 'forecast' && (
+          <ChartCard title="Revenue Forecast">
+            <BBQAreaChart
+              data={data?.forecast ?? []}
+              index="date"
+              categories={['predicted']}
+              colors={['#5a9fd4']}
+              valueFormatter={(v) => formatCurrency(v * 100)}
+            />
+          </ChartCard>
+        )}
+
+        {activeTab === 'anomalies' && (
+          <div className="panel">
+            <h4 className="mb-md">Detected Anomalies</h4>
+            {(data?.anomalies ?? []).length === 0 ? (
+              <p className="text-muted">No anomalies detected</p>
+            ) : (
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Metric</th>
+                    <th>Actual</th>
+                    <th>Expected</th>
+                    <th>Deviation</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data?.anomalies ?? []).map((a, i) => (
+                    <tr key={i}>
+                      <td>{a.date}</td>
+                      <td>{a.metric}</td>
+                      <td>{a.actual.toLocaleString()}</td>
+                      <td>{a.expected.toLocaleString()}</td>
+                      <td className={a.actual > a.expected ? 'text-success' : 'text-danger'}>
+                        {((a.actual - a.expected) / a.expected * 100).toFixed(1)}%
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+      </AnimatedPage>
     </RoleGate>
   );
 }

@@ -3,13 +3,13 @@
 import { useState } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
-import { Card, Select, SelectItem, TextInput, Button } from '@tremor/react';
 import { PageHeader } from '@/components/PageHeader';
 import { DataTable } from '@/components/DataTable';
 import { StatusBadge } from '@/components/StatusBadge';
 import { RoleGate } from '@/components/RoleGate';
-
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+import { AnimatedPage } from '@/components/AnimatedPage';
+import { useToast } from '@/components/Toast';
+import { fetcher, formatDate } from '@/lib/utils';
 
 interface Booking {
   id: string;
@@ -18,19 +18,19 @@ interface Booking {
   status: string;
   packageName?: string | null;
   location?: { name: string };
-  createdAt: string;
+  customerName?: string;
+  totalCents?: number;
 }
 
-const BOOKING_STATUSES = ['pending_approval', 'approved', 'declined', 'cancelled'];
+const BOOKING_STATUSES = ['inquiry', 'confirmed', 'deposit_paid', 'completed', 'cancelled'];
 
 export default function BookingsPage() {
   const [statusFilter, setStatusFilter] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
   const [selectedBooking, setSelectedBooking] = useState<string | null>(null);
-  const [newStatus, setNewStatus] = useState<string>('');
+  const [newStatus, setNewStatus] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
 
   const limit = 20;
@@ -38,40 +38,19 @@ export default function BookingsPage() {
 
   const { data, mutate, isLoading } = useSWR<{ data: Booking[] }>(
     `/api/admin/catering/bookings?limit=${limit}&offset=${offset}`,
-    fetcher,
-    { refreshInterval: 60000 }
+    fetcher
   );
+  const { addToast } = useToast();
 
   const filteredBookings = (data?.data ?? []).filter((booking) => {
     if (statusFilter !== 'all' && booking.status !== statusFilter) return false;
-    if (searchQuery && !booking.id.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-
-    const eventTimestamp = new Date(booking.eventDate).getTime();
-    if (startDate) {
-      const startTimestamp = new Date(`${startDate}T00:00:00`).getTime();
-      if (eventTimestamp < startTimestamp) return false;
-    }
-    if (endDate) {
-      const endTimestamp = new Date(`${endDate}T23:59:59`).getTime();
-      if (eventTimestamp > endTimestamp) return false;
-    }
-
+    if (dateFrom && new Date(booking.eventDate) < new Date(dateFrom)) return false;
+    if (dateTo && new Date(booking.eventDate) > new Date(dateTo)) return false;
     return true;
   });
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    });
-  };
-
   const handleStatusUpdate = async () => {
     if (!selectedBooking || !newStatus) return;
-
     setIsUpdating(true);
     try {
       const response = await fetch(`/api/admin/catering/bookings/${selectedBooking}/status`, {
@@ -79,155 +58,103 @@ export default function BookingsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       });
-
       if (response.ok) {
+        addToast({ type: 'success', message: 'Booking status updated' });
         await mutate();
         setSelectedBooking(null);
         setNewStatus('');
+      } else {
+        addToast({ type: 'error', message: 'Failed to update status' });
       }
-    } catch (error) {
-      console.error('Failed to update booking status:', error);
+    } catch {
+      addToast({ type: 'error', message: 'An error occurred' });
     } finally {
       setIsUpdating(false);
     }
   };
 
   return (
-    <RoleGate allowedRoles={['owner', 'admin', 'manager', 'staff']}>
-    <div className="p-6">
-      <PageHeader
-        title="Catering Bookings"
-        subtitle="Manage event bookings and catering requests"
-      />
-
-      {/* Filters */}
-      <Card className="mb-6">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <label className="mb-2 block text-sm font-medium text-gray-300">Status</label>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectItem value="all">All Statuses</SelectItem>
-              {BOOKING_STATUSES.map((status) => (
-                <SelectItem key={status} value={status}>
-                  {status.replace('_', ' ').charAt(0).toUpperCase() + status.slice(1).replace('_', ' ')}
-                </SelectItem>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <label className="mb-2 block text-sm font-medium text-gray-300">Search Booking ID</label>
-            <TextInput
-              placeholder="Enter booking ID..."
-              value={searchQuery}
-              onValueChange={setSearchQuery}
-            />
-          </div>
-          <div>
-            <label className="mb-2 block text-sm font-medium text-gray-300">From Date</label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="w-full rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-200"
-            />
-          </div>
-          <div>
-            <label className="mb-2 block text-sm font-medium text-gray-300">To Date</label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="w-full rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-200"
-            />
-          </div>
-        </div>
-      </Card>
-
-      {/* Bookings Table */}
-      <Card>
-        <DataTable
-          columns={[
-            { header: 'Booking ID', accessor: (row: Booking) => row.id.slice(0, 8) },
-            { header: 'Event Date', accessor: (row: Booking) => formatDate(row.eventDate) },
-            { header: 'Party Size', accessor: (row: Booking) => row.partySize },
-            {
-              header: 'Status',
-              accessor: (row: Booking) => <StatusBadge status={row.status} />,
-            },
-            { header: 'Package', accessor: (row: Booking) => row.packageName ?? 'Custom' },
-            { header: 'Location', accessor: (row: Booking) => row.location?.name ?? 'N/A' },
-            {
-              header: 'Actions',
-              accessor: (row: Booking) => (
-                <div className="flex gap-2">
-                  <Link
-                    href={`/dashboard/bookings/${row.id}`}
-                    className="inline-flex items-center rounded-md border border-gray-700 px-2 py-1 text-xs text-gray-200 hover:bg-gray-800"
-                  >
-                    View
-                  </Link>
-                  <Button
-                    size="xs"
-                    variant="secondary"
-                    onClick={() => {
-                      setSelectedBooking(row.id);
-                      setNewStatus(row.status);
-                    }}
-                  >
-                    Update Status
-                  </Button>
-                </div>
-              ),
-            },
-          ]}
-          data={filteredBookings}
-          currentPage={page}
-          totalPages={Math.max(1, Math.ceil((data?.data.length ?? 0) / limit))}
-          onPageChange={setPage}
-          isLoading={isLoading}
+    <RoleGate allowedRoles={['owner', 'admin', 'manager']}>
+      <AnimatedPage>
+        <PageHeader
+          title="Catering Bookings"
+          subtitle="Manage event bookings and catering requests"
         />
-      </Card>
 
-      {/* Status Update Dialog */}
-      {selectedBooking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <Card className="w-full max-w-md">
-            <h3 className="text-lg font-semibold text-bbq-light">Update Booking Status</h3>
-            <p className="mt-2 text-sm text-gray-400">Select the new status for this booking:</p>
-            <div className="mt-4">
-              <Select value={newStatus} onValueChange={setNewStatus}>
-                {BOOKING_STATUSES.map((status) => (
-                  <SelectItem key={status} value={status}>
-                    {status.replace('_', ' ').charAt(0).toUpperCase() + status.slice(1).replace('_', ' ')}
-                  </SelectItem>
+        <div className="panel mb-lg">
+          <div className="form-row">
+            <div className="form-group">
+              <label className="form-label">Status</label>
+              <select className="select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                <option value="all">All Statuses</option>
+                {BOOKING_STATUSES.map((s) => (
+                  <option key={s} value={s}>{s.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</option>
                 ))}
-              </Select>
+              </select>
             </div>
-            <div className="mt-6 flex justify-end gap-3">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => {
-                  setSelectedBooking(null);
-                  setNewStatus('');
-                }}
-                disabled={isUpdating}
-              >
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                color="orange"
-                onClick={handleStatusUpdate}
-                disabled={isUpdating}
-              >
-                {isUpdating ? 'Updating...' : 'Update'}
-              </Button>
+            <div className="form-group">
+              <label className="form-label">From Date</label>
+              <input type="date" className="input" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
             </div>
-          </Card>
+            <div className="form-group">
+              <label className="form-label">To Date</label>
+              <input type="date" className="input" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+            </div>
+          </div>
         </div>
-      )}
-    </div>
+
+        <div className="panel">
+          <DataTable
+            columns={[
+              { header: 'Booking ID', accessor: (row: Booking) => row.id.slice(0, 8) },
+              { header: 'Event Date', accessor: (row: Booking) => formatDate(row.eventDate), sortKey: (row: Booking) => row.eventDate },
+              { header: 'Party Size', accessor: (row: Booking) => row.partySize, sortKey: (row: Booking) => row.partySize },
+              { header: 'Status', accessor: (row: Booking) => <StatusBadge status={row.status} type="booking" />, sortKey: (row: Booking) => row.status },
+              { header: 'Package', accessor: (row: Booking) => row.packageName ?? 'Custom' },
+              { header: 'Location', accessor: (row: Booking) => row.location?.name ?? 'N/A' },
+              {
+                header: 'Actions',
+                accessor: (row: Booking) => (
+                  <div className="flex-gap-sm">
+                    <Link href={`/dashboard/bookings/${row.id}`} className="btn btn-ghost btn-xs">View</Link>
+                    <button className="btn btn-secondary btn-xs" onClick={() => { setSelectedBooking(row.id); setNewStatus(row.status); }}>
+                      Update
+                    </button>
+                  </div>
+                ),
+              },
+            ]}
+            data={filteredBookings}
+            currentPage={page}
+            totalPages={Math.max(1, Math.ceil((data?.data.length ?? 0) / limit))}
+            onPageChange={setPage}
+            isLoading={isLoading}
+          />
+        </div>
+
+        {selectedBooking && (
+          <div className="overlay">
+            <div className="overlay-backdrop" onClick={() => { setSelectedBooking(null); setNewStatus(''); }} />
+            <div className="modal modal-sm">
+              <h3 className="modal-title">Update Booking Status</h3>
+              <p className="text-muted mb-md">
+                Select the new status for this booking:
+              </p>
+              <select className="select" value={newStatus} onChange={(e) => setNewStatus(e.target.value)}>
+                {BOOKING_STATUSES.map((s) => (
+                  <option key={s} value={s}>{s.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</option>
+                ))}
+              </select>
+              <div className="modal-actions">
+                <button className="btn btn-ghost btn-sm" onClick={() => { setSelectedBooking(null); setNewStatus(''); }} disabled={isUpdating}>Cancel</button>
+                <button className="btn btn-primary btn-sm" onClick={handleStatusUpdate} disabled={isUpdating}>
+                  {isUpdating ? 'Updating...' : 'Update'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </AnimatedPage>
     </RoleGate>
   );
 }

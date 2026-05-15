@@ -1,90 +1,94 @@
-"use client";
+'use client';
 
-import { useState, FormEvent } from "react";
-import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { Card, TextInput, Button, Callout } from "@tremor/react";
+import { useState, FormEvent } from 'react';
+import { signIn } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
 
-export default function AdminLoginPage() {
+export default function LoginPage() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setLoading(true);
+    setIsLoading(true);
+    setError('');
 
-    const form = e.currentTarget;
-    const email = (form.elements.namedItem("email") as HTMLInputElement).value;
-    const password = (form.elements.namedItem("password") as HTMLInputElement).value;
+    try {
+      const result = await signIn('credentials', {
+        redirect: false,
+        email,
+        password,
+      });
 
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false
-    });
-
-    setLoading(false);
-
-    if (result?.error) {
-      setError("Invalid credentials or insufficient permissions.");
-    } else {
-      router.replace("/dashboard");
+      if (result?.error) {
+        setError('Invalid email or password');
+      } else {
+        router.push('/dashboard');
+      }
+    } catch {
+      setError('An unexpected error occurred');
+    } finally {
+      setIsLoading(false);
     }
-  }
+  };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-bbq-dark p-4">
-      <Card className="w-full max-w-md">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-bbq-light">Admin Dashboard</h1>
-          <p className="mt-1 text-sm text-gray-400">Backyard BBQ King — staff access only</p>
+    <div className="login-page">
+      <motion.div
+        className="login-card"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: 'easeOut' }}
+      >
+        <div className="login-header">
+          <h1>Backyard BBQ</h1>
+          <p>Admin Dashboard</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="mb-2 block text-sm font-medium text-gray-300">
-              Email
-            </label>
-            <TextInput
-              name="email"
-              type="email"
-              required
-              autoComplete="email"
-              placeholder="you@example.com"
-            />
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-medium text-gray-300">
-              Password
-            </label>
-            <TextInput
-              name="password"
-              type="password"
-              required
-              autoComplete="current-password"
-              placeholder="••••••••"
-            />
-          </div>
-
+        <form onSubmit={handleSubmit} className="form-stack">
           {error && (
-            <Callout title="Error" color="red">
+            <div className="callout callout-error">
               {error}
-            </Callout>
+            </div>
           )}
 
-          <Button
-            type="submit"
-            color="orange"
-            className="w-full"
-            disabled={loading}
-          >
-            {loading ? "Signing in…" : "Sign In"}
-          </Button>
+          <div className="form-group">
+            <label className="form-label" htmlFor="email">Email</label>
+            <input
+              id="email"
+              type="email"
+              className="input"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="admin@backyardbbq.com"
+              required
+              autoComplete="email"
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label" htmlFor="password">Password</label>
+            <input
+              id="password"
+              type="password"
+              className="input"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+              autoComplete="current-password"
+            />
+          </div>
+
+          <button type="submit" className="btn btn-primary btn-full" disabled={isLoading}>
+            {isLoading ? 'Signing in...' : 'Sign In'}
+          </button>
         </form>
-      </Card>
-    </main>
+      </motion.div>
+    </div>
   );
 }

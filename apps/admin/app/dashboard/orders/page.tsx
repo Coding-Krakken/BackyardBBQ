@@ -3,13 +3,13 @@
 import { useState } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
-import { Card, Select, SelectItem, TextInput, Button } from '@tremor/react';
 import { PageHeader } from '@/components/PageHeader';
 import { DataTable } from '@/components/DataTable';
 import { StatusBadge } from '@/components/StatusBadge';
 import { RoleGate } from '@/components/RoleGate';
-
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+import { AnimatedPage } from '@/components/AnimatedPage';
+import { useToast } from '@/components/Toast';
+import { fetcher, formatCurrency, formatDate } from '@/lib/utils';
 
 interface Order {
   id: string;
@@ -40,6 +40,7 @@ export default function OrdersPage() {
     fetcher,
     { refreshInterval: 30000 }
   );
+  const { addToast } = useToast();
 
   const filteredOrders = (data?.data ?? []).filter((order) => {
     if (statusFilter !== 'all' && order.status !== statusFilter) return false;
@@ -48,25 +49,8 @@ export default function OrdersPage() {
     return true;
   });
 
-  const formatCurrency = (cents: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(cents / 100);
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    });
-  };
-
   const handleStatusUpdate = async () => {
     if (!selectedOrder || !newStatus) return;
-
     setIsUpdating(true);
     try {
       const response = await fetch(`/api/admin/orders/${selectedOrder}/status`, {
@@ -74,14 +58,16 @@ export default function OrdersPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       });
-
       if (response.ok) {
+        addToast({ type: 'success', message: 'Order status updated' });
         await mutate();
         setSelectedOrder(null);
         setNewStatus('');
+      } else {
+        addToast({ type: 'error', message: 'Failed to update status' });
       }
-    } catch (error) {
-      console.error('Failed to update order status:', error);
+    } catch {
+      addToast({ type: 'error', message: 'An error occurred' });
     } finally {
       setIsUpdating(false);
     }
@@ -89,133 +75,99 @@ export default function OrdersPage() {
 
   return (
     <RoleGate allowedRoles={['owner', 'admin', 'manager', 'staff']}>
-    <div className="p-6">
-      <PageHeader
-        title="Orders"
-        subtitle="Manage all incoming orders from all channels"
-      />
-
-      {/* Filters */}
-      <Card className="mb-6">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <div>
-            <label className="mb-2 block text-sm font-medium text-gray-300">Status</label>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectItem value="all">All Statuses</SelectItem>
-              {ORDER_STATUSES.map((status) => (
-                <SelectItem key={status} value={status}>
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
-                </SelectItem>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <label className="mb-2 block text-sm font-medium text-gray-300">Source</label>
-            <Select value={sourceFilter} onValueChange={setSourceFilter}>
-              <SelectItem value="all">All Sources</SelectItem>
-              {ORDER_SOURCES.map((source) => (
-                <SelectItem key={source} value={source}>
-                  {source.toUpperCase()}
-                </SelectItem>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <label className="mb-2 block text-sm font-medium text-gray-300">Search Order ID</label>
-            <TextInput
-              placeholder="Enter order ID..."
-              value={searchQuery}
-              onValueChange={setSearchQuery}
-            />
-          </div>
-        </div>
-      </Card>
-
-      {/* Orders Table */}
-      <Card>
-        <DataTable
-          columns={[
-            { header: 'Order ID', accessor: (row: Order) => row.id.slice(0, 8) },
-            { header: 'Source', accessor: (row: Order) => row.source.toUpperCase() },
-            {
-              header: 'Status',
-              accessor: (row: Order) => <StatusBadge status={row.status} />,
-            },
-            { header: 'Total', accessor: (row: Order) => formatCurrency(row.totalCents) },
-            { header: 'Location', accessor: (row: Order) => row.location?.name ?? 'N/A' },
-            { header: 'Created', accessor: (row: Order) => formatDate(row.createdAt) },
-            {
-              header: 'Actions',
-              accessor: (row: Order) => (
-                <div className="flex gap-2">
-                  <Link
-                    href={`/dashboard/orders/${row.id}`}
-                    className="inline-flex items-center rounded-md border border-gray-700 px-2 py-1 text-xs text-gray-200 hover:bg-gray-800"
-                  >
-                    View
-                  </Link>
-                  <Button
-                    size="xs"
-                    variant="secondary"
-                    onClick={() => {
-                      setSelectedOrder(row.id);
-                      setNewStatus(row.status);
-                    }}
-                  >
-                    Update Status
-                  </Button>
-                </div>
-              ),
-            },
-          ]}
-          data={filteredOrders}
-          currentPage={page}
-          totalPages={Math.max(1, Math.ceil((data?.data.length ?? 0) / limit))}
-          onPageChange={setPage}
-          isLoading={isLoading}
+      <AnimatedPage>
+        <PageHeader
+          title="Orders"
+          subtitle="Manage all incoming orders from all channels"
         />
-      </Card>
 
-      {/* Status Update Dialog */}
-      {selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <Card className="w-full max-w-md">
-            <h3 className="text-lg font-semibold text-bbq-light">Update Order Status</h3>
-            <p className="mt-2 text-sm text-gray-400">Select the new status for this order:</p>
-            <div className="mt-4">
-              <Select value={newStatus} onValueChange={setNewStatus}>
-                {ORDER_STATUSES.map((status) => (
-                  <SelectItem key={status} value={status}>
-                    {status.charAt(0).toUpperCase() + status.slice(1)}
-                  </SelectItem>
+        {/* Filters */}
+        <div className="panel mb-lg">
+          <div className="form-row">
+            <div className="form-group">
+              <label className="form-label">Status</label>
+              <select className="select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                <option value="all">All Statuses</option>
+                {ORDER_STATUSES.map((s) => (
+                  <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
                 ))}
-              </Select>
+              </select>
             </div>
-            <div className="mt-6 flex justify-end gap-3">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => {
-                  setSelectedOrder(null);
-                  setNewStatus('');
-                }}
-                disabled={isUpdating}
-              >
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                color="orange"
-                onClick={handleStatusUpdate}
-                disabled={isUpdating}
-              >
-                {isUpdating ? 'Updating...' : 'Update'}
-              </Button>
+            <div className="form-group">
+              <label className="form-label">Source</label>
+              <select className="select" value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)}>
+                <option value="all">All Sources</option>
+                {ORDER_SOURCES.map((s) => (
+                  <option key={s} value={s}>{s.toUpperCase()}</option>
+                ))}
+              </select>
             </div>
-          </Card>
+            <div className="form-group">
+              <label className="form-label">Search Order ID</label>
+              <input
+                className="input"
+                placeholder="Enter order ID..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+          </div>
         </div>
-      )}
-    </div>
+
+        {/* Orders Table */}
+        <div className="panel">
+          <DataTable
+            columns={[
+              { header: 'Order ID', accessor: (row: Order) => row.id.slice(0, 8) },
+              { header: 'Source', accessor: (row: Order) => row.source.toUpperCase(), sortKey: (row: Order) => row.source },
+              { header: 'Status', accessor: (row: Order) => <StatusBadge status={row.status} />, sortKey: (row: Order) => row.status },
+              { header: 'Total', accessor: (row: Order) => formatCurrency(row.totalCents), sortKey: (row: Order) => row.totalCents },
+              { header: 'Location', accessor: (row: Order) => row.location?.name ?? 'N/A' },
+              { header: 'Created', accessor: (row: Order) => formatDate(row.createdAt), sortKey: (row: Order) => row.createdAt },
+              {
+                header: 'Actions',
+                accessor: (row: Order) => (
+                  <div className="flex-gap-sm">
+                    <Link href={`/dashboard/orders/${row.id}`} className="btn btn-ghost btn-xs">View</Link>
+                    <button className="btn btn-secondary btn-xs" onClick={() => { setSelectedOrder(row.id); setNewStatus(row.status); }}>
+                      Update Status
+                    </button>
+                  </div>
+                ),
+              },
+            ]}
+            data={filteredOrders}
+            currentPage={page}
+            totalPages={Math.max(1, Math.ceil((data?.data.length ?? 0) / limit))}
+            onPageChange={setPage}
+            isLoading={isLoading}
+          />
+        </div>
+
+        {/* Status Update Dialog */}
+        {selectedOrder && (
+          <div className="overlay">
+            <div className="overlay-backdrop" onClick={() => { setSelectedOrder(null); setNewStatus(''); }} />
+            <div className="modal modal-sm">
+              <h3 className="modal-title">Update Order Status</h3>
+              <p className="text-muted mb-md">
+                Select the new status for this order:
+              </p>
+              <select className="select" value={newStatus} onChange={(e) => setNewStatus(e.target.value)}>
+                {ORDER_STATUSES.map((s) => (
+                  <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                ))}
+              </select>
+              <div className="modal-actions">
+                <button className="btn btn-ghost btn-sm" onClick={() => { setSelectedOrder(null); setNewStatus(''); }} disabled={isUpdating}>Cancel</button>
+                <button className="btn btn-primary btn-sm" onClick={handleStatusUpdate} disabled={isUpdating}>
+                  {isUpdating ? 'Updating...' : 'Update'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </AnimatedPage>
     </RoleGate>
   );
 }

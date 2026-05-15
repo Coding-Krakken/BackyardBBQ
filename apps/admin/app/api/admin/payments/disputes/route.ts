@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     skip: offset
   });
 
-  const data = events.map((e) => {
+  const data = events.map((e: typeof events[number]) => {
     const p = e.payload as Record<string, unknown>;
     return {
       id: e.id,

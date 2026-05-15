@@ -2,51 +2,40 @@
 
 import { useState } from 'react';
 import useSWR from 'swr';
-import {
-  Card,
-  Select,
-  SelectItem,
-  TextInput,
-  Textarea,
-  Button,
-  Callout,
-} from '@tremor/react';
 import { PageHeader } from '@/components/PageHeader';
-import { DataTable } from '@/components/DataTable';
-import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { RoleGate } from '@/components/RoleGate';
-
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+import { AnimatedPage } from '@/components/AnimatedPage';
+import { useToast } from '@/components/Toast';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { fetcher, formatDate } from '@/lib/utils';
 
 interface Notification {
   id: string;
-  title: string;
-  message: string;
   type: string;
-  createdAt: string;
+  subject: string;
+  recipientCount: number;
+  sentAt: string;
+  status: string;
 }
 
-const NOTIFICATION_TYPES = [
-  'order_update',
-  'booking_update',
-  'payment_update',
-  'referral_reward',
-  'promotional',
-];
-
 export default function NotificationsPage() {
-  const [target, setTarget] = useState<'all' | 'specific'>('all');
-  const [customerId, setCustomerId] = useState('');
-  const [type, setType] = useState('promotional');
-  const [title, setTitle] = useState('');
+  const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
+  const [audience, setAudience] = useState('all');
+  const [channel, setChannel] = useState('email');
   const [isSending, setIsSending] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const { addToast } = useToast();
 
-  const { data: recentData, mutate } = useSWR<{ data: Notification[] }>(
-    '/api/admin/notifications?limit=20',
-    fetcher
-  );
+  const { data, mutate } = useSWR<{ data: Notification[] }>('/api/admin/notifications', fetcher);
+
+  const handleSendClick = () => {
+    if (!subject.trim() || !message.trim()) {
+      addToast({ type: 'warning', message: 'Please fill in subject and message' });
+      return;
+    }
+    setShowConfirm(true);
+  };
 
   const handleSend = async () => {
     setIsSending(true);
@@ -54,156 +43,110 @@ export default function NotificationsPage() {
       const response = await fetch('/api/admin/notifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          target,
-          customerId: target === 'specific' ? customerId : undefined,
-          type,
-          title,
-          message,
-        }),
+        body: JSON.stringify({ subject, message, audience, channel }),
       });
-
       if (response.ok) {
-        await mutate();
-        setTitle('');
+        addToast({ type: 'success', message: 'Notification sent successfully' });
+        setSubject('');
         setMessage('');
-        setCustomerId('');
-        setShowConfirm(false);
+        await mutate();
+      } else {
+        addToast({ type: 'error', message: 'Failed to send notification' });
       }
-    } catch (error) {
-      console.error('Failed to send notification:', error);
+    } catch {
+      addToast({ type: 'error', message: 'An error occurred' });
     } finally {
       setIsSending(false);
+      setShowConfirm(false);
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    });
-  };
-
-  const canSend = title.trim() && message.trim() && (target === 'all' || customerId.trim());
-
   return (
     <RoleGate allowedRoles={['owner', 'admin']}>
-    <div className="p-6">
-      <PageHeader
-        title="Notifications"
-        subtitle="Send notifications to customers"
-      />
+      <AnimatedPage>
+        <PageHeader title="Notifications" subtitle="Send messages and view notification history" />
 
-      {/* Compose Form */}
-      <Card className="mb-8">
-        <h3 className="mb-4 text-lg font-semibold text-bbq-light">Compose Notification</h3>
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-300">Target</label>
-              <Select value={target} onValueChange={(val) => setTarget(val as 'all' | 'specific')}>
-                <SelectItem value="all">All Customers</SelectItem>
-                <SelectItem value="specific">Specific Customer</SelectItem>
-              </Select>
-            </div>
-            {target === 'specific' && (
-              <div>
-                <label className="mb-2 block text-sm font-medium text-gray-300">Customer ID</label>
-                <TextInput
-                  placeholder="Enter customer ID..."
-                  value={customerId}
-                  onValueChange={setCustomerId}
-                />
+        {/* Compose */}
+        <div className="panel mb-xl">
+          <h4 className="mb-md">Compose Notification</h4>
+          <div className="form-stack">
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Audience</label>
+                <select className="select" value={audience} onChange={(e) => setAudience(e.target.value)}>
+                  <option value="all">All Customers</option>
+                  <option value="active">Active Customers</option>
+                  <option value="inactive">Inactive Customers</option>
+                  <option value="staff">Staff Only</option>
+                </select>
               </div>
-            )}
+              <div className="form-group">
+                <label className="form-label">Channel</label>
+                <select className="select" value={channel} onChange={(e) => setChannel(e.target.value)}>
+                  <option value="email">Email</option>
+                  <option value="sms">SMS</option>
+                  <option value="push">Push Notification</option>
+                </select>
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Subject</label>
+              <input className="input" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Notification subject" />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Message</label>
+              <textarea className="textarea" value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Write your message..." rows={5} aria-label="Notification message" />
+            </div>
             <div>
-              <label className="mb-2 block text-sm font-medium text-gray-300">Type</label>
-              <Select value={type} onValueChange={setType}>
-                {NOTIFICATION_TYPES.map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {t.replace('_', ' ').toUpperCase()}
-                  </SelectItem>
-                ))}
-              </Select>
+              <button className="btn btn-primary" onClick={handleSendClick} disabled={isSending}>
+                {isSending ? 'Sending...' : 'Send Notification'}
+              </button>
             </div>
           </div>
-          <div>
-            <label className="mb-2 block text-sm font-medium text-gray-300">Title</label>
-            <TextInput
-              placeholder="Enter notification title..."
-              value={title}
-              onValueChange={setTitle}
-            />
-          </div>
-          <div>
-            <label className="mb-2 block text-sm font-medium text-gray-300">Message</label>
-            <Textarea
-              placeholder="Enter notification message..."
-              value={message}
-              onValueChange={setMessage}
-              rows={4}
-            />
-          </div>
         </div>
 
-        {/* Preview */}
-        {title && message && (
-          <div className="mt-6">
-            <p className="mb-2 text-sm font-medium text-gray-300">Preview</p>
-            <Callout title={title} color="blue">
-              {message}
-            </Callout>
-          </div>
-        )}
-
-        <div className="mt-6 flex justify-end">
-          <Button
-            size="lg"
-            color="orange"
-            onClick={() => setShowConfirm(true)}
-            disabled={!canSend}
-          >
-            Send Notification
-          </Button>
+        {/* Recent Notifications */}
+        <div className="panel">
+          <h4 className="mb-md">Recent Notifications</h4>
+          {(data?.data ?? []).length === 0 ? (
+            <p className="text-muted">No notifications sent yet</p>
+          ) : (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Subject</th>
+                  <th>Type</th>
+                  <th>Recipients</th>
+                  <th>Status</th>
+                  <th>Sent</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(data?.data ?? []).map((n) => (
+                  <tr key={n.id}>
+                    <td>{n.subject}</td>
+                    <td>{n.type}</td>
+                    <td>{n.recipientCount}</td>
+                    <td><span className={`badge ${n.status === 'sent' ? 'badge-green' : 'badge-amber'}`}>{n.status}</span></td>
+                    <td>{formatDate(n.sentAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
-      </Card>
 
-      {/* Recent Notifications */}
-      <Card>
-        <h3 className="mb-4 text-lg font-semibold text-bbq-light">Recent Notifications</h3>
-        <DataTable
-          columns={[
-            { header: 'Title', accessor: (row: Notification) => row.title },
-            {
-              header: 'Type',
-              accessor: (row: Notification) => row.type.replace('_', ' ').toUpperCase(),
-            },
-            {
-              header: 'Message',
-              accessor: (row: Notification) =>
-                row.message.length > 50 ? row.message.slice(0, 50) + '...' : row.message,
-            },
-            { header: 'Sent', accessor: (row: Notification) => formatDate(row.createdAt) },
-          ]}
-          data={recentData?.data ?? []}
+        <ConfirmDialog
+          isOpen={showConfirm}
+          onClose={() => setShowConfirm(false)}
+          onConfirm={handleSend}
+          title="Send Notification"
+          message={`Send "${subject}" via ${channel} to ${audience === 'all' ? 'all customers' : audience + ' customers'}? This cannot be undone.`}
+          confirmText="Send"
+          variant="primary"
+          isLoading={isSending}
         />
-      </Card>
-
-      {/* Send Confirmation */}
-      <ConfirmDialog
-        isOpen={showConfirm}
-        onClose={() => setShowConfirm(false)}
-        onConfirm={handleSend}
-        title="Send Notification"
-        message={`Are you sure you want to send this notification to ${
-          target === 'all' ? 'all customers' : 'the specified customer'
-        }?`}
-        confirmText="Send"
-        isLoading={isSending}
-      />
-    </div>
+      </AnimatedPage>
     </RoleGate>
   );
 }

@@ -1,199 +1,180 @@
 'use client';
 
-import { useState } from 'react';
 import useSWR from 'swr';
-import { Card, Metric, Text, Badge, Callout, Button } from '@tremor/react';
 import { PageHeader } from '@/components/PageHeader';
+import { StatusBadge } from '@/components/StatusBadge';
 import { DataTable } from '@/components/DataTable';
-import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { RoleGate } from '@/components/RoleGate';
+import { AnimatedPage } from '@/components/AnimatedPage';
+import { useToast } from '@/components/Toast';
+import { fetcher, formatDate } from '@/lib/utils';
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
-
-interface ChannelHealth {
-  channel: string;
+interface ServiceHealth {
+  name: string;
   status: 'healthy' | 'degraded' | 'down';
-  processedCount: number;
-  failedCount: number;
-  deadLetterDepth: number;
-  averageLatencyMs: number;
+  latencyMs: number;
+  lastCheck: string;
 }
 
 interface Alert {
-  severity: 'critical' | 'warning' | 'info';
-  channel: string;
+  id: string;
+  service: string;
   message: string;
+  severity: string;
+  createdAt: string;
+  acknowledged: boolean;
 }
 
-interface DeadLetterEvent {
+interface DeadLetter {
   id: string;
-  channel: string;
-  eventType: string;
-  payload: any;
+  queue: string;
+  payload: string;
+  error: string;
   createdAt: string;
 }
 
 export default function IntegrationsPage() {
-  const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
-  const [isRetrying, setIsRetrying] = useState(false);
+  const { addToast } = useToast();
 
-  const { data: healthData } = useSWR<{ data: ChannelHealth[] }>(
+  const { data: healthData } = useSWR<{ services: ServiceHealth[] }>(
     '/api/admin/integrations/health',
     fetcher,
-    { refreshInterval: 60000 }
+    { refreshInterval: 30000 }
   );
 
-  const { data: alertsData } = useSWR<{ data: Alert[] }>(
+  const { data: alertsData, mutate: mutateAlerts } = useSWR<{ data: Alert[] }>(
     '/api/admin/integrations/alerts',
-    fetcher,
-    { refreshInterval: 60000 }
-  );
-
-  const { data: deadLetterData, mutate: mutateDeadLetter } = useSWR<{ data: DeadLetterEvent[] }>(
-    '/api/admin/integrations/dead-letter',
     fetcher
   );
 
-  const handleRetry = async () => {
-    if (!selectedEvent) return;
+  const { data: dlqData, mutate: mutateDLQ } = useSWR<{ data: DeadLetter[] }>(
+    '/api/admin/integrations/dead-letters',
+    fetcher
+  );
 
-    setIsRetrying(true);
+  const acknowledgeAlert = async (alertId: string) => {
     try {
-      const response = await fetch(`/api/admin/integrations/dead-letter/${selectedEvent}/retry`, {
-        method: 'PATCH',
-      });
-
+      const response = await fetch(`/api/admin/integrations/alerts/${alertId}/acknowledge`, { method: 'POST' });
       if (response.ok) {
-        await mutateDeadLetter();
-        setSelectedEvent(null);
+        addToast({ type: 'success', message: 'Alert acknowledged' });
+        await mutateAlerts();
       }
-    } catch (error) {
-      console.error('Failed to retry event:', error);
-    } finally {
-      setIsRetrying(false);
+    } catch {
+      addToast({ type: 'error', message: 'Failed to acknowledge alert' });
     }
   };
 
-  const getStatusBadgeColor = (status: string) => {
-    const colors: Record<string, any> = {
-      healthy: 'green',
-      degraded: 'yellow',
-      down: 'red',
-    };
-    return colors[status] || 'gray';
+  const retryDeadLetter = async (id: string) => {
+    try {
+      const response = await fetch(`/api/admin/integrations/dead-letters/${id}/retry`, { method: 'POST' });
+      if (response.ok) {
+        addToast({ type: 'success', message: 'Message retried' });
+        await mutateDLQ();
+      }
+    } catch {
+      addToast({ type: 'error', message: 'Retry failed' });
+    }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    });
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'healthy': return 'badge-green';
+      case 'degraded': return 'badge-amber';
+      case 'down': return 'badge-red';
+      default: return 'badge-gray';
+    }
   };
 
   return (
     <RoleGate allowedRoles={['owner', 'admin']}>
-    <div className="p-6">
-      <PageHeader
-        title="Integrations Health"
-        subtitle="Monitor delivery channel health and failed events"
-      />
+      <AnimatedPage>
+        <PageHeader title="Integrations" subtitle="Monitor third-party service health and queues" />
 
-      {/* Health Cards */}
-      <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {healthData?.data.map((channel) => (
-          <Card key={channel.channel}>
-            <div className="flex items-center justify-between">
-              <Text>{channel.channel.toUpperCase()}</Text>
-              <Badge color={getStatusBadgeColor(channel.status)}>{channel.status}</Badge>
+        {/* Service Health */}
+        <div className="grid-cards grid-cards-3 mb-xl">
+          {(healthData?.services ?? []).length === 0 ? (
+            <div className="panel" style={{ gridColumn: '1 / -1' }}>
+              <div className="empty-state">
+                <div className="empty-state-icon">🔌</div>
+                <p>No services configured</p>
+              </div>
             </div>
-            <Metric className="mt-2">{channel.processedCount}</Metric>
-            <div className="mt-2 space-y-1 text-xs text-gray-400">
-              <div>Failed: {channel.failedCount}</div>
-              <div>Dead Letter: {channel.deadLetterDepth}</div>
-              <div>Latency: {channel.averageLatencyMs}ms</div>
-            </div>
-          </Card>
-        ))}
-      </div>
-
-      {/* Alerts */}
-      {alertsData?.data && alertsData.data.length > 0 && (
-        <div className="mb-8">
-          <h3 className="mb-4 text-lg font-semibold text-bbq-light">Active Alerts</h3>
-          <div className="space-y-3">
-            {alertsData.data.map((alert, idx) => (
-              <Callout
-                key={idx}
-                title={`${alert.channel.toUpperCase()} - ${alert.severity.toUpperCase()}`}
-                color={
-                  alert.severity === 'critical'
-                    ? 'red'
-                    : alert.severity === 'warning'
-                    ? 'yellow'
-                    : 'blue'
-                }
-              >
-                {alert.message}
-              </Callout>
-            ))}
-          </div>
+          ) : (
+            (healthData?.services ?? []).map((service) => (
+              <div key={service.name} className="card">
+                <div className="flex-between mb-sm">
+                  <h4>{service.name}</h4>
+                  <span className={`badge ${getStatusColor(service.status)}`}>{service.status}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.5rem' }}>
+                  <div>
+                    <div className="eyebrow">Latency</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 600, fontFamily: 'var(--font-display)', color: service.latencyMs > 500 ? 'var(--warning)' : service.latencyMs > 1000 ? 'var(--danger)' : 'var(--cream)' }}>
+                      {service.latencyMs}ms
+                    </div>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div className="eyebrow">Last Check</div>
+                    <div className="text-muted" style={{ fontSize: '0.78rem' }}>{formatDate(service.lastCheck)}</div>
+                  </div>
+                </div>
+                {/* Latency bar indicator */}
+                <div style={{ marginTop: '0.65rem', height: '3px', background: 'var(--line-soft)', borderRadius: '2px', overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${Math.min(100, (service.latencyMs / 1000) * 100)}%`,
+                    background: service.latencyMs > 1000 ? 'var(--danger)' : service.latencyMs > 500 ? 'var(--warning)' : 'var(--success)',
+                    borderRadius: '2px',
+                    transition: 'width 0.5s ease',
+                  }} />
+                </div>
+              </div>
+            ))
+          )}
         </div>
-      )}
 
-      {/* Dead Letter Queue */}
-      <Card>
-        <h3 className="mb-4 text-lg font-semibold text-bbq-light">Dead Letter Queue</h3>
-        {deadLetterData?.data && deadLetterData.data.length > 0 ? (
+        {/* Alerts */}
+        <div className="panel mb-lg">
+          <h4 className="mb-md">Active Alerts</h4>
           <DataTable
             columns={[
-              {
-                header: 'Channel',
-                accessor: (row: DeadLetterEvent) => row.channel.toUpperCase(),
-              },
-              { header: 'Event Type', accessor: (row: DeadLetterEvent) => row.eventType },
-              {
-                header: 'Payload',
-                accessor: (row: DeadLetterEvent) =>
-                  JSON.stringify(row.payload).slice(0, 50) + '...',
-              },
-              {
-                header: 'Created',
-                accessor: (row: DeadLetterEvent) => formatDate(row.createdAt),
-              },
-              {
-                header: 'Actions',
-                accessor: (row: DeadLetterEvent) => (
-                  <Button
-                    size="xs"
-                    color="orange"
-                    variant="secondary"
-                    onClick={() => setSelectedEvent(row.id)}
-                  >
-                    Retry
-                  </Button>
-                ),
-              },
+              { header: 'Service', accessor: (row: Alert) => row.service },
+              { header: 'Message', accessor: (row: Alert) => row.message },
+              { header: 'Severity', accessor: (row: Alert) => <StatusBadge status={row.severity} /> },
+              { header: 'Time', accessor: (row: Alert) => formatDate(row.createdAt) },
+              { header: 'Actions', accessor: (row: Alert) => (
+                !row.acknowledged ? (
+                  <button className="btn btn-secondary btn-xs" onClick={() => acknowledgeAlert(row.id)}>Acknowledge</button>
+                ) : (
+                  <span className="text-muted">Acknowledged</span>
+                )
+              )},
             ]}
-            data={deadLetterData.data}
+            data={alertsData?.data ?? []}
           />
-        ) : (
-          <p className="text-gray-400">No failed events in the dead letter queue.</p>
-        )}
-      </Card>
+        </div>
 
-      {/* Retry Confirmation */}
-      <ConfirmDialog
-        isOpen={selectedEvent !== null}
-        onClose={() => setSelectedEvent(null)}
-        onConfirm={handleRetry}
-        title="Retry Failed Event"
-        message="Are you sure you want to retry this failed event? It will be reprocessed."
-        confirmText="Retry"
-        isLoading={isRetrying}
-      />
-    </div>
+        {/* Dead Letter Queue */}
+        <div className="panel">
+          <h4 className="mb-md">Dead Letter Queue</h4>
+          <DataTable
+            columns={[
+              { header: 'ID', accessor: (row: DeadLetter) => row.id.slice(0, 8) },
+              { header: 'Queue', accessor: (row: DeadLetter) => row.queue },
+              { header: 'Error', accessor: (row: DeadLetter) => (
+                <span style={{ maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+                  {row.error}
+                </span>
+              )},
+              { header: 'Time', accessor: (row: DeadLetter) => formatDate(row.createdAt) },
+              { header: 'Actions', accessor: (row: DeadLetter) => (
+                <button className="btn btn-ghost btn-xs" onClick={() => retryDeadLetter(row.id)}>Retry</button>
+              )},
+            ]}
+            data={dlqData?.data ?? []}
+          />
+        </div>
+      </AnimatedPage>
     </RoleGate>
   );
 }

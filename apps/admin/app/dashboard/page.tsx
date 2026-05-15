@@ -1,22 +1,33 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import useSWR from 'swr';
-import { Card, Metric, Text } from '@tremor/react';
+import Link from 'next/link';
 import { PageHeader } from '@/components/PageHeader';
 import { DataTable } from '@/components/DataTable';
 import { StatusBadge } from '@/components/StatusBadge';
-import { CardSkeleton } from '@/components/LoadingSkeleton';
+import { StatCard } from '@/components/StatCard';
+import { ChartCard } from '@/components/ChartCard';
+import { BBQAreaChart } from '@/components/charts/AreaChart';
+import { BBQDonutChart } from '@/components/charts/DonutChart';
+import { BBQBarChart } from '@/components/charts/BarChart';
+import { CardSkeleton, ChartSkeleton } from '@/components/LoadingSkeleton';
 import { RoleGate } from '@/components/RoleGate';
-
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+import { AnimatedPage } from '@/components/AnimatedPage';
+import { fetcher, formatCurrency, formatDate } from '@/lib/utils';
 
 interface OverviewData {
   totals: {
     pendingOrders: number;
     activeBookings: number;
     grossSalesCentsToday: number;
+    totalCustomers?: number;
+    completedOrders?: number;
+    avgOrderCents?: number;
   };
+  revenueByDay?: { date: string; revenue: number }[];
+  ordersBySource?: { source: string; count: number }[];
+  ordersByStatus?: { status: string; count: number }[];
 }
 
 interface Order {
@@ -41,11 +52,11 @@ export default function DashboardOverviewPage() {
   const { data: overview, isLoading: overviewLoading } = useSWR<OverviewData>(
     '/api/admin/overview',
     fetcher,
-    { refreshInterval: 30000 } // Refresh every 30 seconds
+    { refreshInterval: 30000 }
   );
 
   const { data: ordersData } = useSWR<{ data: Order[] }>(
-    '/api/admin/orders?limit=5',
+    '/api/admin/orders?limit=8',
     fetcher,
     { refreshInterval: 30000 }
   );
@@ -55,94 +66,190 @@ export default function DashboardOverviewPage() {
     fetcher
   );
 
-  const formatCurrency = (cents: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(cents / 100);
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
+  // Derive chart data from recent orders when API doesn't provide breakdowns
+  const revenueChartData = useMemo(() => {
+    if (overview?.revenueByDay) return overview.revenueByDay;
+    if (!ordersData?.data) return [];
+    const byDay: Record<string, number> = {};
+    ordersData.data.forEach((o) => {
+      const day = new Date(o.createdAt).toLocaleDateString('en-US', { weekday: 'short' });
+      byDay[day] = (byDay[day] ?? 0) + o.totalCents / 100;
     });
-  };
+    return Object.entries(byDay).map(([date, revenue]) => ({ date, revenue }));
+  }, [overview, ordersData]);
+
+  const sourceChartData = useMemo(() => {
+    if (overview?.ordersBySource) return overview.ordersBySource;
+    if (!ordersData?.data) return [];
+    const bySrc: Record<string, number> = {};
+    ordersData.data.forEach((o) => {
+      const src = o.source.toUpperCase();
+      bySrc[src] = (bySrc[src] ?? 0) + 1;
+    });
+    return Object.entries(bySrc).map(([name, value]) => ({ name, value }));
+  }, [overview, ordersData]);
+
+  const statusChartData = useMemo(() => {
+    if (overview?.ordersByStatus) return overview.ordersByStatus;
+    if (!ordersData?.data) return [];
+    const byStat: Record<string, number> = {};
+    ordersData.data.forEach((o) => {
+      byStat[o.status] = (byStat[o.status] ?? 0) + 1;
+    });
+    return Object.entries(byStat).map(([name, value]) => ({ name, value }));
+  }, [overview, ordersData]);
 
   return (
     <RoleGate allowedRoles={['owner', 'admin', 'manager']}>
-    <div className="p-6">
-      <PageHeader
-        title="Mission Control"
-        subtitle="Real-time overview of your restaurant operations"
-      />
+      <AnimatedPage>
+        <PageHeader
+          title="Mission Control"
+          subtitle="Real-time overview of your restaurant operations"
+        />
 
-      {/* KPI Cards */}
-      <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
-        {overviewLoading ? (
-          <>
-            <CardSkeleton />
-            <CardSkeleton />
-            <CardSkeleton />
-          </>
-        ) : (
-          <>
-            <Card>
-              <Text>Pending Orders</Text>
-              <Metric>{overview?.totals.pendingOrders ?? 0}</Metric>
-            </Card>
-            <Card>
-              <Text>Active Bookings</Text>
-              <Metric>{overview?.totals.activeBookings ?? 0}</Metric>
-            </Card>
-            <Card>
-              <Text>Gross Sales Today</Text>
-              <Metric>
-                {formatCurrency(overview?.totals.grossSalesCentsToday ?? 0)}
-              </Metric>
-            </Card>
-          </>
-        )}
-      </div>
+        {/* KPI Cards — Primary Metrics */}
+        <div className="grid-cards grid-cards-4 mb-xl">
+          {overviewLoading ? (
+            <><CardSkeleton /><CardSkeleton /><CardSkeleton /><CardSkeleton /></>
+          ) : (
+            <>
+              <StatCard
+                label="Pending Orders"
+                value={overview?.totals.pendingOrders ?? 0}
+                icon={<span>⊞</span>}
+              />
+              <StatCard
+                label="Active Bookings"
+                value={overview?.totals.activeBookings ?? 0}
+                icon={<span>◈</span>}
+              />
+              <StatCard
+                label="Today&rsquo;s Revenue"
+                value={(overview?.totals.grossSalesCentsToday ?? 0) / 100}
+                prefix="$"
+                decimals={2}
+                icon={<span>◆</span>}
+              />
+              <StatCard
+                label="Avg Order Value"
+                value={(overview?.totals.avgOrderCents ?? 0) / 100}
+                prefix="$"
+                decimals={2}
+                icon={<span>◇</span>}
+              />
+            </>
+          )}
+        </div>
 
-      {/* Recent Orders */}
-      <div className="mb-8">
-        <h3 className="mb-4 text-lg font-semibold text-bbq-light">Recent Orders</h3>
-        <Card>
-          <DataTable
-            columns={[
-              { header: 'Order ID', accessor: (row: Order) => row.id.slice(0, 8) },
-              { header: 'Source', accessor: (row: Order) => row.source.toUpperCase() },
-              { header: 'Status', accessor: (row: Order) => <StatusBadge status={row.status} /> },
-              { header: 'Total', accessor: (row: Order) => formatCurrency(row.totalCents) },
-              { header: 'Location', accessor: (row: Order) => row.location?.name ?? 'N/A' },
-              { header: 'Created', accessor: (row: Order) => formatDate(row.createdAt) },
-            ]}
-            data={ordersData?.data ?? []}
-          />
-        </Card>
-      </div>
+        {/* Charts Row */}
+        <div className="grid-cards grid-cards-2 mb-xl">
+          {overviewLoading ? (
+            <><ChartSkeleton /><ChartSkeleton /></>
+          ) : (
+            <>
+              <ChartCard title="Revenue Trend">
+                <BBQAreaChart
+                  data={revenueChartData}
+                  index="date"
+                  categories={['revenue']}
+                  valueFormatter={(v) => `$${v.toLocaleString()}`}
+                  height={260}
+                />
+              </ChartCard>
+              <ChartCard title="Orders by Source">
+                <BBQDonutChart
+                  data={sourceChartData}
+                  index="name"
+                  category="value"
+                  height={260}
+                />
+              </ChartCard>
+            </>
+          )}
+        </div>
 
-      {/* Recent Bookings */}
-      <div>
-        <h3 className="mb-4 text-lg font-semibold text-bbq-light">Recent Catering Bookings</h3>
-        <Card>
-          <DataTable
-            columns={[
-              { header: 'Booking ID', accessor: (row: Booking) => row.id.slice(0, 8) },
-              { header: 'Event Date', accessor: (row: Booking) => formatDate(row.eventDate) },
-              { header: 'Party Size', accessor: (row: Booking) => row.partySize },
-              { header: 'Status', accessor: (row: Booking) => <StatusBadge status={row.status} /> },
-              { header: 'Package', accessor: (row: Booking) => row.packageName ?? 'Custom' },
-              { header: 'Location', accessor: (row: Booking) => row.location?.name ?? 'N/A' },
-            ]}
-            data={bookingsData?.data ?? []}
-          />
-        </Card>
-      </div>
-    </div>
+        {/* Secondary chart + quick stats */}
+        <div className="grid-cards grid-cards-3 mb-xl">
+          {overviewLoading ? (
+            <><CardSkeleton /><CardSkeleton /><CardSkeleton /></>
+          ) : (
+            <>
+              <div className="panel" style={{ gridColumn: 'span 2' }}>
+                <div className="chart-header">
+                  <h3 className="chart-title">Order Status Breakdown</h3>
+                </div>
+                <div className="chart-body">
+                  <BBQBarChart
+                    data={statusChartData}
+                    index="name"
+                    categories={['value']}
+                    height={200}
+                  />
+                </div>
+              </div>
+              <div className="panel">
+                <h3 className="chart-title mb-md">Quick Stats</h3>
+                <dl className="detail-list">
+                  <div className="detail-list-item">
+                    <dt>Total Customers</dt>
+                    <dd>{overview?.totals.totalCustomers ?? '—'}</dd>
+                  </div>
+                  <div className="detail-list-item">
+                    <dt>Completed Orders</dt>
+                    <dd>{overview?.totals.completedOrders ?? '—'}</dd>
+                  </div>
+                  <div className="detail-list-item">
+                    <dt>Active Bookings</dt>
+                    <dd>{overview?.totals.activeBookings ?? 0}</dd>
+                  </div>
+                </dl>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Recent Orders */}
+        <div className="mb-xl">
+          <div className="flex-between mb-md">
+            <h3>Recent Orders</h3>
+            <Link href="/dashboard/orders" className="btn btn-ghost btn-sm">View All →</Link>
+          </div>
+          <div className="panel">
+            <DataTable
+              columns={[
+                { header: 'Order ID', accessor: (row: Order) => row.id.slice(0, 8) },
+                { header: 'Source', accessor: (row: Order) => row.source.toUpperCase() },
+                { header: 'Status', accessor: (row: Order) => <StatusBadge status={row.status} /> },
+                { header: 'Total', accessor: (row: Order) => formatCurrency(row.totalCents), sortKey: (row: Order) => row.totalCents },
+                { header: 'Location', accessor: (row: Order) => row.location?.name ?? 'N/A' },
+                { header: 'Created', accessor: (row: Order) => formatDate(row.createdAt), sortKey: (row: Order) => row.createdAt },
+              ]}
+              data={ordersData?.data ?? []}
+            />
+          </div>
+        </div>
+
+        {/* Recent Bookings */}
+        <div>
+          <div className="flex-between mb-md">
+            <h3>Upcoming Catering Bookings</h3>
+            <Link href="/dashboard/bookings" className="btn btn-ghost btn-sm">View All →</Link>
+          </div>
+          <div className="panel">
+            <DataTable
+              columns={[
+                { header: 'Booking ID', accessor: (row: Booking) => row.id.slice(0, 8) },
+                { header: 'Event Date', accessor: (row: Booking) => formatDate(row.eventDate), sortKey: (row: Booking) => row.eventDate },
+                { header: 'Party Size', accessor: (row: Booking) => row.partySize, sortKey: (row: Booking) => row.partySize },
+                { header: 'Status', accessor: (row: Booking) => <StatusBadge status={row.status} type="booking" /> },
+                { header: 'Package', accessor: (row: Booking) => row.packageName ?? 'Custom' },
+                { header: 'Location', accessor: (row: Booking) => row.location?.name ?? 'N/A' },
+              ]}
+              data={bookingsData?.data ?? []}
+            />
+          </div>
+        </div>
+      </AnimatedPage>
     </RoleGate>
   );
 }
