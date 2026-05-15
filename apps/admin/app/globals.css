@@ -625,7 +625,6 @@ input[type="checkbox"] {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  overflow-x: hidden;
   background: var(--bg-midnight);
 }
 .admin-content {
@@ -633,6 +632,10 @@ input[type="checkbox"] {
   padding: clamp(1rem, 2.5vw, 1.75rem);
   overflow-y: auto;
   background: var(--bg-midnight);
+  max-width: 1920px;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
 }
 
 /* ── Sidebar ──────────────────────────────────────────────── */
