@@ -57,7 +57,17 @@ function CheckoutForm() {
 
 export default function CheckoutPage() {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(() => {
+    if (!stripePromise) {
+      return "Secure checkout is unavailable because Stripe is not configured in this environment.";
+    }
+
+    if (!apiBaseUrl) {
+      return "Secure checkout is unavailable because API base URL is not configured in this environment.";
+    }
+
+    return null;
+  });
   const initializedRef = useRef(false);
 
   useEffect(() => {

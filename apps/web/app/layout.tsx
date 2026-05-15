@@ -15,8 +15,7 @@ const bodyFont = Manrope({
 });
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://backyard-bbq.vercel.app";
-const defaultOgImage =
-  "https://images.unsplash.com/photo-1529193591184-b1d58069ecdd?auto=format&fit=crop&w=1200&q=80";
+const defaultOgImage = "/images/marketing/hero.jpg";
 
 export const metadata: Metadata = {
   title: {

@@ -44,3 +44,20 @@
 - Auth/RBAC middleware.
 - Stripe PaymentIntent API endpoint.
 - Booking capacity engine v1.
+
+## Locked Visual Baseline (Approved)
+- The cinematic homepage and route styling in `apps/web` is approved and should be treated as the visual baseline.
+- Preserve current section order, typography contrast, spacing rhythm, and dark premium color direction unless a new design review explicitly approves changes.
+- Keep CTA routing behavior intact: `/catering`, `/checkout`, `/dashboard`, and configured external ordering links.
+
+## Reliability Guardrails (Must Keep)
+- Marketing images are pinned to local assets under `apps/web/public/images/marketing` and mapped from `apps/web/app/config/images.ts`.
+- Do not switch these assets back to remote CDN URLs without equivalent uptime guarantees and verification.
+- Keep checkout env guards in place so missing Stripe or API config fails gracefully without crashing UI.
+- For local development, avoid running `next build` and `next dev` concurrently for the same app; if chunk/runtime errors appear, clear `apps/web/.next` and restart dev.
+
+## Seamless Verification Checklist (Locked State)
+- Home, catering, checkout, and dashboard routes render without server error overlays.
+- Homepage marketing images decode successfully on desktop and mobile.
+- Catering and checkout hero images decode successfully on desktop and mobile.
+- Production monorepo build completes successfully with no type errors.
