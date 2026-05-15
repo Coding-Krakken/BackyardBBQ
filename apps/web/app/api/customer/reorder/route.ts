@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     const unavailableItems = [];
 
     for (const item of originalOrder.items) {
-      const menuItem = menuItemMap.get(item.menuItemName.toLowerCase());
+      const menuItem = menuItemMap.get(item.menuItemName.toLowerCase()) as any;
       
       if (menuItem) {
         reorderItems.push({
