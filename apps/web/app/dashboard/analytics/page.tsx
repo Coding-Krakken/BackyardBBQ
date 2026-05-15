@@ -254,15 +254,16 @@ export default function AnalyticsPage() {
                             transition={{ duration: durations.normal, delay: ANIMATION_CONSTANTS.DELAY_LARGE, ease: easings.easeOut }}
                           >
                             <DonutChart
-                            data={categories.categoryData}
-                            category="spending"
-                            index="category"
-                            valueFormatter={formatCurrency}
-                            colors={["amber", "orange", "red", "rose", "pink", "purple"]}
-                            showAnimation={true}
-                          />
-                        </motion.div>
-                      </Suspense>
+                              data={categories.categoryData}
+                              category="spending"
+                              index="category"
+                              valueFormatter={formatCurrency}
+                              colors={["amber", "orange", "red", "rose", "pink", "purple"]}
+                              showAnimation={true}
+                            />
+                          </motion.div>
+                        </Suspense>
+                      </ErrorBoundary>
 
                       <div style={{ marginTop: "1.5rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                         {categories.categoryData.slice(0, 3).map((cat) => (
@@ -316,16 +317,17 @@ export default function AnalyticsPage() {
                             transition={{ duration: durations.normal, delay: ANIMATION_CONSTANTS.DELAY_XL, ease: easings.easeOut }}
                           >
                             <BarChart
-                            data={frequency.frequencyData}
-                            index="day"
-                            categories={["orders"]}
-                            colors={["amber"]}
-                            valueFormatter={(value) => `${value} orders`}
-                            yAxisWidth={40}
-                            showAnimation={true}
-                          />
-                        </motion.div>
-                      </Suspense>
+                              data={frequency.frequencyData}
+                              index="day"
+                              categories={["orders"]}
+                              colors={["amber"]}
+                              valueFormatter={(value) => `${value} orders`}
+                              yAxisWidth={40}
+                              showAnimation={true}
+                            />
+                          </motion.div>
+                        </Suspense>
+                      </ErrorBoundary>
 
                       <div style={{ marginTop: "1.5rem", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
                         <div
