@@ -24,6 +24,11 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Invalid email or password");
         }
 
+        // Admin app: only allow admin and owner roles
+        if (customer.role !== "admin" && customer.role !== "owner") {
+          throw new Error("Access denied: admin privileges required");
+        }
+
         const isPasswordValid = await compare(
           credentials.password,
           customer.passwordHash
@@ -51,7 +56,7 @@ export const authOptions: NextAuthOptions = {
   },
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60 // 30 days
+    maxAge: 8 * 60 * 60 // 8 hours for admin sessions
   },
   callbacks: {
     async jwt({ token, user }) {
@@ -63,8 +68,8 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.id as string;
-        session.user.role = (token.role as string) ?? "customer";
+        (session.user as { id?: string; role?: string }).id = token.id as string;
+        (session.user as { id?: string; role?: string }).role = (token.role as string) ?? "customer";
       }
       return session;
     }

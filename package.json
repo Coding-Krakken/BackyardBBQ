@@ -23,6 +23,7 @@
     "analyze": "cross-env ANALYZE=true turbo run build --filter=@bbq/web"
   },
   "devDependencies": {
+    "tsx": "^4.19.1",
     "turbo": "^2.0.12",
     "typescript": "^5.6.3"
   },

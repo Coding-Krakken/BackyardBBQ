@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSession, signOut } from "next-auth/react";
 
 const modules = [
   "Unified Order Command Center",
@@ -174,6 +175,7 @@ const orderStatuses = ["pending", "confirmed", "preparing", "ready", "completed"
 const bookingStatuses = ["pending_approval", "approved", "declined", "cancelled"];
 
 export default function AdminHomePage() {
+  const { data: session } = useSession();
   const [overview, setOverview] = useState<OverviewPayload | null>(null);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [bookings, setBookings] = useState<BookingRow[]>([]);
@@ -508,6 +510,17 @@ export default function AdminHomePage() {
             <li>Analytics</li>
             <li>Settings</li>
           </ul>
+          {session && (
+            <div style={{ marginTop: "auto", paddingTop: "1rem", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+              <p style={{ fontSize: "0.75rem", opacity: 0.6, margin: "0 0 0.5rem" }}>{session.user?.email}</p>
+              <button
+                onClick={() => signOut({ callbackUrl: "/auth/login" })}
+                style={{ background: "none", border: "1px solid rgba(255,255,255,0.2)", color: "inherit", padding: "0.375rem 0.75rem", borderRadius: 4, cursor: "pointer", fontSize: "0.8rem", width: "100%" }}
+              >
+                Sign out
+              </button>
+            </div>
+          )}
         </aside>
         <section className="surface">
           <h1>Mission Control</h1>

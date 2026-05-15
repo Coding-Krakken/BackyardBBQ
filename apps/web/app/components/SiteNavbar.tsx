@@ -104,6 +104,8 @@ export function SiteNavbar() {
     return { href: "/auth/login", label: "Sign In" };
   }, [session, status]);
 
+  const isAdmin = session?.user?.role === "admin" || session?.user?.role === "owner";
+
   return (
     <>
       <header className={`site-nav-shell ${navStateClass}`}>
@@ -176,6 +178,17 @@ export function SiteNavbar() {
                 </Link>
               </motion.span>
             )}
+            {isAdmin && (
+              <motion.span
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.95 }}
+                style={{ display: "inline-flex", alignItems: "center" }}
+              >
+                <Link href={process.env.NEXT_PUBLIC_ADMIN_URL ?? "/admin"} style={{ color: "var(--ember, #e05c1a)", fontWeight: 600 }}>
+                  Admin
+                </Link>
+              </motion.span>
+            )}
           </div>
 
           <div className="site-nav-ctas">
@@ -245,6 +258,11 @@ export function SiteNavbar() {
                   {authLink && (
                     <Link href={authLink.href} onClick={() => setMobileOpen(false)}>
                       {authLink.label}
+                    </Link>
+                  )}
+                  {isAdmin && (
+                    <Link href={process.env.NEXT_PUBLIC_ADMIN_URL ?? "/admin"} onClick={() => setMobileOpen(false)} style={{ color: "var(--ember, #e05c1a)", fontWeight: 600 }}>
+                      Admin
                     </Link>
                   )}
                 </div>
