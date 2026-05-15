@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
     });
 
     const menuItemMap = new Map(
-      menuItems.map((item) => [item.name, item])
+      menuItems.map((item: any) => [item.name, item])
     );
 
     // Enrich favorites with current availability and pricing
