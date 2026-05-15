@@ -71,6 +71,7 @@ export function SiteNavbar() {
   }, [session, status]);
 
   return (
+    <>
     <header className={`site-nav-shell ${navStateClass}`}>
       <nav className="site-nav page-shell" aria-label="Primary navigation">
         <Link className="site-brand" href="/">
@@ -148,8 +149,9 @@ export function SiteNavbar() {
           </MagneticButton>
         </div>
       </nav>
+    </header>
 
-      <AnimatePresence>
+    <AnimatePresence>
         {mobileOpen && (
           <>
             {/* Backdrop overlay */}
@@ -219,6 +221,6 @@ export function SiteNavbar() {
           </>
         )}
       </AnimatePresence>
-    </header>
+    </>
   );
 }
