@@ -7,3 +7,15 @@ dist
 coverage
 .DS_Store
 *.log
+.turbo
+.vercel
+*.tsbuildinfo
+apps/*/.next
+apps/*/.turbo
+apps/*/.vercel
+apps/*/dist
+apps/*/tsconfig.tsbuildinfo
+packages/*/.turbo
+packages/*/dist
+packages/*/tsconfig.tsbuildinfo
+packages/database/prisma/dev.db
