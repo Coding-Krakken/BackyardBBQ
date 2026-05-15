@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { ANIMATION_CONSTANTS, PERFORMANCE_CONSTANTS, UI_CONSTANTS } from "../lib/constants";
 
 interface Particle {
   x: number;
