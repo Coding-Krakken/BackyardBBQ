@@ -50,7 +50,12 @@ export function SmokeTrail({
       canvas.height = window.innerHeight;
     };
     resize();
-    window.addEventListener("resize", resize);
+    let resizeTimer: ReturnType<typeof setTimeout>;
+    const debouncedResize = () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(resize, 200);
+    };
+    window.addEventListener("resize", debouncedResize);
 
     // Track mouse position
     const handleMouseMove = (e: MouseEvent) => {
@@ -117,7 +122,8 @@ export function SmokeTrail({
 
     // Cleanup
     return () => {
-      window.removeEventListener("resize", resize);
+      window.removeEventListener("resize", debouncedResize);
+      clearTimeout(resizeTimer);
       window.removeEventListener("mousemove", handleMouseMove);
       if (rafRef.current) {
         cancelAnimationFrame(rafRef.current);
