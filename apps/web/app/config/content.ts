@@ -1,0 +1,138 @@
+import { galleryImages, menuImages } from "./images";
+
+const orderOnlineUrl = process.env.NEXT_PUBLIC_ORDER_ONLINE_URL ?? "/checkout";
+const doordashUrl = process.env.NEXT_PUBLIC_DOORDASH_URL ?? "https://order.online/doordash-placeholder";
+const uberEatsUrl =
+  process.env.NEXT_PUBLIC_UBER_EATS_URL ??
+  process.env.NEXT_PUBLIC_UBEREATS_URL ??
+  "https://order.online/ubereats-placeholder";
+const grubhubUrl = process.env.NEXT_PUBLIC_GRUBHUB_URL ?? "https://order.online/grubhub-placeholder";
+const cateringInquiryUrl = process.env.NEXT_PUBLIC_CATERING_INQUIRY_URL ?? "/catering";
+
+export const businessInfo = {
+  phone: process.env.NEXT_PUBLIC_PHONE ?? "+1-555-BBQ-KING",
+  email: process.env.NEXT_PUBLIC_EMAIL ?? "hello@backyardbbqking.com",
+  location: process.env.NEXT_PUBLIC_LOCATION ?? "Austin, Texas",
+  hours: process.env.NEXT_PUBLIC_HOURS ?? "Tue-Sat 11am-9pm, Sun 12pm-8pm",
+  truckSchedule:
+    process.env.NEXT_PUBLIC_FOOD_TRUCK_SCHEDULE ?? "Food Truck: Thu-Sat evenings, private events by request",
+  cateringAvailability:
+    process.env.NEXT_PUBLIC_CATERING_AVAILABILITY ?? "Catering available 7 days with 72-hour lead time"
+};
+
+export const orderingLinks = {
+  orderOnlineUrl,
+  doordashUrl,
+  uberEatsUrl,
+  grubhubUrl,
+  cateringInquiryUrl
+};
+
+export const heroContent = {
+  eyebrow: "Texas Smokehouse + Premium Catering + Food Truck",
+  headline: "Welcome To Backyard BBQ Texas",
+  description:
+    "Where we serve mouthwatering smoked meats, premium sides, and true Texas hospitality in a warm cinematic atmosphere.",
+  primaryCta: {
+    label: "Reserve Now",
+    href: cateringInquiryUrl
+  },
+  secondaryCta: {
+    label: "Order Online",
+    href: orderOnlineUrl
+  }
+};
+
+export const menuItems = [
+  {
+    name: "Smoked Brisket",
+    description: "16-hour oak-smoked prime brisket with black pepper bark.",
+    price: "$24",
+    image: menuImages.brisket
+  },
+  {
+    name: "BBQ Rib Plate",
+    description: "Sticky lacquered ribs with charred corn and pit beans.",
+    price: "$22",
+    image: menuImages.ribs
+  },
+  {
+    name: "Pulled Pork Sandwich",
+    description: "Hand-pulled pork shoulder, slaw, and ember aioli brioche.",
+    price: "$16",
+    image: menuImages.pulledPork
+  },
+  {
+    name: "Loaded Mac Bowl",
+    description: "Smoked gouda mac with burnt ends and crispy onions.",
+    price: "$18",
+    image: menuImages.loadedMac
+  },
+  {
+    name: "Burnt Ends",
+    description: "Caramelized brisket cubes kissed by hickory smoke.",
+    price: "$19",
+    image: menuImages.burntEnds
+  },
+  {
+    name: "Smoked Wings",
+    description: "Crisp smoked wings tossed in chili-honey glaze.",
+    price: "$15",
+    image: menuImages.wings
+  }
+] as const;
+
+export const testimonials = [
+  {
+    quote:
+      "Best brisket in Texas hands down. Tender, smoky, and served with concierge-level hospitality for our corporate retreat.",
+    name: "Alyssa M.",
+    role: "Operations Director"
+  },
+  {
+    quote:
+      "They catered our wedding for 220 guests and every tray looked premium. Guests still talk about the burnt ends.",
+    name: "Jordan and Reese",
+    role: "Wedding Clients"
+  },
+  {
+    quote:
+      "Food truck service was fast, polished, and wildly good. Perfect for festival traffic and late-night cravings.",
+    name: "Marco V.",
+    role: "Event Producer"
+  }
+] as const;
+
+export { galleryImages };
+
+export const featureHighlights = [
+  "Smoked fresh every day in small batches",
+  "Prime meats and handcrafted house sauces",
+  "Authentic oak and hickory wood-fired flavor",
+  "Wedding, corporate, and private event specialists"
+] as const;
+
+export const cateringHighlights = [
+  "Wedding receptions and rehearsal dinners",
+  "Corporate lunches, launches, and retreats",
+  "Private celebrations and backyard festivals",
+  "Full-service food truck and on-site pit experience"
+] as const;
+
+export const whyUsContent = {
+  eyebrow: "Why Us",
+  headline: "We Offer The Best BBQ In All of Texas",
+  description:
+    "We offer the best BBQ in all of Texas, serving tender, smoky meats and flavorful sides in a welcoming atmosphere.",
+  highlights: [
+    "High Quality Meat",
+    "Organic Meat and Ingredients",
+    "Best Service in Texas"
+  ] as const
+};
+
+export const socialLinks = {
+  instagram: process.env.NEXT_PUBLIC_INSTAGRAM_URL ?? "https://instagram.com/backyardbbqking",
+  facebook: process.env.NEXT_PUBLIC_FACEBOOK_URL ?? "https://facebook.com/backyardbbqking",
+  x: process.env.NEXT_PUBLIC_X_URL ?? "https://x.com/backyardbbqking"
+};

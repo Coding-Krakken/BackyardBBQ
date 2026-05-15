@@ -1,0 +1,27 @@
+{
+  "name": "backyard-bbq-king",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "npm@10.8.2",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "dev:web": "npm run dev -w @bbq/web",
+    "dev:admin": "npm run dev -w @bbq/admin",
+    "dev:api": "npm run dev -w @bbq/api",
+    "dev:workers": "npm run dev -w @bbq/workers",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.12",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
