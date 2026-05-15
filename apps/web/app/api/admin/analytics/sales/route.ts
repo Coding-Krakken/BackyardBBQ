@@ -36,15 +36,18 @@ export async function GET(request: NextRequest) {
     totals.grossSalesCents += o.totalCents;
     const day = o.createdAt.toISOString().slice(0, 10);
     if (!dailyMap[day]) dailyMap[day] = { orders: 0, grossSalesCents: 0 };
-    dailyMap[day].orders += 1;
-    dailyMap[day].grossSalesCents += o.totalCents;
+    const dday = dailyMap[day]!;
+    dday.orders += 1;
+    dday.grossSalesCents += o.totalCents;
     if (!sourceMap[o.source]) sourceMap[o.source] = { orders: 0, grossSalesCents: 0 };
-    sourceMap[o.source].orders += 1;
-    sourceMap[o.source].grossSalesCents += o.totalCents;
+    const dsrc = sourceMap[o.source]!;
+    dsrc.orders += 1;
+    dsrc.grossSalesCents += o.totalCents;
     for (const item of o.items) {
       if (!itemMap[item.menuItemName]) itemMap[item.menuItemName] = { quantity: 0, revenueCents: 0 };
-      itemMap[item.menuItemName].quantity += item.quantity;
-      itemMap[item.menuItemName].revenueCents += item.quantity * item.unitPriceCents;
+      const di = itemMap[item.menuItemName]!;
+      di.quantity += item.quantity;
+      di.revenueCents += item.quantity * item.unitPriceCents;
     }
   }
 

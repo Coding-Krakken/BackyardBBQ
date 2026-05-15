@@ -27,8 +27,9 @@ export async function GET(request: NextRequest) {
   for (const o of orders) {
     const day = o.createdAt.toISOString().slice(0, 10);
     if (!dailyMap[day]) dailyMap[day] = { orders: 0, salesCents: 0 };
-    dailyMap[day].orders += 1;
-    dailyMap[day].salesCents += o.totalCents;
+    const fe = dailyMap[day]!;
+    fe.orders += 1;
+    fe.salesCents += o.totalCents;
   }
 
   const days = Object.values(dailyMap);

@@ -25,7 +25,7 @@ export async function GET() {
   const channelMap: Record<string, { processed: number; failed: number; deadLetter: number; latencies: number[] }> = {};
   for (const e of events) {
     if (!channelMap[e.channel]) channelMap[e.channel] = { processed: 0, failed: 0, deadLetter: 0, latencies: [] };
-    const c = channelMap[e.channel];
+    const c = channelMap[e.channel]!;
     if (e.status === "processed" || e.status === "completed") c.processed += 1;
     else if (e.status === "failed") { c.failed += 1; c.deadLetter += 1; }
     else if (e.status === "dead_letter") c.deadLetter += 1;

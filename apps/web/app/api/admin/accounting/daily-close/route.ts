@@ -56,8 +56,9 @@ export async function GET(request: NextRequest) {
   const bySourceMap: Record<string, { orders: number; totalCents: number }> = {};
   for (const o of orders) {
     if (!bySourceMap[o.source]) bySourceMap[o.source] = { orders: 0, totalCents: 0 };
-    bySourceMap[o.source].orders += 1;
-    bySourceMap[o.source].totalCents += o.totalCents;
+    const src = bySourceMap[o.source]!;
+    src.orders += 1;
+    src.totalCents += o.totalCents;
   }
 
   return NextResponse.json({
