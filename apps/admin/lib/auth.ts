@@ -24,8 +24,9 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Invalid email or password");
         }
 
-        // Admin app: only allow admin and owner roles
-        if (customer.role !== "admin" && customer.role !== "owner") {
+        // Admin app: allow all operational roles, while customer role remains blocked.
+        const allowedRoles = ["owner", "admin", "manager", "staff", "accounting"];
+        if (!allowedRoles.includes(customer.role)) {
           throw new Error("Access denied: admin privileges required");
         }
 

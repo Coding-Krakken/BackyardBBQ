@@ -3,8 +3,10 @@ import cors from "@fastify/cors";
 import rawBody from "fastify-raw-body";
 import { z } from "zod";
 import Stripe from "stripe";
-import { prisma, Prisma } from "@bbq/database";
+import { prisma, Prisma } from "./prisma.js";
 import type { PaymentStatus } from "@prisma/client";
+
+export async function buildApp() {
 
 const app = Fastify({ logger: true });
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
@@ -1986,5 +1988,12 @@ app.post(
   }
 );
 
-const port = Number(process.env.PORT ?? 4000);
-await app.listen({ port, host: "0.0.0.0" });
+return app;
+}
+
+// Local dev: start the server when not running on Vercel
+if (!process.env.VERCEL) {
+  const app = await buildApp();
+  const port = Number(process.env.PORT ?? 4000);
+  await app.listen({ port, host: "0.0.0.0" });
+}

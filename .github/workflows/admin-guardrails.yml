@@ -1,0 +1,50 @@
+name: admin-guardrails
+
+on:
+  pull_request:
+    paths:
+      - "apps/admin/**"
+      - "packages/**"
+      - "package.json"
+      - "package-lock.json"
+      - "turbo.json"
+      - ".github/workflows/admin-guardrails.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/admin/**"
+      - "packages/**"
+      - "package.json"
+      - "package-lock.json"
+      - "turbo.json"
+
+jobs:
+  admin-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Admin TypeScript Check
+        run: npm run typecheck -w @bbq/admin
+
+      - name: Role Matrix Verification
+        run: npm run verify:roles -w @bbq/admin
+
+      - name: Dashboard Page Role Verification
+        run: npm run verify:dashboard-pages -w @bbq/admin
+
+      - name: API Role Policy Verification
+        run: npm run verify:api-roles -w @bbq/admin

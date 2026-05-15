@@ -16,6 +16,7 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
+    "validate:admin": "npm run typecheck -w @bbq/admin && npm run verify:roles -w @bbq/admin && npm run verify:dashboard-pages -w @bbq/admin && npm run verify:api-roles -w @bbq/admin",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

@@ -1,0 +1,41 @@
+{
+  "roles": {
+    "owner": {
+      "defaultDashboard": "/dashboard",
+      "fullDashboardAccess": true,
+      "dashboardPrefixes": []
+    },
+    "admin": {
+      "defaultDashboard": "/dashboard",
+      "fullDashboardAccess": true,
+      "dashboardPrefixes": []
+    },
+    "manager": {
+      "defaultDashboard": "/dashboard",
+      "fullDashboardAccess": false,
+      "dashboardPrefixes": [
+        "/dashboard/orders",
+        "/dashboard/bookings",
+        "/dashboard/customers",
+        "/dashboard/analytics",
+        "/dashboard/menu"
+      ]
+    },
+    "staff": {
+      "defaultDashboard": "/dashboard/orders",
+      "fullDashboardAccess": false,
+      "dashboardPrefixes": [
+        "/dashboard/orders",
+        "/dashboard/bookings"
+      ]
+    },
+    "accounting": {
+      "defaultDashboard": "/dashboard/payments",
+      "fullDashboardAccess": false,
+      "dashboardPrefixes": [
+        "/dashboard/payments",
+        "/dashboard/accounting"
+      ]
+    }
+  }
+}

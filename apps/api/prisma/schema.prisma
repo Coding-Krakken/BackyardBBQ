@@ -1,0 +1,256 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum LocationType {
+  truck
+  brick_and_mortar
+}
+
+enum OrderSource {
+  direct
+  doordash
+  ubereats
+  grubhub
+  catering
+}
+
+enum OrderStatus {
+  pending
+  confirmed
+  preparing
+  ready
+  completed
+  cancelled
+}
+
+enum BookingStatus {
+  draft
+  pending_approval
+  approved
+  declined
+  cancelled
+}
+
+enum PaymentStatus {
+  requires_payment_method
+  requires_confirmation
+  requires_action
+  requires_capture
+  processing
+  succeeded
+  canceled
+  failed
+  partially_refunded
+  refunded
+}
+
+enum ReferralStatus {
+  pending
+  signed_up
+  rewarded
+  expired
+}
+
+enum NotificationType {
+  order_update
+  booking_update
+  payment_update
+  referral_reward
+  promotional
+}
+
+enum CustomerRole {
+  customer
+  admin
+  owner
+}
+
+model Customer {
+  id                    String            @id @default(cuid())
+  email                 String            @unique
+  passwordHash          String?
+  firstName             String?
+  lastName              String?
+  phone                 String?
+  emailVerified         Boolean           @default(false)
+  role                  CustomerRole      @default(customer)
+  preferredLocationId   String?
+  dietaryPreferences    Json?
+  notificationSettings  Json?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  orders                Order[]
+  bookings              CateringBooking[]
+  payments              PaymentTransaction[]
+  addresses             Address[]
+  referralsSent         Referral[]        @relation("ReferrerRelation")
+  referralsReceived     Referral[]        @relation("RefereeRelation")
+  notifications         Notification[]
+}
+
+model Location {
+  id             String           @id @default(cuid())
+  name           String
+  type           LocationType
+  timezone       String           @default("America/New_York")
+  isActive       Boolean          @default(true)
+  maxCateringCap Int              @default(500)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  menuItems      MenuItem[]
+  orders         Order[]
+  bookings       CateringBooking[]
+}
+
+model MenuItem {
+  id            String    @id @default(cuid())
+  locationId    String
+  name          String
+  description   String?
+  basePriceCents Int
+  isAvailable   Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  location      Location  @relation(fields: [locationId], references: [id])
+
+  @@unique([locationId, name])
+}
+
+model Order {
+  id                String               @id @default(cuid())
+  customerId        String?
+  locationId        String
+  source            OrderSource
+  status            OrderStatus          @default(pending)
+  subtotalCents     Int
+  taxCents          Int                  @default(0)
+  tipCents          Int                  @default(0)
+  totalCents        Int
+  currency          String               @default("usd")
+  stripeIntentId    String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  customer          Customer?            @relation(fields: [customerId], references: [id])
+  location          Location             @relation(fields: [locationId], references: [id])
+  items             OrderItem[]
+  payment           PaymentTransaction?
+  integrationEvents IntegrationEvent[]
+}
+
+model OrderItem {
+  id              String   @id @default(cuid())
+  orderId         String
+  menuItemName    String
+  quantity        Int
+  unitPriceCents  Int
+  notes           String?
+  createdAt       DateTime @default(now())
+  order           Order    @relation(fields: [orderId], references: [id])
+}
+
+model CateringBooking {
+  id                 String        @id @default(cuid())
+  customerId         String?
+  locationId         String
+  eventDate          DateTime
+  partySize          Int
+  eventAddress       String?
+  packageName        String?
+  status             BookingStatus @default(draft)
+  estimatedTotalCents Int?
+  depositCents       Int?
+  finalPaymentCents  Int?
+  notes              String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  customer           Customer?     @relation(fields: [customerId], references: [id])
+  location           Location      @relation(fields: [locationId], references: [id])
+
+  @@index([eventDate, locationId])
+}
+
+model PaymentTransaction {
+  id                 String        @id @default(cuid())
+  customerId         String?
+  orderId            String?       @unique
+  stripePaymentIntentId String     @unique
+  amountCents        Int
+  currency           String        @default("usd")
+  status             PaymentStatus
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  customer           Customer?     @relation(fields: [customerId], references: [id])
+  order              Order?        @relation(fields: [orderId], references: [id])
+}
+
+model IntegrationEvent {
+  id            String    @id @default(cuid())
+  orderId       String?
+  channel       String
+  eventType     String
+  payload       Json
+  status        String
+  createdAt     DateTime  @default(now())
+  order         Order?    @relation(fields: [orderId], references: [id])
+
+  @@index([channel, eventType])
+}
+
+model Address {
+  id          String   @id @default(cuid())
+  customerId  String
+  label       String?
+  street      String
+  city        String
+  state       String
+  zip         String
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+}
+
+model Referral {
+  id            String         @id @default(cuid())
+  referrerId    String
+  refereeEmail  String?
+  refereeId     String?
+  referralCode  String         @unique
+  status        ReferralStatus @default(pending)
+  rewardCents   Int            @default(0)
+  rewardClaimed Boolean        @default(false)
+  claimedAt     DateTime?
+  expiresAt     DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  referrer      Customer       @relation("ReferrerRelation", fields: [referrerId], references: [id], onDelete: Cascade)
+  referee       Customer?      @relation("RefereeRelation", fields: [refereeId], references: [id], onDelete: Cascade)
+
+  @@index([referrerId])
+  @@index([refereeId])
+  @@index([referralCode])
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  customerId  String
+  type        NotificationType
+  title       String
+  message     String
+  read        Boolean          @default(false)
+  actionUrl   String?
+  metadata    Json?
+  createdAt   DateTime         @default(now())
+  customer    Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, read])
+  @@index([createdAt])
+}

@@ -1,0 +1,101 @@
+{
+  "routes": {
+    "/api/admin/overview": {
+      "GET": ["owner", "admin", "manager", "staff", "accounting"]
+    },
+    "/api/admin/orders": {
+      "GET": ["owner", "admin", "manager", "staff"]
+    },
+    "/api/admin/orders/[id]/status": {
+      "PATCH": ["owner", "admin", "manager", "staff"]
+    },
+    "/api/admin/catering/bookings": {
+      "GET": ["owner", "admin", "manager", "staff"]
+    },
+    "/api/admin/catering/bookings/[id]/status": {
+      "PATCH": ["owner", "admin", "manager", "staff"]
+    },
+    "/api/admin/payments": {
+      "GET": ["owner", "admin", "accounting"]
+    },
+    "/api/admin/payments/refunds": {
+      "POST": ["owner", "admin"]
+    },
+    "/api/admin/payments/disputes": {
+      "GET": ["owner", "admin", "accounting"]
+    },
+    "/api/admin/payments/disputes/[id]/review": {
+      "PATCH": ["owner", "admin"]
+    },
+    "/api/admin/accounting/daily-close": {
+      "GET": ["owner", "admin", "accounting"]
+    },
+    "/api/admin/accounting/daily-close/export": {
+      "GET": ["owner", "admin", "accounting"]
+    },
+    "/api/admin/accounting/daily-close/finalize": {
+      "POST": ["owner"]
+    },
+    "/api/admin/analytics/sales": {
+      "GET": ["owner", "admin", "manager"]
+    },
+    "/api/admin/analytics/sales/export": {
+      "GET": ["owner", "admin", "manager"]
+    },
+    "/api/admin/analytics/forecast": {
+      "GET": ["owner", "admin", "manager"]
+    },
+    "/api/admin/analytics/forecast/export": {
+      "GET": ["owner", "admin", "manager"]
+    },
+    "/api/admin/analytics/anomalies": {
+      "GET": ["owner", "admin", "manager"]
+    },
+    "/api/admin/integrations/health": {
+      "GET": ["owner", "admin"]
+    },
+    "/api/admin/integrations/dead-letter": {
+      "GET": ["owner", "admin"]
+    },
+    "/api/admin/integrations/dead-letter/[id]/retry": {
+      "PATCH": ["owner", "admin"]
+    },
+    "/api/admin/integrations/alerts": {
+      "GET": ["owner", "admin"]
+    },
+    "/api/admin/customers": {
+      "GET": ["owner", "admin", "manager"]
+    },
+    "/api/admin/customers/[id]": {
+      "GET": ["owner", "admin", "manager"],
+      "PATCH": ["owner", "admin"]
+    },
+    "/api/admin/menu/items": {
+      "GET": ["owner", "admin", "manager"],
+      "POST": ["owner", "admin", "manager"]
+    },
+    "/api/admin/menu/items/[id]": {
+      "PUT": ["owner", "admin", "manager"],
+      "PATCH": ["owner", "admin", "manager"],
+      "DELETE": ["owner", "admin", "manager"]
+    },
+    "/api/admin/menu/locations": {
+      "GET": ["owner", "admin", "manager"],
+      "POST": ["owner"]
+    },
+    "/api/admin/menu/locations/[id]": {
+      "PUT": ["owner"],
+      "PATCH": ["owner", "admin"]
+    },
+    "/api/admin/notifications": {
+      "GET": ["owner", "admin"],
+      "POST": ["owner", "admin"]
+    },
+    "/api/admin/referrals": {
+      "GET": ["owner", "admin"]
+    },
+    "/api/admin/referrals/[id]": {
+      "PATCH": ["owner", "admin"]
+    }
+  }
+}

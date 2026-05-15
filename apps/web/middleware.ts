@@ -3,14 +3,7 @@ import { NextResponse } from "next/server";
 
 export default withAuth(
   function middleware(req) {
-    const { token } = req.nextauth;
-    const isAdminRoute = req.nextUrl.pathname.startsWith("/admin");
-
-    // Block non-admins from /admin routes
-    if (isAdminRoute && token?.role !== "admin" && token?.role !== "owner") {
-      return NextResponse.redirect(new URL("/dashboard", req.url));
-    }
-
+    // No admin routes in web app anymore - admin has its own deployment
     return NextResponse.next();
   },
   {
@@ -21,5 +14,5 @@ export default withAuth(
 );
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/admin/:path*"]
+  matcher: ["/dashboard/:path*"]
 };

@@ -1,0 +1,20 @@
+{
+  "clientPages": {
+    "/dashboard": ["owner", "admin", "manager"],
+    "/dashboard/orders": ["owner", "admin", "manager", "staff"],
+    "/dashboard/bookings": ["owner", "admin", "manager", "staff"],
+    "/dashboard/payments": ["owner", "admin", "accounting"],
+    "/dashboard/analytics": ["owner", "admin", "manager"],
+    "/dashboard/accounting": ["owner", "admin", "accounting"],
+    "/dashboard/customers": ["owner", "admin", "manager"],
+    "/dashboard/menu": ["owner", "admin", "manager"],
+    "/dashboard/notifications": ["owner", "admin"],
+    "/dashboard/referrals": ["owner", "admin"],
+    "/dashboard/integrations": ["owner", "admin"]
+  },
+  "serverPages": {
+    "/dashboard/orders/[id]": ["owner", "admin", "manager", "staff"],
+    "/dashboard/bookings/[id]": ["owner", "admin", "manager", "staff"],
+    "/dashboard/customers/[id]": ["owner", "admin", "manager"]
+  }
+}
