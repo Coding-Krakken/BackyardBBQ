@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Particles, { initParticlesEngine } from "@tsparticles/react";
 import { loadSlim } from "@tsparticles/slim";
 import type { Container, ISourceOptions } from "@tsparticles/engine";
@@ -21,16 +21,21 @@ export function EmberParticles({
   speed = 0.5,
   disabled = false 
 }: EmberParticlesProps) {
+  const [engineReady, setEngineReady] = useState(false);
+
   const particlesLoaded = useCallback(async (container?: Container) => {
-    // Optional callback when particles are loaded
-    // console.log("Particles loaded", container);
+    // Particles loaded and rendering
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     // Initialize particles engine only once
     initParticlesEngine(async (engine) => {
       await loadSlim(engine);
+    }).then(() => {
+      if (!cancelled) setEngineReady(true);
     });
+    return () => { cancelled = true; };
   }, []);
 
   const options: ISourceOptions = useMemo(
@@ -115,7 +120,7 @@ export function EmberParticles({
     [density, speed]
   );
 
-  if (disabled) {
+  if (disabled || !engineReady) {
     return null;
   }
 

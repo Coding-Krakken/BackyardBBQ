@@ -96,23 +96,35 @@ export function SiteNavbar() {
               key={item.label}
               href={item.href}
               className="nav-link"
-              whileHover={{ y: -2 }}
+              whileHover="hover"
               whileTap={{ scale: 0.95 }}
+              initial="idle"
               style={{ position: "relative", display: "inline-block" }}
             >
-              {item.label}
+              <motion.span
+                variants={{
+                  idle: { y: 0 },
+                  hover: { y: -2 },
+                }}
+              >
+                {item.label}
+              </motion.span>
               <motion.span
                 className="nav-link-underline"
-                initial={{ width: 0 }}
-                whileHover={{ width: "100%" }}
+                variants={{
+                  idle: { scaleX: 0 },
+                  hover: { scaleX: 1 },
+                }}
                 transition={springs.gentle}
                 style={{
                   position: "absolute",
                   bottom: -4,
                   left: 0,
+                  right: 0,
                   height: 2,
                   background: "var(--ember)",
                   borderRadius: 2,
+                  transformOrigin: "left",
                 }}
               />
             </motion.a>
@@ -139,15 +151,33 @@ export function SiteNavbar() {
 
       <AnimatePresence>
         {mobileOpen && (
-          <motion.div
-            className="mobile-nav-drawer"
-            role="dialog"
-            aria-label="Mobile navigation"
-            initial={{ x: "100%" }}
-            animate={{ x: 0 }}
-            exit={{ x: "100%" }}
-            transition={springs.layout}
-          >
+          <>
+            {/* Backdrop overlay */}
+            <motion.div
+              className="mobile-nav-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              onClick={() => setMobileOpen(false)}
+              style={{
+                position: "fixed",
+                inset: 0,
+                background: "rgba(0, 0, 0, 0.6)",
+                backdropFilter: "blur(4px)",
+                WebkitBackdropFilter: "blur(4px)",
+                zIndex: 98,
+              }}
+            />
+            <motion.div
+              className="mobile-nav-drawer"
+              role="dialog"
+              aria-label="Mobile navigation"
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              transition={springs.layout}
+            >
             <div className="mobile-nav-links">
               {navLinks.map((item) => (
                 <a key={item.label} href={item.href} onClick={() => setMobileOpen(false)}>
@@ -186,6 +216,7 @@ export function SiteNavbar() {
               })}
             </div>
           </motion.div>
+          </>
         )}
       </AnimatePresence>
     </header>

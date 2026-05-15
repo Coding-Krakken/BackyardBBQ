@@ -62,9 +62,8 @@ export function SmokeTrail({
     const animate = (time: number) => {
       if (!ctx || !canvas) return;
 
-      // Clear canvas with fade effect
-      ctx.fillStyle = "rgba(0, 0, 0, 0.05)";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // Clear canvas fully each frame to avoid dark buildup
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       // Emit new particles (throttled)
       if (time - lastEmitRef.current > 50 && particlesRef.current.length < maxParticles) {
@@ -140,7 +139,7 @@ export function SmokeTrail({
         width: "100%",
         height: "100%",
         pointerEvents: "none",
-        zIndex: 999,
+        zIndex: 50,
         mixBlendMode: "screen",
       }}
     />
