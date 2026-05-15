@@ -1237,7 +1237,7 @@ input:focus-visible {
   }
 
   .mobile-nav-toggle {
-    display: block;
+    display: flex;
   }
 
   .site-nav {
