@@ -6,12 +6,12 @@
 /* ── Design Tokens ──────────────────────────────────────────── */
 :root {
   /* Backgrounds */
-  --bg-charcoal: #060809;
-  --bg-midnight: #09141a;
-  --bg-smoke: #102029;
-  --bg-surface: rgba(6, 15, 20, 0.74);
-  --bg-surface-strong: rgba(7, 12, 16, 0.9);
-  --bg-surface-hover: rgba(16, 32, 41, 0.6);
+  --bg-charcoal: #0a0e12;
+  --bg-midnight: #0f1f2e;
+  --bg-smoke: #152535;
+  --bg-surface: rgba(15, 31, 46, 0.74);
+  --bg-surface-strong: rgba(15, 31, 46, 0.9);
+  --bg-surface-hover: rgba(21, 37, 53, 0.6);
 
   /* Brand accents */
   --ember: #d96d31;
