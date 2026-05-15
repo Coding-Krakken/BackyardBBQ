@@ -17,6 +17,19 @@
   --radius-md: 16px;
   --radius-sm: 12px;
   --content-width: min(820px, 94vw);
+  
+  /* Animation duration constants */
+  --duration-fast: 0.2s;
+  --duration-normal: 0.3s;
+  --duration-slow: 0.5s;
+  --duration-very-slow: 0.8s;
+}
+
+/* CSS Houdini for animated gradients */
+@property --gradient-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
 }
 
 * {
@@ -88,6 +101,49 @@ img {
   border-radius: 10px;
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.24);
   padding: clamp(1.25rem, 2.4vw, 2.15rem);
+  /* Enhanced glassmorphism with backdrop filter */
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  /* Layered shadows for depth */
+  box-shadow: 
+    0 10px 22px rgba(0, 0, 0, 0.24),
+    0 0 0 1px rgba(255, 255, 255, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  /* GPU acceleration for smooth animations */
+  transform: translateZ(0);
+  transition: transform var(--duration-fast) ease,
+              opacity var(--duration-fast) ease,
+              box-shadow var(--duration-fast) ease;
+}
+
+/* Premium glass variant for hero/CTAs */
+.glass-premium {
+  background: linear-gradient(165deg, 
+    rgba(217, 109, 49, 0.08) 0%, 
+    rgba(6, 8, 9, 0.9) 100%);
+  backdrop-filter: blur(32px) saturate(200%);
+  -webkit-backdrop-filter: blur(32px) saturate(200%);
+  border: 1px solid rgba(217, 109, 49, 0.2);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(217, 109, 49, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transform: translateZ(0);
+}
+
+/* Fallback for browsers without backdrop-filter support */
+@supports not (backdrop-filter: blur(24px)) {
+  .panel {
+    background: linear-gradient(165deg, 
+      rgba(6, 15, 20, 0.95) 0%, 
+      rgba(9, 13, 18, 0.96) 100%);
+  }
+  
+  .glass-premium {
+    background: linear-gradient(165deg, 
+      rgba(217, 109, 49, 0.12) 0%, 
+      rgba(6, 8, 9, 0.96) 100%);
+  }
 }
 
 .eyebrow,
@@ -156,11 +212,16 @@ p {
   font-size: 0.9rem;
   letter-spacing: 0.02em;
   cursor: pointer;
-  transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease, background 200ms ease;
+  /* GPU acceleration */
+  transform: translateZ(0);
+  /* Use only transform and opacity for 60fps animations */
+  transition: transform var(--duration-fast) ease, 
+              opacity var(--duration-fast) ease,
+              box-shadow var(--duration-fast) ease;
 }
 
 .btn:hover {
-  transform: translateY(-2px);
+  transform: translateY(-2px) translateZ(0);
 }
 
 .btn:focus-visible,
@@ -174,6 +235,12 @@ input:focus-visible {
   color: #190f09;
   background: linear-gradient(180deg, #f3b27a 0%, #da6f34 100%);
   box-shadow: 0 10px 24px rgba(217, 109, 49, 0.35);
+  /* Ember glow animation */
+  animation: ember-glow 3s ease-in-out infinite;
+}
+
+.btn-primary:hover {
+  animation-duration: 2s; /* Speed up on hover */
 }
 
 .btn-secondary {
@@ -386,35 +453,57 @@ input:focus-visible {
 }
 
 .mobile-nav-drawer {
-  max-height: 0;
-  overflow: hidden;
-  transition: max-height 280ms ease;
-  border-top: 1px solid transparent;
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(360px, 85vw);
+  background: rgba(6, 8, 10, 0.97);
+  border-left: 1px solid rgba(217, 109, 49, 0.18);
+  z-index: 99;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding-top: 5rem;
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5);
 }
 
 .site-nav-shell.is-open .mobile-nav-drawer {
-  max-height: 540px;
-  border-top-color: var(--line-soft);
+  /* Handled by Framer Motion AnimatePresence */
 }
 
 .mobile-nav-links,
 .mobile-nav-ctas {
-  width: min(1200px, 92vw);
-  margin: 0 auto;
+  width: 100%;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
 }
 
 .mobile-nav-links {
-  padding: 1rem 0 0.3rem;
+  padding-top: 1rem;
+  padding-bottom: 0.3rem;
   display: grid;
   gap: 0.7rem;
   color: var(--warm-gray);
 }
 
+.mobile-nav-links a {
+  font-size: 1.1rem;
+  padding: 0.5rem 0;
+  transition: color 200ms ease;
+}
+
+.mobile-nav-links a:hover {
+  color: var(--cream);
+}
+
 .mobile-nav-ctas {
-  padding: 0.85rem 0 1.2rem;
+  padding-top: 1.5rem;
+  padding-bottom: 1.2rem;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.55rem;
+  margin-top: auto;
 }
 
 .hero-stage {
@@ -607,11 +696,15 @@ input:focus-visible {
   border: 1px solid var(--line-soft);
   overflow: hidden;
   background: linear-gradient(180deg, rgba(8, 20, 27, 0.88), rgba(7, 11, 14, 0.94));
-  transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+  /* GPU acceleration */
+  transform: translateZ(0);
+  transition: transform var(--duration-fast) ease, 
+              opacity var(--duration-fast) ease,
+              box-shadow var(--duration-fast) ease;
 }
 
 .menu-card:hover {
-  transform: translateY(-5px);
+  transform: translateY(-5px) translateZ(0);
   border-color: rgba(217, 109, 49, 0.35);
   box-shadow: var(--shadow-soft);
 }
@@ -724,11 +817,14 @@ input:focus-visible {
   border-radius: var(--radius-md);
   background: linear-gradient(180deg, rgba(8, 21, 29, 0.86), rgba(9, 12, 16, 0.9));
   padding: 1rem;
-  transition: border-color 200ms ease, transform 200ms ease;
+  /* GPU acceleration */
+  transform: translateZ(0);
+  transition: transform var(--duration-fast) ease,
+              opacity var(--duration-fast) ease;
 }
 
 .ordering-card:hover {
-  transform: translateY(-3px);
+  transform: translateY(-3px) translateZ(0);
   border-color: rgba(184, 146, 88, 0.45);
 }
 
@@ -754,11 +850,15 @@ input:focus-visible {
   border-radius: var(--radius-sm);
   border: 1px solid var(--line-soft);
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.25);
+  /* GPU acceleration */
+  transform: translateZ(0);
 }
 
 .gallery-card img {
   object-fit: cover;
-  transition: transform 260ms ease;
+  /* GPU-accelerated transform */
+  transform: translateZ(0);
+  transition: transform var(--duration-normal) ease;
 }
 
 .gallery-card-2 {
@@ -1011,6 +1111,69 @@ input:focus-visible {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* Rotating gradient animation for living backgrounds */
+@keyframes rotate-gradient {
+  to {
+    --gradient-angle: 360deg;
+  }
+}
+
+/* Ember glow pulsing effect for buttons */
+@keyframes ember-glow {
+  0%, 100% {
+    box-shadow: 
+      0 10px 24px rgba(217, 109, 49, 0.4),
+      0 0 40px rgba(217, 109, 49, 0.2),
+      inset 0 0 20px rgba(217, 109, 49, 0.1);
+  }
+  50% {
+    box-shadow: 
+      0 10px 30px rgba(217, 109, 49, 0.6),
+      0 0 60px rgba(217, 109, 49, 0.3),
+      inset 0 0 30px rgba(217, 109, 49, 0.2);
+  }
+}
+
+/* Smoke rise effect for section reveals */
+@keyframes smoke-rise {
+  from {
+    opacity: 0;
+    transform: translateY(40px);
+    filter: blur(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0px);
+  }
+}
+
+/* Smoke rise section class */
+.section-smoke-rise {
+  animation: smoke-rise 1.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Ember gradient class for hero/CTA elements */
+.ember-gradient {
+  background: conic-gradient(
+    from var(--gradient-angle),
+    var(--ember),
+    var(--brass),
+    var(--ember-soft),
+    var(--ember)
+  );
+  animation: rotate-gradient 8s linear infinite;
+  transform: translateZ(0);
+}
+
+/* Fallback for browsers without Houdini support */
+@supports not (background: conic-gradient(from 0deg, red, blue)) {
+  .ember-gradient {
+    background: linear-gradient(135deg, var(--ember), var(--brass));
+    animation: none;
   }
 }
 
@@ -1782,6 +1945,69 @@ textarea:focus-visible {
   opacity: 1;
   transform: translateY(0);
   transition: opacity 300ms ease, transform 300ms ease;
+}
+
+/* ===================================
+   Mobile-Specific Optimizations
+   =================================== */
+
+/* Touch target optimization - minimum 44x44px for accessibility */
+@media (max-width: 768px) {
+  .btn,
+  .mobile-nav-toggle,
+  .site-nav-links a,
+  .nav-link,
+  .ordering-card,
+  .menu-card,
+  .stat-card,
+  button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Simplify animations on mobile for performance */
+  .panel,
+  .glass-premium {
+    backdrop-filter: blur(12px) saturate(150%);
+    /* Reduced from 24px blur for better mobile performance */
+  }
+
+  /* Disable heavy effects on mobile */
+  .ember-gradient {
+    animation: none;
+    background: linear-gradient(135deg, var(--ember) 0%, var(--ember-soft) 100%);
+  }
+
+  /* Simplified parallax on mobile */
+  .hero-bg {
+    transform: none !important;
+  }
+
+  /* Reduce will-change usage on mobile to save battery */
+  .btn,
+  .panel,
+  .menu-card {
+    will-change: auto;
+  }
+
+  /* Prevent 300ms tap delay on interactive elements */
+  .btn,
+  .mobile-nav-toggle,
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+}
+
+/* Ultra-low-end device optimizations */
+@media (max-width: 768px) and (prefers-reduced-motion: no-preference) {
+  /* Keep simple animations on capable mobile devices */
+  @supports (backdrop-filter: blur(12px)) {
+    .panel {
+      backdrop-filter: blur(12px) saturate(150%);
+    }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

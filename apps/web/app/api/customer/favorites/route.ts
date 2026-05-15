@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../../../lib/auth";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "../../../../lib/prisma";
 
 export async function GET(request: NextRequest) {
   try {
@@ -84,7 +82,7 @@ export async function GET(request: NextRequest) {
     });
 
     const menuItemMap = new Map(
-      menuItems.map((item) => [item.name, item])
+      menuItems.map((item) => [item.name, item] as const)
     );
 
     // Enrich favorites with current availability and pricing
@@ -95,7 +93,7 @@ export async function GET(request: NextRequest) {
         available: !!menuItem,
         currentPriceCents: menuItem?.basePriceCents,
         locationId: menuItem?.locationId,
-        locationName: menuItem?.location.name
+        locationName: menuItem?.location?.name
       };
     });
 

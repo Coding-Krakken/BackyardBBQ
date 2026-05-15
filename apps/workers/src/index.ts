@@ -1,4 +1,4 @@
-import { prisma } from "@bbq/database";
+import { prisma, Prisma } from "@bbq/database";
 import {
   createDeliveryChannelAdapters,
   deliveryChannels,
@@ -88,7 +88,7 @@ async function persistIngestEvent(input: {
       channel: input.channel,
       eventType: input.eventType,
       status: input.status,
-      payload: input.payload
+      payload: input.payload as Prisma.InputJsonValue
     }
   });
 }

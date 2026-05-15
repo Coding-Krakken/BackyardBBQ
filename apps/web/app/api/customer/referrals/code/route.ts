@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../../../../lib/auth";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "../../../../../lib/prisma";
 
 // GET /api/customer/referrals/code - Get customer's unique referral code
 export async function GET(request: NextRequest) {

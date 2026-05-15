@@ -8,6 +8,7 @@ import { DashboardHeader, DashboardSidebar } from "./components/DashboardLayout"
 import { DashboardStatsSkeleton, OrderListSkeleton } from "./components/SkeletonLoader";
 import { QuickReorderGrid } from "./components/QuickReorderGrid";
 import { FavoriteItems } from "./components/FavoriteItems";
+import { CountUpStat } from "./components/CountUpStat";
 
 interface DashboardStats {
   totalOrders: number;
@@ -152,28 +153,32 @@ export default function CustomerDashboardPage() {
 
           <section className="dashboard-section">
             <div className="stat-cards">
-              <div className="stat-card">
-                <span className="stat-label">Total Orders</span>
-                <span className="stat-value">{stats?.totalOrders || 0}</span>
-                <span className="stat-subtext">All time</span>
-              </div>
-              <div className="stat-card">
-                <span className="stat-label">Active Orders</span>
-                <span className="stat-value">{stats?.activeOrders || 0}</span>
-                <span className="stat-subtext">In progress</span>
-              </div>
-              <div className="stat-card">
-                <span className="stat-label">Upcoming Events</span>
-                <span className="stat-value">{stats?.upcomingBookings || 0}</span>
-                <span className="stat-subtext">Catering bookings</span>
-              </div>
-              <div className="stat-card">
-                <span className="stat-label">Total Spent</span>
-                <span className="stat-value">
-                  ${((stats?.totalSpentCents || 0) / 100).toFixed(0)}
-                </span>
-                <span className="stat-subtext">Lifetime value</span>
-              </div>
+              <CountUpStat
+                label="Total Orders"
+                value={stats?.totalOrders || 0}
+                subtext="All time"
+                delay={0}
+              />
+              <CountUpStat
+                label="Active Orders"
+                value={stats?.activeOrders || 0}
+                subtext="In progress"
+                delay={0.1}
+              />
+              <CountUpStat
+                label="Upcoming Events"
+                value={stats?.upcomingBookings || 0}
+                subtext="Catering bookings"
+                delay={0.2}
+              />
+              <CountUpStat
+                label="Total Spent"
+                value={(stats?.totalSpentCents || 0) / 100}
+                subtext="Lifetime value"
+                prefix="$"
+                decimals={0}
+                delay={0.3}
+              />
             </div>
           </section>
 

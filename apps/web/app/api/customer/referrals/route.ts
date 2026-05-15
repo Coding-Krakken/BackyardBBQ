@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../../../lib/auth";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "../../../../lib/prisma";
 
 // GET /api/customer/referrals - Fetch all referrals and stats for the logged-in customer
 export async function GET(request: NextRequest) {
@@ -36,13 +34,13 @@ export async function GET(request: NextRequest) {
 
     // Calculate stats
     const totalReferrals = referrals.length;
-    const signedUpCount = referrals.filter(r => r.status === "signed_up" || r.status === "rewarded").length;
-    const rewardedCount = referrals.filter(r => r.status === "rewarded").length;
+    const signedUpCount = referrals.filter((r) => r.status === "signed_up" || r.status === "rewarded").length;
+    const rewardedCount = referrals.filter((r) => r.status === "rewarded").length;
     const totalEarnedCents = referrals
-      .filter(r => r.status === "rewarded")
+      .filter((r) => r.status === "rewarded")
       .reduce((sum, r) => sum + r.rewardCents, 0);
     const pendingRewardsCents = referrals
-      .filter(r => r.status === "rewarded" && !r.rewardClaimed)
+      .filter((r) => r.status === "rewarded" && !r.rewardClaimed)
       .reduce((sum, r) => sum + r.rewardCents, 0);
 
     // Get customer's unique referral code
@@ -59,7 +57,7 @@ export async function GET(request: NextRequest) {
     const referralCode = `${customer?.firstName?.charAt(0).toUpperCase() || ""}${customer?.id.substring(0, 8).toUpperCase()}`;
 
     return NextResponse.json({
-      referrals: referrals.map(r => ({
+      referrals: referrals.map((r) => ({
         id: r.id,
         refereeEmail: r.refereeEmail,
         refereeName: r.referee 

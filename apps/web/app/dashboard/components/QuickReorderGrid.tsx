@@ -1,6 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
+import { motion, useInView, AnimatePresence } from "framer-motion";
+import { staggerContainer, staggerItem, hoverTap, springs } from "../../lib/animations";
+import { MagneticButton } from "../../components/MagneticButton";
 
 interface OrderItem {
   menuItemName: string;
@@ -24,6 +27,8 @@ interface QuickReorderGridProps {
 }
 
 export function QuickReorderGrid({ recentOrders, onReorderSuccess }: QuickReorderGridProps) {
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: true, margin: "-50px" });
   const [reordering, setReordering] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -109,33 +114,53 @@ export function QuickReorderGrid({ recentOrders, onReorderSuccess }: QuickReorde
         </div>
       </div>
 
-      {message && (
-        <div
-          className={message.type === "success" ? "success-text" : "error-text"}
-          style={{
-            marginTop: "1rem",
-            padding: "0.75rem 1rem",
-            background: message.type === "success" 
-              ? "rgba(34, 197, 94, 0.1)" 
-              : "rgba(239, 68, 68, 0.1)",
-            borderRadius: "8px",
-            border: `1px solid ${message.type === "success" ? "rgba(34, 197, 94, 0.3)" : "rgba(239, 68, 68, 0.3)"}`
-          }}
-        >
-          {message.text}
-        </div>
-      )}
+      <AnimatePresence>
+        {message && (
+          <motion.div
+            className={message.type === "success" ? "success-text" : "error-text"}
+            initial={{ opacity: 0, y: -10, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: "auto" }}
+            exit={{ opacity: 0, y: -10, height: 0 }}
+            transition={springs.gentle}
+            style={{
+              marginTop: "1rem",
+              padding: "0.75rem 1rem",
+              background: message.type === "success" 
+                ? "rgba(34, 197, 94, 0.1)" 
+                : "rgba(239, 68, 68, 0.1)",
+              borderRadius: "8px",
+              border: `1px solid ${message.type === "success" ? "rgba(34, 197, 94, 0.3)" : "rgba(239, 68, 68, 0.3)"}`
+            }}
+          >
+            {message.text}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      <div
+      <motion.div
+        ref={ref}
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
           gap: "1rem",
           marginTop: "1.5rem"
         }}
+        variants={staggerContainer}
+        initial="initial"
+        animate={isInView ? "animate" : "initial"}
       >
         {recentOrders.slice(0, 6).map((order) => (
-          <article key={order.id} className="panel" style={{ padding: "1.25rem" }}>
+          <motion.article 
+            key={order.id} 
+            className="panel" 
+            style={{ padding: "1.25rem" }}
+            variants={staggerItem}
+            whileHover={{ 
+              y: -5, 
+              boxShadow: "0 8px 24px rgba(217, 109, 49, 0.2), 0 4px 8px rgba(0, 0, 0, 0.4)",
+              transition: { type: "spring", stiffness: 300 }
+            }}
+          >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
               <div>
                 <p style={{ fontSize: "0.85rem", color: "var(--warm-gray)" }}>
@@ -166,17 +191,22 @@ export function QuickReorderGrid({ recentOrders, onReorderSuccess }: QuickReorde
               {getItemsSummary(order.items)}
             </p>
 
-            <button
-              onClick={() => handleReorder(order.id)}
-              disabled={reordering === order.id}
-              className="btn btn-secondary"
-              style={{ marginTop: "1rem", width: "100%" }}
-            >
-              {reordering === order.id ? "Reordering..." : "Reorder"}
-            </button>
-          </article>
+            <MagneticButton strength={0.2}>
+              <motion.button
+                onClick={() => handleReorder(order.id)}
+                disabled={reordering === order.id}
+                className="btn btn-secondary"
+                style={{ marginTop: "1rem", width: "100%" }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                transition={springs.button}
+              >
+                {reordering === order.id ? "Reordering..." : "Reorder"}
+              </motion.button>
+            </MagneticButton>
+          </motion.article>
         ))}
-      </div>
+      </motion.div>
     </section>
   );
 }

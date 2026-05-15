@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../../../lib/auth";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "../../../../lib/prisma";
+import type { Prisma } from "@prisma/client";
 
 export async function GET(request: NextRequest) {
   try {
@@ -21,18 +20,13 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "50");
     const offset = parseInt(searchParams.get("offset") || "0");
 
-    const where: any = {
-      customerId: session.user.id
+    const where: Prisma.CateringBookingWhereInput = {
+      customerId: session.user.id,
+      ...(upcoming ? {
+        eventDate: { gte: new Date() },
+        status: { in: ["pending_approval", "approved"] }
+      } : {})
     };
-
-    if (upcoming) {
-      where.eventDate = {
-        gte: new Date()
-      };
-      where.status = {
-        in: ["pending_approval", "approved"]
-      };
-    }
 
     const [bookings, total] = await Promise.all([
       prisma.cateringBooking.findMany({

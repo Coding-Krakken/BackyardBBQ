@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../../../lib/auth";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "../../../../lib/prisma";
 
 export async function POST(request: NextRequest) {
   try {
@@ -67,7 +65,7 @@ export async function POST(request: NextRequest) {
     });
 
     const menuItemMap = new Map(
-      menuItems.map((item) => [item.name.toLowerCase(), item])
+      menuItems.map((item) => [item.name.toLowerCase(), item] as const)
     );
 
     // Validate and prepare reorder items

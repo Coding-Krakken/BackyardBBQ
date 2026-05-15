@@ -1,6 +1,8 @@
 /**
  * Simple in-memory rate limiter for API routes
- * For production, use Redis-based solution like @upstash/ratelimit
+ * Note: In serverless environments (Vercel), each cold start gets a fresh Map.
+ * This provides basic burst protection within a single instance.
+ * For production at scale, use Redis-based solution like @upstash/ratelimit.
  */
 
 interface RateLimitEntry {
@@ -10,15 +12,17 @@ interface RateLimitEntry {
 
 const rateLimitStore = new Map<string, RateLimitEntry>();
 
-// Clean up old entries every 5 minutes
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, entry] of rateLimitStore.entries()) {
-    if (now > entry.resetTime) {
-      rateLimitStore.delete(key);
+// Lazy cleanup: purge expired entries when the map grows too large
+function cleanupIfNeeded() {
+  if (rateLimitStore.size > 1000) {
+    const now = Date.now();
+    for (const [key, entry] of rateLimitStore.entries()) {
+      if (now > entry.resetTime) {
+        rateLimitStore.delete(key);
+      }
     }
   }
-}, 5 * 60 * 1000);
+}
 
 interface RateLimitOptions {
   /**
@@ -75,6 +79,7 @@ export function checkRateLimit({
   maxRequests = 60,
   windowMs = 60000
 }: RateLimitOptions): RateLimitResult {
+  cleanupIfNeeded();
   const now = Date.now();
   const key = identifier;
   

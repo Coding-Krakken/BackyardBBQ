@@ -1,9 +1,16 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useEffect, useState, lazy, Suspense } from "react";
+import { useEffect, useState, lazy, Suspense, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { DashboardHeader, DashboardSidebar } from "../components/DashboardLayout";import { AnalyticsChartsSkeleton, SkeletonLoader } from "../components/SkeletonLoader";
+import { motion, useInView } from "framer-motion";
+import { DashboardHeader, DashboardSidebar } from "../components/DashboardLayout";
+import { AnalyticsChartsSkeleton } from "../components/SkeletonLoader";
+import { CountUpStat } from "../components/CountUpStat";
+import { durations, easings } from "../../lib/animations";
+import { ErrorBoundary } from "../../components/ErrorBoundary";
+import { ANIMATION_CONSTANTS, ERROR_MESSAGES } from "../../lib/constants";
+
 // Lazy load Tremor charts for better performance
 const AreaChart = lazy(() => import("@tremor/react").then(m => ({ default: m.AreaChart })));
 const DonutChart = lazy(() => import("@tremor/react").then(m => ({ default: m.DonutChart })));
@@ -43,6 +50,15 @@ export default function AnalyticsPage() {
   const [categories, setCategories] = useState<CategoryData | null>(null);
   const [frequency, setFrequency] = useState<FrequencyData | null>(null);
   const [loading, setLoading] = useState(true);
+  
+  // Refs for scroll-triggered chart animations
+  const trendChartRef = useRef(null);
+  const categoryChartRef = useRef(null);
+  const frequencyChartRef = useRef(null);
+  
+  const isTrendInView = useInView(trendChartRef, { once: true, margin: ANIMATION_CONSTANTS.SCROLL_TRIGGER_MARGIN });
+  const isCategoryInView = useInView(categoryChartRef, { once: true, margin: ANIMATION_CONSTANTS.SCROLL_TRIGGER_MARGIN });
+  const isFrequencyInView = useInView(frequencyChartRef, { once: true, margin: ANIMATION_CONSTANTS.SCROLL_TRIGGER_MARGIN });
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -130,21 +146,28 @@ export default function AnalyticsPage() {
               {/* Stats Cards */}
               <section className="dashboard-section">
                 <div className="stat-cards">
-                  <div className="stat-card">
-                    <span className="stat-label">YTD Spending</span>
-                    <span className="stat-value">${spending.stats.ytdTotal.toFixed(0)}</span>
-                    <span className="stat-subtext">{new Date().getFullYear()}</span>
-                  </div>
-                  <div className="stat-card">
-                    <span className="stat-label">Avg Order Value</span>
-                    <span className="stat-value">${spending.stats.averageOrderValue.toFixed(0)}</span>
-                    <span className="stat-subtext">Per order</span>
-                  </div>
-                  <div className="stat-card">
-                    <span className="stat-label">Total Orders</span>
-                    <span className="stat-value">{spending.stats.totalOrders}</span>
-                    <span className="stat-subtext">All time</span>
-                  </div>
+                  <CountUpStat
+                    label="YTD Spending"
+                    value={spending.stats.ytdTotal}
+                    subtext={new Date().getFullYear().toString()}
+                    prefix="$"
+                    decimals={0}
+                    delay={0}
+                  />
+                  <CountUpStat
+                    label="Avg Order Value"
+                    value={spending.stats.averageOrderValue}
+                    subtext="Per order"
+                    prefix="$"
+                    decimals={0}
+                    delay={0.1}
+                  />
+                  <CountUpStat
+                    label="Total Orders"
+                    value={spending.stats.totalOrders}
+                    subtext="All time"
+                    delay={0.2}
+                  />
                   <div className="stat-card">
                     <span className="stat-label">Top Month</span>
                     <span className="stat-value" style={{ fontSize: "1.3rem" }}>
@@ -155,8 +178,14 @@ export default function AnalyticsPage() {
                 </div>
               </section>
 
-              {/* Monthly Spending Trend */}
-              <section className="dashboard-section">
+              {/* Monthly Spending Trend - Animated */}
+              <motion.section
+                className="dashboard-section"
+                ref={trendChartRef}
+                initial={{ opacity: 0, y: 40 }}
+                animate={isTrendInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 40 }}
+                transition={{ duration: durations.slow, ease: easings.easeOut }}
+              >
                 <div>
                   <h2>Spending Trend</h2>
                   <p style={{ color: "var(--warm-gray)", marginTop: "0.25rem", fontSize: "0.95rem" }}>
@@ -164,33 +193,51 @@ export default function AnalyticsPage() {
                   </p>
                 </div>
 
-                <Card
-                  style={{
-                    marginTop: "1.5rem",
-                    background: "var(--panel)",
-                    border: "1px solid var(--line-soft)",
-                    padding: "1.5rem"
-                  }}
-                >
-                  <div style={{ height: "300px" }}>
-                    <AreaChart
-                      data={spending.monthlyData}
-                      index="month"
-                      categories={["spending"]}
-                      colors={["amber"]}
-                      valueFormatter={formatCurrency}
-                      yAxisWidth={60}
-                      showAnimation={true}
-                      curveType="natural"
-                    />
-                  </div>
-                </Card>
-              </section>
+                <ErrorBoundary fallback={<div style={{ height: "300px", padding: "2rem", textAlign: "center" }}>Unable to load chart</div>}>
+                  <Suspense fallback={<div style={{ height: "300px" }} />}>
+                    <motion.div
+                      initial={{ opacity: 0, scaleY: 0.8 }}
+                      animate={isTrendInView ? { opacity: 1, scaleY: 1 } : { opacity: 0, scaleY: 0.8 }}
+                      transition={{ duration: durations.normal, delay: ANIMATION_CONSTANTS.DELAY_MEDIUM, ease: easings.easeOut }}
+                      style={{ transformOrigin: "bottom" }}
+                    >
+                      <Card
+                      style={{
+                        marginTop: "1.5rem",
+                        background: "var(--panel)",
+                        border: "1px solid var(--line-soft)",
+                        padding: "1.5rem"
+                      }}
+                    >
+                      <div style={{ height: "300px" }}>
+                        <AreaChart
+                          data={spending.monthlyData}
+                          index="month"
+                          categories={["spending"]}
+                          colors={["amber"]}
+                          valueFormatter={formatCurrency}
+                          yAxisWidth={60}
+                          showAnimation={true}
+                          curveType="natural"
+                        />
+                      </div>
+                      </Card>
+                    </motion.div>
+                  </Suspense>
+                </ErrorBoundary>
+              </motion.section>
 
               {/* Category Breakdown and Order Frequency */}
               <div className="dashboard-grid" style={{ marginTop: "2rem" }}>
-                {/* Category Breakdown */}
-                <article className="panel" style={{ padding: "1.5rem" }}>
+                {/* Category Breakdown - Animated */}
+                <motion.article
+                  className="panel"
+                  style={{ padding: "1.5rem" }}
+                  ref={categoryChartRef}
+                  initial={{ opacity: 0, y: 40 }}
+                  animate={isCategoryInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 40 }}
+                  transition={{ duration: durations.slow, delay: 0.1, ease: easings.easeOut }}
+                >
                   <h3>Spending by Category</h3>
                   <p style={{ color: "var(--warm-gray)", marginTop: "0.25rem", fontSize: "0.9rem" }}>
                     Where your BBQ budget goes
@@ -198,16 +245,25 @@ export default function AnalyticsPage() {
 
                   {categories && categories.categoryData.length > 0 ? (
                     <>
-                      <div style={{ marginTop: "1.5rem", height: "240px" }}>
-                        <DonutChart
-                          data={categories.categoryData}
-                          category="spending"
-                          index="category"
-                          valueFormatter={formatCurrency}
-                          colors={["amber", "orange", "red", "rose", "pink", "purple"]}
-                          showAnimation={true}
-                        />
-                      </div>
+                      <ErrorBoundary fallback={<div style={{ height: "240px", padding: "2rem", textAlign: "center" }}>Unable to load chart</div>}>
+                        <Suspense fallback={<div style={{ height: "240px" }} />}>
+                          <motion.div
+                            style={{ marginTop: "1.5rem", height: "240px" }}
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={isCategoryInView ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.9 }}
+                            transition={{ duration: durations.normal, delay: ANIMATION_CONSTANTS.DELAY_LARGE, ease: easings.easeOut }}
+                          >
+                            <DonutChart
+                              data={categories.categoryData}
+                              category="spending"
+                              index="category"
+                              valueFormatter={formatCurrency}
+                              colors={["amber", "orange", "red", "rose", "pink", "purple"]}
+                              showAnimation={true}
+                            />
+                          </motion.div>
+                        </Suspense>
+                      </ErrorBoundary>
 
                       <div style={{ marginTop: "1.5rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                         {categories.categoryData.slice(0, 3).map((cat) => (
@@ -234,10 +290,17 @@ export default function AnalyticsPage() {
                       No category data available
                     </p>
                   )}
-                </article>
+                </motion.article>
 
-                {/* Order Frequency */}
-                <article className="panel" style={{ padding: "1.5rem" }}>
+                {/* Order Frequency - Animated */}
+                <motion.article
+                  className="panel"
+                  style={{ padding: "1.5rem" }}
+                  ref={frequencyChartRef}
+                  initial={{ opacity: 0, y: 40 }}
+                  animate={isFrequencyInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 40 }}
+                  transition={{ duration: durations.slow, delay: 0.2, ease: easings.easeOut }}
+                >
                   <h3>Order Frequency</h3>
                   <p style={{ color: "var(--warm-gray)", marginTop: "0.25rem", fontSize: "0.9rem" }}>
                     When you crave BBQ most
@@ -245,17 +308,26 @@ export default function AnalyticsPage() {
 
                   {frequency && frequency.frequencyData.length > 0 ? (
                     <>
-                      <div style={{ marginTop: "1.5rem", height: "240px" }}>
-                        <BarChart
-                          data={frequency.frequencyData}
-                          index="day"
-                          categories={["orders"]}
-                          colors={["amber"]}
-                          valueFormatter={(value) => `${value} orders`}
-                          yAxisWidth={40}
-                          showAnimation={true}
-                        />
-                      </div>
+                      <ErrorBoundary fallback={<div style={{ height: "240px", padding: "2rem", textAlign: "center" }}>Unable to load chart</div>}>
+                        <Suspense fallback={<div style={{ height: "240px" }} />}>
+                          <motion.div
+                            style={{ marginTop: "1.5rem", height: "240px", transformOrigin: "bottom" }}
+                            initial={{ opacity: 0, scaleY: 0.8 }}
+                            animate={isFrequencyInView ? { opacity: 1, scaleY: 1 } : { opacity: 0, scaleY: 0.8 }}
+                            transition={{ duration: durations.normal, delay: ANIMATION_CONSTANTS.DELAY_XL, ease: easings.easeOut }}
+                          >
+                            <BarChart
+                              data={frequency.frequencyData}
+                              index="day"
+                              categories={["orders"]}
+                              colors={["amber"]}
+                              valueFormatter={(value) => `${value} orders`}
+                              yAxisWidth={40}
+                              showAnimation={true}
+                            />
+                          </motion.div>
+                        </Suspense>
+                      </ErrorBoundary>
 
                       <div style={{ marginTop: "1.5rem", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
                         <div
@@ -291,7 +363,7 @@ export default function AnalyticsPage() {
                       No frequency data available
                     </p>
                   )}
-                </article>
+                </motion.article>
               </div>
             </>
           )}
