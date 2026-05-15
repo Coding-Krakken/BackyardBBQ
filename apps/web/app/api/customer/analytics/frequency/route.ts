@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
 
     const monthFrequency: Record<string, number> = {};
     
-    orders.forEach((order) => {
+    orders.forEach((order: typeof orders[number]) => {
       const date = new Date(order.createdAt);
       const dayName = date.toLocaleDateString("en-US", { weekday: "long" });
       const monthKey = date.toLocaleDateString("en-US", { year: "numeric", month: "short" });

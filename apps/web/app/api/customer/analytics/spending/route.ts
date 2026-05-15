@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Aggregate spending by month
-    orders.forEach((order) => {
+    orders.forEach((order: typeof orders[number]) => {
       const orderDate = new Date(order.createdAt);
       if (orderDate >= twelveMonthsAgo) {
         const key = orderDate.toLocaleDateString("en-US", { year: "numeric", month: "short" });

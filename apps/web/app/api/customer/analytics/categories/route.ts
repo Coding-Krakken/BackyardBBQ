@@ -47,8 +47,8 @@ export async function GET(request: NextRequest) {
     };
 
     // Categorize and sum spending
-    orders.forEach((order) => {
-      order.items.forEach((item) => {
+    orders.forEach((order: typeof orders[number]) => {
+      order.items.forEach((item: typeof order.items[number]) => {
         const itemName = item.menuItemName.toLowerCase();
         const totalCents = item.unitPriceCents * item.quantity;
         
