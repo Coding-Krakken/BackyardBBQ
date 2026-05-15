@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useLayoutEffect } from "react";
 
 interface PerformanceMetrics {
   fps: number;
@@ -95,23 +95,22 @@ export function useRenderPerformance(
   componentName: string = "Component",
   budgetMs: number = 16.67
 ) {
-  const renderStartRef = useRef<number>(0);
+  const renderStartRef = useRef<number>(performance.now());
 
-  useEffect(() => {
+  // Record render start time synchronously (before paint)
+  renderStartRef.current = performance.now();
+
+  useLayoutEffect(() => {
     if (process.env.NODE_ENV !== "development") {
       return;
     }
 
-    renderStartRef.current = performance.now();
-
-    return () => {
-      const renderTime = performance.now() - renderStartRef.current;
-      if (renderTime > budgetMs) {
-        console.warn(
-          `⚠️ ${componentName}: Render time ${renderTime.toFixed(2)}ms exceeded budget of ${budgetMs}ms`
-        );
-      }
-    };
+    const renderTime = performance.now() - renderStartRef.current;
+    if (renderTime > budgetMs) {
+      console.warn(
+        `⚠️ ${componentName}: Render time ${renderTime.toFixed(2)}ms exceeded budget of ${budgetMs}ms`
+      );
+    }
   });
 }
 

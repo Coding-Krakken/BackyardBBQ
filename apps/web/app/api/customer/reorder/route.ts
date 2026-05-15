@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     });
 
     const menuItemMap = new Map(
-      menuItems.map((item: any) => [item.name.toLowerCase(), item])
+      menuItems.map((item) => [item.name.toLowerCase(), item] as const)
     );
 
     // Validate and prepare reorder items
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
     const unavailableItems = [];
 
     for (const item of originalOrder.items) {
-      const menuItem = menuItemMap.get(item.menuItemName.toLowerCase()) as any;
+      const menuItem = menuItemMap.get(item.menuItemName.toLowerCase());
       
       if (menuItem) {
         reorderItems.push({

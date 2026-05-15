@@ -356,6 +356,34 @@ export function FeaturedMenuSection() {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: "-100px" });
   const [selectedItem, setSelectedItem] = useState<null | { name: string; description: string; price: string; image: { src: string; alt: string } }>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const lastFocusedRef = useRef<HTMLElement | null>(null);
+
+  // Close on Escape key
+  useEffect(() => {
+    if (!selectedItem) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setSelectedItem(null);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [selectedItem]);
+
+  // Focus trap and restore focus
+  useEffect(() => {
+    if (selectedItem) {
+      lastFocusedRef.current = document.activeElement as HTMLElement;
+      // Focus the modal after animation
+      requestAnimationFrame(() => {
+        modalRef.current?.focus();
+      });
+    } else if (lastFocusedRef.current) {
+      lastFocusedRef.current.focus();
+      lastFocusedRef.current = null;
+    }
+  }, [selectedItem]);
 
   return (
     <motion.section
@@ -393,7 +421,16 @@ export function FeaturedMenuSection() {
             key={item.name}
             layoutId={`menu-item-${item.name}`}
             variants={staggerItem}
+            role="button"
+            tabIndex={0}
+            aria-label={`View details for ${item.name}`}
             onClick={() => setSelectedItem(item)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setSelectedItem(item);
+              }
+            }}
             style={{ cursor: "pointer" }}
             whileHover={{ 
               y: -8,
@@ -438,6 +475,30 @@ export function FeaturedMenuSection() {
             />
             {/* Modal Content with Shared Layout */}
             <div
+              ref={modalRef}
+              role="dialog"
+              aria-modal="true"
+              aria-label={`${selectedItem.name} details`}
+              tabIndex={-1}
+              onKeyDown={(e) => {
+                // Focus trap: cycle focus within modal
+                if (e.key === "Tab") {
+                  const focusable = modalRef.current?.querySelectorAll<HTMLElement>(
+                    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+                  );
+                  if (focusable && focusable.length > 0) {
+                    const first = focusable[0]!;
+                    const last = focusable[focusable.length - 1]!;
+                    if (e.shiftKey && document.activeElement === first) {
+                      e.preventDefault();
+                      last.focus();
+                    } else if (!e.shiftKey && document.activeElement === last) {
+                      e.preventDefault();
+                      first.focus();
+                    }
+                  }
+                }
+              }}
               style={{
                 position: "fixed",
                 top: 0,

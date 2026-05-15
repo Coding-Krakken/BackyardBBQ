@@ -82,18 +82,18 @@ export async function GET(request: NextRequest) {
     });
 
     const menuItemMap = new Map(
-      menuItems.map((item: any) => [item.name, item])
+      menuItems.map((item) => [item.name, item] as const)
     );
 
     // Enrich favorites with current availability and pricing
     const enrichedFavorites = favorites.map((fav) => {
-      const menuItem = menuItemMap.get(fav.name) as any;
+      const menuItem = menuItemMap.get(fav.name);
       return {
         ...fav,
         available: !!menuItem,
         currentPriceCents: menuItem?.basePriceCents,
         locationId: menuItem?.locationId,
-        locationName: menuItem?.location.name
+        locationName: menuItem?.location?.name
       };
     });
 

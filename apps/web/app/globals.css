@@ -111,7 +111,6 @@ img {
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
   /* GPU acceleration for smooth animations */
   transform: translateZ(0);
-  will-change: transform, opacity;
   transition: transform var(--duration-fast) ease,
               opacity var(--duration-fast) ease,
               box-shadow var(--duration-fast) ease;
@@ -215,7 +214,6 @@ p {
   cursor: pointer;
   /* GPU acceleration */
   transform: translateZ(0);
-  will-change: transform, opacity;
   /* Use only transform and opacity for 60fps animations */
   transition: transform var(--duration-fast) ease, 
               opacity var(--duration-fast) ease,
@@ -239,7 +237,6 @@ input:focus-visible {
   box-shadow: 0 10px 24px rgba(217, 109, 49, 0.35);
   /* Ember glow animation */
   animation: ember-glow 3s ease-in-out infinite;
-  will-change: box-shadow;
 }
 
 .btn-primary:hover {
@@ -701,7 +698,6 @@ input:focus-visible {
   background: linear-gradient(180deg, rgba(8, 20, 27, 0.88), rgba(7, 11, 14, 0.94));
   /* GPU acceleration */
   transform: translateZ(0);
-  will-change: transform, opacity;
   transition: transform var(--duration-fast) ease, 
               opacity var(--duration-fast) ease,
               box-shadow var(--duration-fast) ease;
@@ -823,7 +819,6 @@ input:focus-visible {
   padding: 1rem;
   /* GPU acceleration */
   transform: translateZ(0);
-  will-change: transform, opacity;
   transition: transform var(--duration-fast) ease,
               opacity var(--duration-fast) ease;
 }
@@ -863,7 +858,6 @@ input:focus-visible {
   object-fit: cover;
   /* GPU-accelerated transform */
   transform: translateZ(0);
-  will-change: transform;
   transition: transform var(--duration-normal) ease;
 }
 
@@ -1996,8 +1990,11 @@ textarea:focus-visible {
     will-change: auto;
   }
 
-  /* Prevent 300ms tap delay (handled by Next.js but explicit for clarity) */
-  * {
+  /* Prevent 300ms tap delay on interactive elements */
+  .btn,
+  .mobile-nav-toggle,
+  button,
+  a {
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
   }

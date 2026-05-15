@@ -3,7 +3,8 @@ import cors from "@fastify/cors";
 import rawBody from "fastify-raw-body";
 import { z } from "zod";
 import Stripe from "stripe";
-import { prisma } from "@bbq/database";
+import { prisma, Prisma } from "@bbq/database";
+import type { PaymentStatus } from "@prisma/client";
 
 const app = Fastify({ logger: true });
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
@@ -117,8 +118,8 @@ async function writeAdminAuditEvent(input: {
   });
 }
 
-function mapStripeStatusToPaymentStatus(status: Stripe.PaymentIntent.Status) {
-  const map: Record<Stripe.PaymentIntent.Status, string> = {
+function mapStripeStatusToPaymentStatus(status: Stripe.PaymentIntent.Status): PaymentStatus {
+  const map: Record<Stripe.PaymentIntent.Status, PaymentStatus> = {
     requires_payment_method: "requires_payment_method",
     requires_confirmation: "requires_confirmation",
     requires_action: "requires_action",
@@ -1943,7 +1944,7 @@ app.post(
               payload: {
                 paymentIntentId: paymentIntent.id,
                 status: paymentIntent.status
-              }
+              } as Prisma.InputJsonValue
             }
           });
         } catch (error) {
@@ -1970,8 +1971,8 @@ app.post(
                 amountCents: dispute.amount,
                 currency: dispute.currency,
                 reason: dispute.reason,
-                evidenceDetails: dispute.evidence_details
-              }
+                evidenceDetails: JSON.parse(JSON.stringify(dispute.evidence_details))
+              } as Prisma.InputJsonValue
             }
           });
         } catch (error) {

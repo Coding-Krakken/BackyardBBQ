@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface Particle {
   x: number;
@@ -14,7 +14,6 @@ interface Particle {
 }
 
 interface SmokeTrailProps {
-  disabled?: boolean;
   maxParticles?: number;
   particleLifespan?: number;
 }
@@ -25,7 +24,6 @@ interface SmokeTrailProps {
  * Auto-disabled on mobile and reduced motion
  */
 export function SmokeTrail({ 
-  disabled = false,
   maxParticles = 30,
   particleLifespan = 60 
 }: SmokeTrailProps) {
@@ -34,6 +32,21 @@ export function SmokeTrail({
   const mouseRef = useRef({ x: 0, y: 0 });
   const lastEmitRef = useRef(0);
   const rafRef = useRef<number>();
+  const [disabled, setDisabled] = useState(true);
+
+  // Self-contained mobile/reduced-motion detection
+  useEffect(() => {
+    const isMobile = window.innerWidth < 1024;
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    setDisabled(isMobile || prefersReducedMotion);
+
+    const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const handleChange = (e: MediaQueryListEvent) => {
+      setDisabled(window.innerWidth < 1024 || e.matches);
+    };
+    mql.addEventListener("change", handleChange);
+    return () => mql.removeEventListener("change", handleChange);
+  }, []);
 
   useEffect(() => {
     if (disabled) return;
@@ -63,11 +76,25 @@ export function SmokeTrail({
     };
     window.addEventListener("mousemove", handleMouseMove);
 
+    // Pre-compute gradient color stops to avoid per-frame allocations
+    const drawParticle = (particle: Particle) => {
+      const gradient = ctx.createRadialGradient(
+        particle.x, particle.y, 0,
+        particle.x, particle.y, particle.size
+      );
+      gradient.addColorStop(0, `rgba(120, 120, 120, ${particle.opacity})`);
+      gradient.addColorStop(0.5, `rgba(100, 100, 100, ${particle.opacity * 0.5})`);
+      gradient.addColorStop(1, "rgba(80, 80, 80, 0)");
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+      ctx.fill();
+    };
+
     // Animation loop
     const animate = (time: number) => {
       if (!ctx || !canvas) return;
 
-      // Clear canvas fully each frame to avoid dark buildup
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       // Emit new particles (throttled)
@@ -93,25 +120,8 @@ export function SmokeTrail({
         particle.size += 0.2;
         particle.opacity = Math.max(0, 0.3 * (1 - particle.life / particle.maxLife));
 
-        // Draw particle with gradient
-        const gradient = ctx.createRadialGradient(
-          particle.x,
-          particle.y,
-          0,
-          particle.x,
-          particle.y,
-          particle.size
-        );
-        gradient.addColorStop(0, `rgba(120, 120, 120, ${particle.opacity})`);
-        gradient.addColorStop(0.5, `rgba(100, 100, 100, ${particle.opacity * 0.5})`);
-        gradient.addColorStop(1, `rgba(80, 80, 80, 0)`);
+        drawParticle(particle);
 
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Keep particle if still alive
         return particle.life < particle.maxLife;
       });
 
@@ -120,7 +130,6 @@ export function SmokeTrail({
 
     rafRef.current = requestAnimationFrame(animate);
 
-    // Cleanup
     return () => {
       window.removeEventListener("resize", debouncedResize);
       clearTimeout(resizeTimer);

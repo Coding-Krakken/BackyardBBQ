@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, ReactNode } from "react";
+import { useState, useCallback, useRef, ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface Ripple {
@@ -30,7 +30,7 @@ export function TouchRipple({
   disabled = false 
 }: TouchRippleProps) {
   const [ripples, setRipples] = useState<Ripple[]>([]);
-  const [nextId, setNextId] = useState(0);
+  const nextIdRef = useRef(0);
 
   const addRipple = useCallback((event: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
     if (disabled) return;
@@ -39,31 +39,24 @@ export function TouchRipple({
     let x: number, y: number;
 
     if ('touches' in event) {
-      // Touch event
       const touch = event.touches[0];
-      if (!touch) return; // Guard against undefined
+      if (!touch) return;
       x = touch.clientX - rect.left;
       y = touch.clientY - rect.top;
     } else {
-      // Mouse event
       x = event.clientX - rect.left;
       y = event.clientY - rect.top;
     }
 
-    const newRipple: Ripple = {
-      id: nextId,
-      x,
-      y,
-    };
+    const id = nextIdRef.current++;
+    const newRipple: Ripple = { id, x, y };
 
     setRipples((prev) => [...prev, newRipple]);
-    setNextId((prev) => prev + 1);
 
-    // Remove ripple after animation completes
     setTimeout(() => {
-      setRipples((prev) => prev.filter((r) => r.id !== newRipple.id));
+      setRipples((prev) => prev.filter((r) => r.id !== id));
     }, duration * 1000);
-  }, [nextId, duration, disabled]);
+  }, [duration, disabled]);
 
   return (
     <div

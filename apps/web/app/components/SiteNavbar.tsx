@@ -71,7 +71,6 @@ export function SiteNavbar() {
   }, [session, status]);
 
   return (
-    <>
     <header className={`site-nav-shell ${navStateClass}`}>
       <nav className="site-nav page-shell" aria-label="Primary navigation">
         <Link className="site-brand" href="/">
@@ -84,6 +83,7 @@ export function SiteNavbar() {
           type="button"
           aria-label="Toggle navigation menu"
           aria-expanded={mobileOpen}
+          aria-controls="mobile-nav-drawer"
           onClick={() => setMobileOpen((state) => !state)}
         >
           <span />
@@ -149,9 +149,8 @@ export function SiteNavbar() {
           </MagneticButton>
         </div>
       </nav>
-    </header>
 
-    <AnimatePresence>
+      <AnimatePresence>
         {mobileOpen && (
           <>
             {/* Backdrop overlay */}
@@ -162,6 +161,7 @@ export function SiteNavbar() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.3 }}
               onClick={() => setMobileOpen(false)}
+              aria-hidden="true"
               style={{
                 position: "fixed",
                 inset: 0,
@@ -172,8 +172,10 @@ export function SiteNavbar() {
               }}
             />
             <motion.div
+              id="mobile-nav-drawer"
               className="mobile-nav-drawer"
               role="dialog"
+              aria-modal="true"
               aria-label="Mobile navigation"
               initial={{ x: "100%" }}
               animate={{ x: 0 }}
@@ -221,6 +223,6 @@ export function SiteNavbar() {
           </>
         )}
       </AnimatePresence>
-    </>
+    </header>
   );
 }

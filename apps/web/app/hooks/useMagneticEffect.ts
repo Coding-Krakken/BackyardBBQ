@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
-import { useMotionValue, useSpring, useTransform } from "framer-motion";
+import { useMotionValue, useSpring } from "framer-motion";
 
 interface MagneticEffectOptions {
   strength?: number; // 0-1, how much the element moves toward cursor
@@ -44,42 +44,39 @@ export function useMagneticEffect(options: MagneticEffectOptions = {}) {
     if (!element) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      if (!isHovered) return;
-
       const rect = element.getBoundingClientRect();
       const centerX = rect.left + rect.width / 2;
       const centerY = rect.top + rect.height / 2;
 
-      // Calculate distance from cursor to element center
       const deltaX = e.clientX - centerX;
       const deltaY = e.clientY - centerY;
 
-      // Apply strength multiplier (0.3 = 30% of distance)
       mouseX.set(deltaX * strength);
       mouseY.set(deltaY * strength);
     };
 
     const handleMouseEnter = () => {
       setIsHovered(true);
+      // Attach mousemove only while hovering
+      window.addEventListener("mousemove", handleMouseMove);
     };
 
     const handleMouseLeave = () => {
       setIsHovered(false);
-      // Reset to center with spring animation
       mouseX.set(0);
       mouseY.set(0);
+      window.removeEventListener("mousemove", handleMouseMove);
     };
 
     element.addEventListener("mouseenter", handleMouseEnter);
     element.addEventListener("mouseleave", handleMouseLeave);
-    window.addEventListener("mousemove", handleMouseMove);
 
     return () => {
       element.removeEventListener("mouseenter", handleMouseEnter);
       element.removeEventListener("mouseleave", handleMouseLeave);
       window.removeEventListener("mousemove", handleMouseMove);
     };
-  }, [mouseX, mouseY, strength, isHovered, disabled]);
+  }, [mouseX, mouseY, strength, disabled]);
 
   return { ref, x, y, isHovered };
 }

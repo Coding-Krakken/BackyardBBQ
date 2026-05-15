@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Particles, { initParticlesEngine } from "@tsparticles/react";
 import { loadSlim } from "@tsparticles/slim";
-import type { Container, ISourceOptions } from "@tsparticles/engine";
+import type { ISourceOptions } from "@tsparticles/engine";
 
 interface EmberParticlesProps {
   density?: number; // Number of particles (default: 25)
@@ -22,10 +22,6 @@ export function EmberParticles({
   disabled = false 
 }: EmberParticlesProps) {
   const [engineReady, setEngineReady] = useState(false);
-
-  const particlesLoaded = useCallback(async (container?: Container) => {
-    // Particles loaded and rendering
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -127,7 +123,6 @@ export function EmberParticles({
   return (
     <Particles
       id="ember-particles"
-      particlesLoaded={particlesLoaded}
       options={options}
       style={{
         position: "absolute",

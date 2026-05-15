@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, memo } from "react";
+import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { springs } from "../../lib/animations";
@@ -20,7 +20,7 @@ export const NotificationCenter = memo(function NotificationCenter() {
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [prevUnreadCount, setPrevUnreadCount] = useState(0);
+  const prevUnreadCountRef = useRef(0);
   const [shouldBounce, setShouldBounce] = useState(false);
   const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -59,12 +59,12 @@ export const NotificationCenter = memo(function NotificationCenter() {
         const newUnreadCount = data.unreadCount || 0;
         
         // Trigger bounce animation if unread count increased
-        if (newUnreadCount > prevUnreadCount && prevUnreadCount !== 0) {
+        if (newUnreadCount > prevUnreadCountRef.current && prevUnreadCountRef.current !== 0) {
           setShouldBounce(true);
           setTimeout(() => setShouldBounce(false), 1000);
         }
         
-        setPrevUnreadCount(newUnreadCount);
+        prevUnreadCountRef.current = newUnreadCount;
         setUnreadCount(newUnreadCount);
       }
     } catch (error) {
