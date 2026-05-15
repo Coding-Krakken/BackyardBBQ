@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
 
     // Enrich favorites with current availability and pricing
     const enrichedFavorites = favorites.map((fav) => {
-      const menuItem = menuItemMap.get(fav.name);
+      const menuItem = menuItemMap.get(fav.name) as any;
       return {
         ...fav,
         available: !!menuItem,
