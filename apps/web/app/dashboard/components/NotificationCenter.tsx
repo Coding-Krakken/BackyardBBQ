@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef, memo } from "react";
 import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
+import { springs } from "../../lib/animations";
 
 interface Notification {
   id: string;
@@ -18,6 +20,8 @@ export const NotificationCenter = memo(function NotificationCenter() {
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [prevUnreadCount, setPrevUnreadCount] = useState(0);
+  const [shouldBounce, setShouldBounce] = useState(false);
   const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -52,7 +56,16 @@ export const NotificationCenter = memo(function NotificationCenter() {
       if (response.ok) {
         const data = await response.json();
         setNotifications(data.notifications || []);
-        setUnreadCount(data.unreadCount || 0);
+        const newUnreadCount = data.unreadCount || 0;
+        
+        // Trigger bounce animation if unread count increased
+        if (newUnreadCount > prevUnreadCount && prevUnreadCount !== 0) {
+          setShouldBounce(true);
+          setTimeout(() => setShouldBounce(false), 1000);
+        }
+        
+        setPrevUnreadCount(newUnreadCount);
+        setUnreadCount(newUnreadCount);
       }
     } catch (error) {
       console.error("Failed to fetch notifications:", error);
@@ -155,28 +168,42 @@ export const NotificationCenter = memo(function NotificationCenter() {
         }}
       >
         <span role="img" aria-label="Bell icon">🔔</span>
-        {unreadCount > 0 && (
-          <span 
-            aria-live="polite"
-            aria-atomic="true"
-            style={{
-              position: "absolute",
-              top: "-4px",
-              right: "-4px",
-              background: "var(--ember)",
-              color: "var(--bg-charcoal)",
-              borderRadius: "50%",
-              width: "20px",
-              height: "20px",
-              fontSize: "0.7rem",
-              fontWeight: 700,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center"
-            }}>
-            {unreadCount > 9 ? "9+" : unreadCount}
-          </span>
-        )}
+        <AnimatePresence>
+          {unreadCount > 0 && (
+            <motion.span 
+              key="badge"
+              aria-live="polite"
+              aria-atomic="true"
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ 
+                scale: shouldBounce ? [1, 1.3, 1] : 1,
+                opacity: 1,
+                rotate: shouldBounce ? [0, -10, 10, -10, 0] : 0
+              }}
+              exit={{ scale: 0, opacity: 0 }}
+              transition={shouldBounce ? {
+                ...springs.bounce,
+                times: [0, 0.3, 0.6, 0.8, 1]
+              } : springs.gentle}
+              style={{
+                position: "absolute",
+                top: "-4px",
+                right: "-4px",
+                background: "var(--ember)",
+                color: "var(--bg-charcoal)",
+                borderRadius: "50%",
+                width: "20px",
+                height: "20px",
+                fontSize: "0.7rem",
+                fontWeight: 700,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
+              }}>
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </motion.span>
+          )}
+        </AnimatePresence>
       </button>
 
       {isOpen && (

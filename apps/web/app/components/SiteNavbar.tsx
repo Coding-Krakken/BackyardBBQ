@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
+import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
 import { orderingLinks } from "../config/content";
+import { MagneticButton } from "./MagneticButton";
+import { springs } from "../lib/animations";
 
 const navLinks = [
   { href: "/", label: "Home" },
@@ -89,63 +92,102 @@ export function SiteNavbar() {
 
         <div className="site-nav-links">
           {navLinks.map((item) => (
-            <a key={item.label} href={item.href}>
+            <motion.a
+              key={item.label}
+              href={item.href}
+              className="nav-link"
+              whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.95 }}
+              style={{ position: "relative", display: "inline-block" }}
+            >
               {item.label}
-            </a>
+              <motion.span
+                className="nav-link-underline"
+                initial={{ width: 0 }}
+                whileHover={{ width: "100%" }}
+                transition={springs.gentle}
+                style={{
+                  position: "absolute",
+                  bottom: -4,
+                  left: 0,
+                  height: 2,
+                  background: "var(--ember)",
+                  borderRadius: 2,
+                }}
+              />
+            </motion.a>
           ))}
           {authLink && (
-            <Link href={authLink.href}>
-              {authLink.label}
-            </Link>
+            <motion.div whileHover={{ y: -2 }} whileTap={{ scale: 0.95 }}>
+              <Link href={authLink.href}>
+                {authLink.label}
+              </Link>
+            </motion.div>
           )}
         </div>
 
         <div className="site-nav-ctas">
-          <Link className="btn nav-btn nav-btn-reserve" href={primaryDesktopCta.href}>
-            {primaryDesktopCta.label}
-          </Link>
+          <MagneticButton strength={0.25}>
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              <Link className="btn nav-btn nav-btn-reserve" href={primaryDesktopCta.href}>
+                {primaryDesktopCta.label}
+              </Link>
+            </motion.div>
+          </MagneticButton>
         </div>
       </nav>
 
-      <div className="mobile-nav-drawer" role="dialog" aria-label="Mobile navigation">
-        <div className="mobile-nav-links">
-          {navLinks.map((item) => (
-            <a key={item.label} href={item.href} onClick={() => setMobileOpen(false)}>
-              {item.label}
-            </a>
-          ))}
-          <Link href="/catering" onClick={() => setMobileOpen(false)}>
-            Catering Page
-          </Link>
-          <Link href="/checkout" onClick={() => setMobileOpen(false)}>
-            Checkout
-          </Link>
-          {authLink && (
-            <Link href={authLink.href} onClick={() => setMobileOpen(false)}>
-              {authLink.label}
-            </Link>
-          )}
-        </div>
-
-        <div className="mobile-nav-ctas">
-          {ctaLinks.map((item) => {
-            const className = `btn nav-btn nav-btn-${item.variant}`;
-            if (isExternalUrl(item.href)) {
-              return (
-                <a key={item.label} className={className} href={item.href} rel="noreferrer" target="_blank">
+      <AnimatePresence>
+        {mobileOpen && (
+          <motion.div
+            className="mobile-nav-drawer"
+            role="dialog"
+            aria-label="Mobile navigation"
+            initial={{ x: "100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "100%" }}
+            transition={springs.layout}
+          >
+            <div className="mobile-nav-links">
+              {navLinks.map((item) => (
+                <a key={item.label} href={item.href} onClick={() => setMobileOpen(false)}>
                   {item.label}
                 </a>
-              );
-            }
-
-            return (
-              <Link key={item.label} className={className} href={item.href} onClick={() => setMobileOpen(false)}>
-                {item.label}
+              ))}
+              <Link href="/catering" onClick={() => setMobileOpen(false)}>
+                Catering Page
               </Link>
-            );
-          })}
-        </div>
-      </div>
+              <Link href="/checkout" onClick={() => setMobileOpen(false)}>
+                Checkout
+              </Link>
+              {authLink && (
+                <Link href={authLink.href} onClick={() => setMobileOpen(false)}>
+                  {authLink.label}
+                </Link>
+              )}
+            </div>
+
+            <div className="mobile-nav-ctas">
+              {ctaLinks.map((item) => {
+                const className = `btn nav-btn nav-btn-${item.variant}`;
+                if (isExternalUrl(item.href)) {
+                  return (
+                    <a key={item.label} className={className} href={item.href} rel="noreferrer" target="_blank">
+                      {item.label}
+                    </a>
+                  );
+                }
+
+                return (
+                  <Link key={item.label} className={className} href={item.href} onClick={() => setMobileOpen(false)}>
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </header>
   );
 }

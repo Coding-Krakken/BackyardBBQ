@@ -3,6 +3,7 @@
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { motion, PanInfo } from "framer-motion";
 import { DashboardHeader, DashboardSidebar } from "../components/DashboardLayout";
 import { OrderStatusTimeline } from "../components/OrderStatusTimeline";
 import { OrderListSkeleton } from "../components/SkeletonLoader";
@@ -342,8 +343,52 @@ function OrderCard({
     );
   };
 
+  const [dragX, setDragX] = useState(0);
+
+  const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    // If dragged significantly to the right (> 100px), trigger reorder
+    if (info.offset.x > 100 && order.status === "completed") {
+      onReorder(order.id);
+    }
+    setDragX(0);
+  };
+
   return (
-    <article className="panel">
+    <div style={{ position: "relative", overflow: "hidden" }}>
+      {/* Action indicator background */}
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: "100px",
+          background: "linear-gradient(90deg, rgba(217, 109, 49, 0.2), transparent)",
+          display: "flex",
+          alignItems: "center",
+          paddingLeft: "1rem",
+          opacity: dragX > 0 ? Math.min(dragX / 100, 1) : 0,
+          transition: "opacity 0.2s",
+          pointerEvents: "none",
+          zIndex: 0
+        }}
+      >
+        <span style={{ color: "var(--ember)", fontSize: "1.5rem" }}>🔄</span>
+      </div>
+
+      <motion.article
+        className="panel"
+        drag="x"
+        dragConstraints={{ left: 0, right: order.status === "completed" ? 150 : 0 }}
+        dragElastic={0.2}
+        onDrag={(e, info) => setDragX(info.offset.x)}
+        onDragEnd={handleDragEnd}
+        style={{
+          touchAction: "pan-y", // Allow vertical scrolling while dragging horizontally
+          position: "relative",
+          zIndex: 1
+        }}
+      >
       <div
         style={{
           display: "flex",
@@ -473,6 +518,7 @@ function OrderCard({
           </div>
         </div>
       )}
-    </article>
+      </motion.article>
+    </div>
   );
 }

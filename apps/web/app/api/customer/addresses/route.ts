@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../../../lib/auth";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../../../../lib/prisma";
 import { z } from "zod";
-
-const prisma = new PrismaClient();
 
 const addressSchema = z.object({
   label: z.string().min(1, "Label is required").max(50),
