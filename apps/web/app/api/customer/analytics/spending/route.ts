@@ -65,14 +65,14 @@ export async function GET(request: NextRequest) {
 
     // Calculate YTD spending (current year)
     const currentYear = now.getFullYear();
-    const ytdOrders = orders.filter((order) => {
+    const ytdOrders = orders.filter((order: typeof orders[number]) => {
       const orderYear = new Date(order.createdAt).getFullYear();
       return orderYear === currentYear;
     });
-    const ytdTotal = ytdOrders.reduce((sum, order) => sum + order.totalCents, 0);
+    const ytdTotal = ytdOrders.reduce((sum: number, order: typeof orders[number]) => sum + order.totalCents, 0);
 
     // Calculate average order value
-    const totalSpent = orders.reduce((sum, order) => sum + order.totalCents, 0);
+    const totalSpent = orders.reduce((sum: number, order: typeof orders[number]) => sum + order.totalCents, 0);
     const averageOrderValue = orders.length > 0 ? totalSpent / orders.length : 0;
 
     // Find top spending month
