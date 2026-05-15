@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
@@ -10,8 +10,6 @@ const modules = [
   "Accounting and Payout Reconciliation",
   "Forecasting and Channel Analytics"
 ];
-
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 
 const orderStatuses = ["pending", "confirmed", "preparing", "ready", "completed", "cancelled"];
 const bookingStatuses = ["pending_approval", "approved", "declined", "cancelled"];
@@ -87,7 +85,6 @@ export default function AdminDashboardPage() {
   const router = useRouter();
 
   const adminRole = (session?.user as { role?: string })?.role ?? "owner";
-  const adminHeaders = useMemo(() => ({ "x-admin-role": adminRole }), [adminRole]);
 
   const [overview, setOverview] = useState<OverviewPayload | null>(null);
   const [orders, setOrders] = useState<OrderRow[]>([]);
@@ -130,18 +127,18 @@ export default function AdminDashboardPage() {
       integrationHealthRes, deadLetterRes, integrationAlertsRes,
       analyticsSalesRes, analyticsForecastRes, analyticsAnomaliesRes
     ] = await Promise.all([
-      fetch(`${apiBaseUrl}/api/admin/overview`, { headers: adminHeaders }),
-      fetch(`${apiBaseUrl}/api/admin/orders?limit=8`, { headers: adminHeaders }),
-      fetch(`${apiBaseUrl}/api/admin/catering/bookings?limit=8`, { headers: adminHeaders }),
-      fetch(`${apiBaseUrl}/api/admin/payments?limit=8`, { headers: adminHeaders }),
-      fetch(`${apiBaseUrl}/api/admin/payments/disputes?limit=8`, { headers: adminHeaders }),
-      fetch(`${apiBaseUrl}/api/admin/accounting/daily-close?date=${targetDate}`, { headers: adminHeaders }),
-      fetch(`${apiBaseUrl}/api/admin/integrations/health`, { headers: adminHeaders }),
-      fetch(`${apiBaseUrl}/api/admin/integrations/dead-letter?limit=8`, { headers: adminHeaders }),
-      fetch(`${apiBaseUrl}/api/admin/integrations/alerts`, { headers: adminHeaders }),
-      fetch(`${apiBaseUrl}/api/admin/analytics/sales?days=14`, { headers: adminHeaders }),
-      fetch(`${apiBaseUrl}/api/admin/analytics/forecast?days=7`, { headers: adminHeaders }),
-      fetch(`${apiBaseUrl}/api/admin/analytics/anomalies?days=21`, { headers: adminHeaders })
+      fetch(`/api/admin/overview`),
+      fetch(`/api/admin/orders?limit=8`),
+      fetch(`/api/admin/catering/bookings?limit=8`),
+      fetch(`/api/admin/payments?limit=8`),
+      fetch(`/api/admin/payments/disputes?limit=8`),
+      fetch(`/api/admin/accounting/daily-close?date=${targetDate}`),
+      fetch(`/api/admin/integrations/health`),
+      fetch(`/api/admin/integrations/dead-letter?limit=8`),
+      fetch(`/api/admin/integrations/alerts`),
+      fetch(`/api/admin/analytics/sales?days=14`),
+      fetch(`/api/admin/analytics/forecast?days=7`),
+      fetch(`/api/admin/analytics/anomalies?days=21`)
     ]);
 
     if (!overviewRes.ok || !ordersRes.ok || !bookingsRes.ok || !paymentsRes.ok ||
@@ -174,9 +171,9 @@ export default function AdminDashboardPage() {
 
   const updateOrderStatus = async (orderId: string, orderStatus: string) => {
     try {
-      const res = await fetch(`${apiBaseUrl}/api/admin/orders/${orderId}/status`, {
+      const res = await fetch(`/api/admin/orders/${orderId}/status`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", ...adminHeaders },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: orderStatus })
       });
       if (!res.ok) throw new Error(await readApiError(res, "Unable to update order status."));
@@ -189,9 +186,9 @@ export default function AdminDashboardPage() {
 
   const updateBookingStatus = async (bookingId: string, bookingStatus: string) => {
     try {
-      const res = await fetch(`${apiBaseUrl}/api/admin/catering/bookings/${bookingId}/status`, {
+      const res = await fetch(`/api/admin/catering/bookings/${bookingId}/status`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", ...adminHeaders },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: bookingStatus })
       });
       if (!res.ok) throw new Error(await readApiError(res, "Unable to update booking status."));
@@ -204,9 +201,9 @@ export default function AdminDashboardPage() {
 
   const refundPayment = async (paymentIntentId: string) => {
     try {
-      const res = await fetch(`${apiBaseUrl}/api/admin/payments/refunds`, {
+      const res = await fetch(`/api/admin/payments/refunds`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...adminHeaders },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ paymentIntentId })
       });
       if (!res.ok) throw new Error(await readApiError(res, "Unable to create refund."));
@@ -219,8 +216,8 @@ export default function AdminDashboardPage() {
 
   const reviewDispute = async (eventId: string) => {
     try {
-      const res = await fetch(`${apiBaseUrl}/api/admin/payments/disputes/${eventId}/review`, {
-        method: "PATCH", headers: adminHeaders
+      const res = await fetch(`/api/admin/payments/disputes/${eventId}/review`, {
+        method: "PATCH"
       });
       if (!res.ok) throw new Error(await readApiError(res, "Unable to mark dispute as reviewed."));
       setActionMessage(`Dispute ${eventId} marked as reviewed.`);
@@ -232,8 +229,8 @@ export default function AdminDashboardPage() {
 
   const retryDeadLetter = async (eventId: string) => {
     try {
-      const res = await fetch(`${apiBaseUrl}/api/admin/integrations/dead-letter/${eventId}/retry`, {
-        method: "PATCH", headers: adminHeaders
+      const res = await fetch(`/api/admin/integrations/dead-letter/${eventId}/retry`, {
+        method: "PATCH"
       });
       if (!res.ok) throw new Error(await readApiError(res, "Unable to retry dead-letter event."));
       setActionMessage(`Integration dead-letter ${eventId} retried.`);
@@ -245,9 +242,9 @@ export default function AdminDashboardPage() {
 
   const finalizeDailyClose = async () => {
     try {
-      const res = await fetch(`${apiBaseUrl}/api/admin/accounting/daily-close/finalize`, {
+      const res = await fetch(`/api/admin/accounting/daily-close/finalize`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...adminHeaders },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date: reportDate })
       });
       if (!res.ok) throw new Error(await readApiError(res, "Unable to finalize daily close."));
@@ -260,7 +257,7 @@ export default function AdminDashboardPage() {
 
   const exportCsv = async (url: string, filename: string) => {
     try {
-      const res = await fetch(url, { headers: adminHeaders });
+      const res = await fetch(url);
       if (!res.ok) throw new Error("Unable to export CSV.");
       const blob = await res.blob();
       const anchor = document.createElement("a");
@@ -423,7 +420,7 @@ export default function AdminDashboardPage() {
             <div className="admin-inline-row" style={{ marginBottom: "0.7rem" }}>
               <input type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} className="admin-date-input" />
               <button className="admin-mini-btn" type="button" onClick={finalizeDailyClose}>Finalize Day</button>
-              <button className="admin-mini-btn" type="button" onClick={() => exportCsv(`${apiBaseUrl}/api/admin/accounting/daily-close/export?date=${reportDate}`, `bbq-daily-close-${reportDate}.csv`)}>Export CSV</button>
+              <button className="admin-mini-btn" type="button" onClick={() => exportCsv(`/api/admin/accounting/daily-close/export?date=${reportDate}`, `bbq-daily-close-${reportDate}.csv`)}>Export CSV</button>
             </div>
             <div className="admin-kpi-row">
               <article className="admin-card"><strong>Gross Sales</strong><p>${((dailyClose?.summary.grossSalesCents ?? 0) / 100).toFixed(2)}</p></article>
@@ -446,8 +443,8 @@ export default function AdminDashboardPage() {
           <section className="admin-section">
             <h2>Analytics and Forecasting</h2>
             <div className="admin-inline-row" style={{ marginBottom: "0.7rem" }}>
-              <button className="admin-mini-btn" type="button" onClick={() => exportCsv(`${apiBaseUrl}/api/admin/analytics/sales/export?days=14`, "bbq-analytics-sales-14d.csv")}>Export Sales CSV</button>
-              <button className="admin-mini-btn" type="button" onClick={() => exportCsv(`${apiBaseUrl}/api/admin/analytics/forecast/export?days=7`, "bbq-analytics-forecast-7d.csv")}>Export Forecast CSV</button>
+              <button className="admin-mini-btn" type="button" onClick={() => exportCsv(`/api/admin/analytics/sales/export?days=14`, "bbq-analytics-sales-14d.csv")}>Export Sales CSV</button>
+              <button className="admin-mini-btn" type="button" onClick={() => exportCsv(`/api/admin/analytics/forecast/export?days=7`, "bbq-analytics-forecast-7d.csv")}>Export Forecast CSV</button>
             </div>
 
             {analyticsAnomalies && (
