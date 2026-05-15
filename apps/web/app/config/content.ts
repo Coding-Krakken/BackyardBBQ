@@ -12,7 +12,7 @@ const cateringInquiryUrl = process.env.NEXT_PUBLIC_CATERING_INQUIRY_URL ?? "/cat
 export const businessInfo = {
   phone: process.env.NEXT_PUBLIC_PHONE ?? "+1-555-BBQ-KING",
   email: process.env.NEXT_PUBLIC_EMAIL ?? "hello@backyardbbqking.com",
-  location: process.env.NEXT_PUBLIC_LOCATION ?? "Austin, Texas",
+  location: process.env.NEXT_PUBLIC_LOCATION ?? "Syracuse, New York",
   hours: process.env.NEXT_PUBLIC_HOURS ?? "Tue-Sat 11am-9pm, Sun 12pm-8pm",
   truckSchedule:
     process.env.NEXT_PUBLIC_FOOD_TRUCK_SCHEDULE ?? "Food Truck: Thu-Sat evenings, private events by request",
@@ -29,10 +29,10 @@ export const orderingLinks = {
 };
 
 export const heroContent = {
-  eyebrow: "Texas Smokehouse + Premium Catering + Food Truck",
-  headline: "Welcome To Backyard BBQ Texas",
+  eyebrow: "Texas-Style Smokehouse + Premium Catering + Food Truck",
+  headline: "Welcome To Backyard BBQ",
   description:
-    "Where we serve mouthwatering smoked meats, premium sides, and true Texas hospitality in a warm cinematic atmosphere.",
+    "Where we serve mouthwatering smoked meats, premium sides, and warm hospitality in a cinematic atmosphere.",
   primaryCta: {
     label: "Reserve Now",
     href: cateringInquiryUrl
@@ -85,7 +85,7 @@ export const menuItems = [
 export const testimonials = [
   {
     quote:
-      "Best brisket in Texas hands down. Tender, smoky, and served with concierge-level hospitality for our corporate retreat.",
+      "Best brisket I've ever had. Tender, smoky, and served with concierge-level hospitality for our corporate retreat.",
     name: "Alyssa M.",
     role: "Operations Director"
   },
@@ -121,13 +121,13 @@ export const cateringHighlights = [
 
 export const whyUsContent = {
   eyebrow: "Why Us",
-  headline: "We Offer The Best BBQ In All of Texas",
+  headline: "We Offer The Best BBQ In Syracuse",
   description:
-    "We offer the best BBQ in all of Texas, serving tender, smoky meats and flavorful sides in a welcoming atmosphere.",
+    "We offer the best BBQ in Syracuse, serving tender, smoky meats and flavorful sides in a welcoming atmosphere.",
   highlights: [
     "High Quality Meat",
     "Organic Meat and Ingredients",
-    "Best Service in Texas"
+    "Exceptional Service"
   ] as const
 };
 

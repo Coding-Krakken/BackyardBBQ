@@ -20,7 +20,7 @@ const defaultOgImage = "/images/marketing/hero.jpg";
 
 export const metadata: Metadata = {
   title: {
-    default: "Backyard BBQ King | Premium Texas Smokehouse and Catering",
+    default: "Backyard BBQ King | Premium Texas-Style Smokehouse and Catering",
     template: "%s | Backyard BBQ King"
   },
   description: "Premium smokehouse catering, food truck flavor, and modern online ordering in one cinematic brand experience.",
@@ -28,7 +28,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Backyard BBQ King",
     description:
-      "Cinematic Texas smokehouse flavor for online ordering, food truck events, and premium catering service.",
+      "Cinematic Texas-style smokehouse flavor for online ordering, food truck events, and premium catering service.",
     url: siteUrl,
     siteName: "Backyard BBQ King",
     images: [
@@ -45,7 +45,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Backyard BBQ King",
-    description: "Slow-smoked Texas BBQ with premium catering and modern ordering.",
+    description: "Slow-smoked Texas-style BBQ with premium catering and modern ordering.",
     images: [defaultOgImage]
   }
 };
