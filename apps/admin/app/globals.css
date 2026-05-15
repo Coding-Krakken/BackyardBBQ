@@ -89,7 +89,7 @@ body {
   font-size: 0.9rem;
   line-height: 1.6;
   color: var(--cream);
-  background: var(--bg-charcoal);
+  background: var(--bg-midnight);
   min-height: 100vh;
 }
 
@@ -615,6 +615,7 @@ input[type="checkbox"] {
   display: grid;
   grid-template-columns: var(--sidebar-width) 1fr;
   min-height: 100vh;
+  background: var(--bg-midnight);
   transition: grid-template-columns var(--duration-slow) var(--ease-spring);
 }
 .admin-shell.collapsed {
@@ -1085,7 +1086,7 @@ input[type="checkbox"] {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-charcoal);
+  background: var(--bg-midnight);
   background-image:
     radial-gradient(ellipse 80% 50% at 50% 0%, rgba(217, 109, 49, 0.06) 0%, transparent 50%),
     radial-gradient(ellipse 60% 40% at 80% 100%, rgba(90, 159, 212, 0.03) 0%, transparent 50%);
