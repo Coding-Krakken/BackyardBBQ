@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
-import { signIn } from "next-auth/react";
+import { signIn, getSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { SiteNavbar } from "../../components/SiteNavbar";
 import { SiteFooter } from "../../components/HomeSections";
@@ -30,7 +30,13 @@ export default function LoginPage() {
         setError(result.error);
         setSubmitting(false);
       } else if (result?.ok) {
-        router.push("/dashboard");
+        const session = await getSession();
+        const role = session?.user?.role;
+        if (role === "admin" || role === "owner") {
+          router.push("/admin");
+        } else {
+          router.push("/dashboard");
+        }
         router.refresh();
       }
     } catch (err) {
