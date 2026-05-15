@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Particles, { initParticlesEngine } from "@tsparticles/react";
 import { loadSlim } from "@tsparticles/slim";
-import type { ISourceOptions } from "@tsparticles/engine";
+import type { Container, ISourceOptions } from "@tsparticles/engine";
+import { ANIMATION_CONSTANTS, UI_CONSTANTS } from "../lib/constants";
 
 interface EmberParticlesProps {
   density?: number; // Number of particles (default: 25)
@@ -22,6 +23,10 @@ export function EmberParticles({
   disabled = false 
 }: EmberParticlesProps) {
   const [engineReady, setEngineReady] = useState(false);
+
+  const particlesLoaded = useCallback(async (container?: Container) => {
+    // Particles loaded and rendering
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -116,13 +121,14 @@ export function EmberParticles({
     [density, speed]
   );
 
-  if (disabled || !engineReady) {
+  if (disabled || !engineReady || !UI_CONSTANTS.ENABLE_PREMIUM_ANIMATIONS) {
     return null;
   }
 
   return (
     <Particles
       id="ember-particles"
+      particlesLoaded={particlesLoaded}
       options={options}
       style={{
         position: "absolute",
@@ -135,10 +141,4 @@ export function EmberParticles({
       }}
     />
   );
-}
-
-// Feature flag check
-if (!UI_CONSTANTS.ENABLE_PREMIUM_ANIMATIONS) {
-  // Override to always return null if animations are disabled
-  EmberParticles.prototype.render = function() { return null; };
 }
