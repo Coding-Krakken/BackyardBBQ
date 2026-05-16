@@ -23,3 +23,5 @@ packages/database/prisma/dev.db
 # Playwright test artifacts
 playwright-report/
 test-results/
+.env*.local
+.env*
