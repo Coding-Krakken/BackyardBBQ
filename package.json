@@ -28,6 +28,8 @@
     "test:payments:coverage": "jest --config jest.payments.config.js --coverage --runInBand",
     "test:payments:scripts": "node --test scripts/__tests__/payments-integration-summary.test.mjs scripts/__tests__/payments-integration-checks.test.mjs",
     "test:payments:integration": "node scripts/payments-integration-checks.mjs",
+    "test:delivery:webhook-replay": "npm run test:delivery:webhook-replay -w @bbq/api --",
+    "test:delivery:dispatch-replay": "npm run test:delivery:dispatch-replay -w @bbq/api --",
     "report:payments:integration": "node scripts/payments-integration-summary.mjs",
     "report:payments:coverage": "node scripts/payments-coverage-summary.mjs",
     "test:ci": "jest --ci --coverage --maxWorkers=2",
