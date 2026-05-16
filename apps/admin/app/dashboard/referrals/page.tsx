@@ -53,7 +53,7 @@ export default function ReferralsPage() {
   };
 
   return (
-    <RoleGate allowedRoles={['owner', 'admin', 'manager']}>
+    <RoleGate allowedRoles={['owner', 'admin']}>
       <AnimatedPage>
         <PageHeader title="Referrals" subtitle="Manage customer referral rewards" />
 

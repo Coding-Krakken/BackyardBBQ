@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { notFound, redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { hasAnyRole, type Role } from '@/lib/roles';
 import { StatusBadge } from '@/components/StatusBadge';
 import { BookingActions } from '@/components/BookingActions';
 import Link from 'next/link';
@@ -11,7 +12,7 @@ export default async function BookingDetailPage({ params }: { params: { id: stri
   const session = await getServerSession(authOptions);
   if (!session?.user) redirect('/auth/login');
   const role = (session.user as { role?: string })?.role;
-  if (!role || !['owner', 'admin', 'manager', 'staff'].includes(role)) redirect('/dashboard');
+  if (!hasAnyRole(role, ['owner', 'admin', 'manager', 'staff'] satisfies Role[])) redirect('/dashboard');
 
   const booking = await prisma.cateringBooking.findUnique({
     where: { id: params.id },

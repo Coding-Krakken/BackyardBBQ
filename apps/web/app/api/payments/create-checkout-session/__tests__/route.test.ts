@@ -5,6 +5,7 @@ import { getServerSession } from "next-auth";
 import { prisma } from "../../../../../lib/prisma";
 import { clearRateLimitStore } from "../../../../../lib/rate-limit";
 import { POST } from "../route";
+import { TEST_STRIPE_SECRET_KEY } from "../../__tests__/test-constants";
 
 var mockCheckoutSessionsCreate: jest.Mock;
 var mockCustomersCreate: jest.Mock;
@@ -38,7 +39,7 @@ describe("POST /api/payments/create-checkout-session", () => {
   const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
 
   beforeAll(() => {
-    process.env.STRIPE_SECRET_KEY = "sk_test_123";
+    process.env.STRIPE_SECRET_KEY = TEST_STRIPE_SECRET_KEY;
     process.env.NEXT_PUBLIC_SITE_URL = "https://example.com";
   });
 

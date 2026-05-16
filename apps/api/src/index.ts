@@ -2337,7 +2337,17 @@ app.post(
           return { received: true, duplicate: true };
         }
       } catch (error) {
-        request.log.warn({ error, eventId: event.id }, "Failed persisted webhook duplicate check; continuing with processing");
+        request.log.error(
+          { 
+            error, 
+            eventId: event.id, 
+            eventType: event.type,
+            alertType: 'duplicate_check_failure',
+            severity: 'high',
+            impact: 'potential_duplicate_processing'
+          }, 
+          "ALERT: Failed persisted webhook duplicate check; continuing with processing - potential duplicate events may be processed"
+        );
       }
     }
 

@@ -2,6 +2,7 @@
 
 import { NextRequest } from "next/server";
 import { GET } from "../route";
+import { TEST_STRIPE_SECRET_KEY } from "../../__tests__/test-constants";
 
 var mockCheckoutSessionsRetrieve: jest.Mock;
 
@@ -24,7 +25,7 @@ jest.mock("stripe", () => {
 
 describe("GET /api/payments/verify-session", () => {
   beforeAll(() => {
-    process.env.STRIPE_SECRET_KEY = "sk_test_123";
+    process.env.STRIPE_SECRET_KEY = TEST_STRIPE_SECRET_KEY;
   });
 
   beforeEach(() => {

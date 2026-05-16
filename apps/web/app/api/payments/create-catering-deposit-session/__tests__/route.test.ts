@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { prisma } from "../../../../../lib/prisma";
 import { POST } from "../route";
+import { TEST_STRIPE_SECRET_KEY } from "../../__tests__/test-constants";
 
 var mockCheckoutSessionsCreate: jest.Mock;
 var mockCustomersCreate: jest.Mock;
@@ -35,7 +36,7 @@ jest.mock("next-auth", () => ({
 
 describe("POST /api/payments/create-catering-deposit-session", () => {
   beforeAll(() => {
-    process.env.STRIPE_SECRET_KEY = "sk_test_123";
+    process.env.STRIPE_SECRET_KEY = TEST_STRIPE_SECRET_KEY;
     process.env.NEXT_PUBLIC_SITE_URL = "https://example.com";
   });
 
