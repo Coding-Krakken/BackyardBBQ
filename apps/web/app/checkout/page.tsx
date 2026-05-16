@@ -22,7 +22,6 @@ import type { CartItem } from "../components/cart/CartContext";
 
 const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim() ?? "";
 const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ?? "";
 
 function CheckoutForm() {
   const checkoutState = useCheckout();
@@ -122,10 +121,6 @@ export default function CheckoutPage() {
       return "Secure checkout is unavailable because Stripe is not configured in this environment.";
     }
 
-    if (!apiBaseUrl) {
-      return "Secure checkout is unavailable because API base URL is not configured in this environment.";
-    }
-
     return null;
   });
   const initializedRef = useRef(false);
@@ -152,14 +147,9 @@ export default function CheckoutPage() {
       return;
     }
 
-    if (!apiBaseUrl) {
-      setErrorMessage("Secure checkout is unavailable because API base URL is not configured in this environment.");
-      return;
-    }
-
     const createCheckoutSession = async () => {
       try {
-        const response = await fetch(`${apiBaseUrl}/api/payments/create-checkout-session`, {
+        const response = await fetch('/api/payments/create-checkout-session', {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
