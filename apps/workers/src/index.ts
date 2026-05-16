@@ -3,7 +3,8 @@ import {
   createDeliveryChannelAdapters,
   deliveryChannels,
   type DeliveryChannel,
-  type InboundOrderEnvelope
+  type InboundOrderEnvelope,
+  type ProviderStatusSyncInput
 } from "@bbq/delivery-channels";
 
 const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
@@ -21,6 +22,24 @@ deliveryChannels.forEach((channel) => {
 });
 
 let sequence = 0;
+let lastOutboundSyncAt = new Date(0);
+
+function mapInternalToProviderStatus(status: string): ProviderStatusSyncInput["status"] | null {
+  switch (status) {
+    case "confirmed":
+      return "accepted";
+    case "preparing":
+      return "preparing";
+    case "ready":
+      return "ready";
+    case "completed":
+      return "delivered";
+    case "cancelled":
+      return "cancelled";
+    default:
+      return null;
+  }
+}
 
 async function persistHealthEvent(input: {
   channel: DeliveryChannel;
@@ -87,6 +106,25 @@ async function persistIngestEvent(input: {
     data: {
       channel: input.channel,
       eventType: input.eventType,
+      status: input.status,
+      payload: input.payload as Prisma.InputJsonValue
+    }
+  });
+}
+
+async function persistStatusSyncEvent(input: {
+  channel: DeliveryChannel;
+  status: string;
+  payload: Record<string, unknown>;
+}) {
+  if (!hasDatabaseUrl) {
+    return;
+  }
+
+  await prisma.integrationEvent.create({
+    data: {
+      channel: input.channel,
+      eventType: "delivery.order.status.sync",
       status: input.status,
       payload: input.payload as Prisma.InputJsonValue
     }
@@ -190,10 +228,98 @@ async function runSyncCycle() {
   }
 }
 
+async function runOutboundStatusSyncCycle() {
+  if (!hasDatabaseUrl) {
+    return;
+  }
+
+  const changedOrders = await prisma.order.findMany({
+    where: {
+      source: {
+        in: ["doordash", "ubereats", "grubhub"]
+      },
+      updatedAt: {
+        gt: lastOutboundSyncAt
+      }
+    },
+    select: {
+      id: true,
+      status: true,
+      source: true,
+      updatedAt: true
+    },
+    orderBy: {
+      updatedAt: "asc"
+    },
+    take: 200
+  });
+
+  if (changedOrders.length === 0) {
+    return;
+  }
+
+  for (const order of changedOrders) {
+    const channel = order.source as DeliveryChannel;
+    if (!deliveryChannels.includes(channel)) {
+      continue;
+    }
+
+    const mappedStatus = mapInternalToProviderStatus(order.status);
+    if (!mappedStatus) {
+      continue;
+    }
+
+    const externalOrderId = `${channel}:${order.id}`;
+    const adapter = adapters[channel];
+    try {
+      const syncResult = await adapter.syncOrderStatus({
+        externalOrderId,
+        status: mappedStatus,
+        occurredAt: order.updatedAt.toISOString()
+      });
+
+      await persistStatusSyncEvent({
+        channel,
+        status: "processed",
+        payload: {
+          orderId: order.id,
+          externalOrderId,
+          mappedStatus,
+          latencyMs: syncResult.latencyMs,
+          syncedAt: new Date().toISOString()
+        }
+      });
+    } catch (error) {
+      await persistStatusSyncEvent({
+        channel,
+        status: "failed",
+        payload: {
+          orderId: order.id,
+          externalOrderId,
+          mappedStatus,
+          error: error instanceof Error ? error.message : "Unknown sync failure",
+          syncedAt: new Date().toISOString()
+        }
+      });
+    }
+  }
+
+  const newestUpdatedAt = changedOrders[changedOrders.length - 1]?.updatedAt;
+  if (newestUpdatedAt) {
+    lastOutboundSyncAt = newestUpdatedAt;
+  }
+}
+
 setInterval(() => {
   runSyncCycle().catch((error) => {
     console.error("[workers] sync cycle failed", error);
   });
 }, 30000);
+
+setInterval(() => {
+  runOutboundStatusSyncCycle().catch((error) => {
+    console.error("[workers] outbound status sync cycle failed", error);
+  });
+}, 15000);
 
 console.log("[workers] started integration worker service");

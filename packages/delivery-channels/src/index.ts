@@ -1,3 +1,16 @@
+import {
+  DoorDashClient,
+  GrubhubClient,
+  UberEatsClient,
+  type DeliveryProviderClient,
+  type DeliveryProviderCredentials,
+  type ProviderHealthSnapshot,
+  type ProviderMenuSnapshot,
+  type ProviderStatusSyncInput
+} from "./clients/index";
+
+export * from "./clients/index";
+
 export const deliveryChannels = ["doordash", "ubereats", "grubhub"] as const;
 
 export type DeliveryChannel = (typeof deliveryChannels)[number];
@@ -35,9 +48,18 @@ export type AdapterIngestResult = {
   reason?: string;
 };
 
+export type AdapterWebhookValidationInput = {
+  signature?: string;
+  rawBody: string;
+};
+
 export interface DeliveryChannelAdapter {
   readonly channel: DeliveryChannel;
   ingestOrder(envelope: InboundOrderEnvelope): Promise<AdapterIngestResult>;
+  verifyWebhookSignature(input: AdapterWebhookValidationInput): Promise<boolean>;
+  syncOrderStatus(input: ProviderStatusSyncInput): Promise<{ latencyMs: number }>;
+  publishMenuSnapshot(snapshot: ProviderMenuSnapshot): Promise<{ latencyMs: number }>;
+  checkHealth(): Promise<ProviderHealthSnapshot>;
 }
 
 type AdapterConfig = {
@@ -117,20 +139,23 @@ function evaluateAttempt(
   return { outcome: "success", latencyMs };
 }
 
-class SimulatedDeliveryChannelAdapter implements DeliveryChannelAdapter {
+class ProviderBackedDeliveryAdapter implements DeliveryChannelAdapter {
   readonly channel: DeliveryChannel;
 
+  private readonly providerClient: DeliveryProviderClient;
   private readonly config: AdapterConfig;
   private readonly retryPolicy: RetryPolicy;
   private readonly idempotencyStore: InMemoryIdempotencyStore;
 
   constructor(input: {
     channel: DeliveryChannel;
+    providerClient: DeliveryProviderClient;
     config: AdapterConfig;
     retryPolicy: RetryPolicy;
     idempotencyStore: InMemoryIdempotencyStore;
   }) {
     this.channel = input.channel;
+    this.providerClient = input.providerClient;
     this.config = input.config;
     this.retryPolicy = input.retryPolicy;
     this.idempotencyStore = input.idempotencyStore;
@@ -181,32 +206,67 @@ class SimulatedDeliveryChannelAdapter implements DeliveryChannelAdapter {
       reason: "Provider timed out across all retry attempts"
     };
   }
+
+  async verifyWebhookSignature(input: AdapterWebhookValidationInput): Promise<boolean> {
+    return this.providerClient.verifyWebhookSignature(input);
+  }
+
+  async syncOrderStatus(input: ProviderStatusSyncInput): Promise<{ latencyMs: number }> {
+    const start = Date.now();
+    await this.providerClient.syncOrderStatus(input);
+    return { latencyMs: Date.now() - start };
+  }
+
+  async publishMenuSnapshot(snapshot: ProviderMenuSnapshot): Promise<{ latencyMs: number }> {
+    const start = Date.now();
+    await this.providerClient.publishMenuSnapshot(snapshot);
+    return { latencyMs: Date.now() - start };
+  }
+
+  async checkHealth(): Promise<ProviderHealthSnapshot> {
+    return this.providerClient.checkHealth();
+  }
+}
+
+function createProviderClients(
+  credentialsByChannel: Partial<Record<DeliveryChannel, DeliveryProviderCredentials>>
+): Record<DeliveryChannel, DeliveryProviderClient> {
+  return {
+    doordash: new DoorDashClient(credentialsByChannel.doordash ?? { apiKey: "" }),
+    ubereats: new UberEatsClient(credentialsByChannel.ubereats ?? { apiKey: "" }),
+    grubhub: new GrubhubClient(credentialsByChannel.grubhub ?? { apiKey: "" })
+  };
 }
 
 export function createDeliveryChannelAdapters(input?: {
   retryPolicy?: Partial<RetryPolicy>;
+  credentialsByChannel?: Partial<Record<DeliveryChannel, DeliveryProviderCredentials>>;
 }): Record<DeliveryChannel, DeliveryChannelAdapter> {
   const retryPolicy: RetryPolicy = {
     ...defaultRetryPolicy,
     ...(input?.retryPolicy ?? {})
   };
   const idempotencyStore = new InMemoryIdempotencyStore();
+  const providerClients = createProviderClients(input?.credentialsByChannel ?? {});
 
   return {
-    doordash: new SimulatedDeliveryChannelAdapter({
+    doordash: new ProviderBackedDeliveryAdapter({
       channel: "doordash",
+      providerClient: providerClients.doordash,
       config: defaultAdapterConfig.doordash,
       retryPolicy,
       idempotencyStore
     }),
-    ubereats: new SimulatedDeliveryChannelAdapter({
+    ubereats: new ProviderBackedDeliveryAdapter({
       channel: "ubereats",
+      providerClient: providerClients.ubereats,
       config: defaultAdapterConfig.ubereats,
       retryPolicy,
       idempotencyStore
     }),
-    grubhub: new SimulatedDeliveryChannelAdapter({
+    grubhub: new ProviderBackedDeliveryAdapter({
       channel: "grubhub",
+      providerClient: providerClients.grubhub,
       config: defaultAdapterConfig.grubhub,
       retryPolicy,
       idempotencyStore

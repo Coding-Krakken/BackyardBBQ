@@ -575,6 +575,45 @@ function getRecentDateKeys(days: number) {
 }
 
 const integrationChannels = ["doordash", "ubereats", "grubhub"] as const;
+const integrationChannelSchema = z.enum(integrationChannels);
+
+const deliveryWebhookParamsSchema = z.object({
+  channel: integrationChannelSchema
+});
+
+const deliveryWebhookBodySchema = z.object({
+  eventId: z.string().min(1),
+  eventType: z.string().min(1),
+  orderExternalId: z.string().optional(),
+  payload: z.record(z.unknown()).default({})
+});
+
+const deliveryWebhookSecretByChannel: Record<(typeof integrationChannels)[number], string | undefined> = {
+  doordash: process.env.DOORDASH_WEBHOOK_SECRET,
+  ubereats: process.env.UBEREATS_WEBHOOK_SECRET,
+  grubhub: process.env.GRUBHUB_WEBHOOK_SECRET
+};
+
+function isSupportedIntegrationChannel(channel: string): channel is (typeof integrationChannels)[number] {
+  return integrationChannels.includes(channel as (typeof integrationChannels)[number]);
+}
+
+function hasDeliveryWebhookSignature(input: {
+  channel: (typeof integrationChannels)[number];
+  headers: Record<string, unknown>;
+  rawBody: string;
+}) {
+  const configuredSecret = deliveryWebhookSecretByChannel[input.channel];
+  if (!configuredSecret) {
+    return false;
+  }
+
+  const providedSignature =
+    (typeof input.headers["x-delivery-signature"] === "string" ? input.headers["x-delivery-signature"] : undefined) ??
+    (typeof input.headers["x-signature"] === "string" ? input.headers["x-signature"] : undefined);
+
+  return Boolean(providedSignature && input.rawBody.length > 0);
+}
 
 const allowedOrderTransitions: Record<z.infer<typeof orderStatusSchema>, z.infer<typeof orderStatusSchema>[]> = {
   pending: ["confirmed", "cancelled"],
@@ -2248,6 +2287,102 @@ app.post("/api/catering/availability", async (request, reply) => {
       : "Select a different date or reduce event size"
   };
 });
+
+app.post(
+  "/api/webhooks/:channel",
+  {
+    config: {
+      rawBody: true
+    }
+  },
+  async (request, reply) => {
+    const parsedParams = deliveryWebhookParamsSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      return reply.status(400).send({
+        message: "Invalid delivery webhook channel",
+        errors: parsedParams.error.flatten()
+      });
+    }
+
+    const channel = parsedParams.data.channel;
+    if (!isSupportedIntegrationChannel(channel)) {
+      return reply.status(400).send({ message: "Unsupported delivery webhook channel" });
+    }
+
+    if (isWebhookRateLimited(request.ip)) {
+      return reply.status(429).send({ message: "Too many webhook requests" });
+    }
+
+    const raw = (request as typeof request & { rawBody?: string }).rawBody;
+    if (!raw) {
+      return reply.status(400).send({ message: "Missing webhook payload" });
+    }
+
+    if (!hasDeliveryWebhookSignature({ channel, headers: request.headers, rawBody: raw })) {
+      await sendOperationalAlert({
+        type: "delivery_webhook_signature_invalid",
+        severity: "critical",
+        message: "Delivery webhook signature verification failed",
+        details: {
+          channel,
+          requestIp: request.ip
+        }
+      });
+      return reply.status(401).send({ message: "Invalid signature" });
+    }
+
+    const parsedBody = deliveryWebhookBodySchema.safeParse(request.body);
+    if (!parsedBody.success) {
+      return reply.status(400).send({
+        message: "Invalid delivery webhook payload",
+        errors: parsedBody.error.flatten()
+      });
+    }
+
+    const dedupeKey = `${channel}:${parsedBody.data.eventId}`;
+    if (isDuplicateWebhookEvent(dedupeKey)) {
+      return { received: true, duplicate: true };
+    }
+
+    if (hasDatabaseUrl) {
+      const duplicateEvent = await prisma.integrationEvent.findFirst({
+        where: {
+          channel,
+          eventType: parsedBody.data.eventType,
+          createdAt: {
+            gte: new Date(Date.now() - webhookEventTtlMs)
+          },
+          payload: {
+            path: ["eventId"],
+            equals: parsedBody.data.eventId
+          }
+        },
+        select: { id: true }
+      });
+
+      if (duplicateEvent) {
+        return { received: true, duplicate: true };
+      }
+
+      await prisma.integrationEvent.create({
+        data: {
+          channel,
+          eventType: parsedBody.data.eventType,
+          status: "received",
+          payload: {
+            eventId: parsedBody.data.eventId,
+            orderExternalId: parsedBody.data.orderExternalId ?? null,
+            requestIp: request.ip,
+            receivedAt: new Date().toISOString(),
+            payload: parsedBody.data.payload
+          } as Prisma.InputJsonValue
+        }
+      });
+    }
+
+    return { received: true };
+  }
+);
 
 app.post(
   "/api/payments/webhook",
