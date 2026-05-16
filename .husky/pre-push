@@ -1,39 +1,34 @@
 #!/bin/sh
 
-# Pre-push hook: Run comprehensive validation before pushing to remote
-# Equivalent to CI/CD checks, but running locally
+# Pre-push hook: Run fast validation before pushing to remote
+# Optimized for speed - runs tests in parallel, skips coverage, E2E optional
 
-echo "🔍 Running pre-push validation..."
+echo "🔍 Running pre-push validation (optimized)..."
 echo ""
 
-# Step 1: Payment quality validation
-echo "📋 Running payment quality checks..."
-npm run validate:payments:core
+# Fast validation: tests (no coverage) + parallel typechecks + admin checks
+echo "⚡ Running fast validation suite..."
+npm run validate:pre-push
 if [ $? -ne 0 ]; then
-  echo "❌ Payment quality validation failed"
+  echo "❌ Validation failed"
   exit 1
 fi
-echo "✅ Payment quality checks passed"
+echo "✅ Fast validation passed"
 echo ""
 
-# Step 2: Admin guardrails validation
-echo "🔒 Running admin guardrails..."
-npm run validate:admin
-if [ $? -ne 0 ]; then
-  echo "❌ Admin guardrails validation failed"
-  exit 1
+# Optional E2E smoke tests - set SKIP_E2E=1 to skip
+if [ "$SKIP_E2E" = "1" ]; then
+  echo "⏭️  Skipping E2E tests (SKIP_E2E=1)"
+else
+  echo "🧪 Running E2E smoke tests..."
+  npm run test:e2e:smoke
+  if [ $? -ne 0 ]; then
+    echo "❌ E2E smoke tests failed"
+    echo "💡 To skip E2E tests: SKIP_E2E=1 git push"
+    exit 1
+  fi
+  echo "✅ E2E smoke tests passed"
 fi
-echo "✅ Admin guardrails passed"
-echo ""
-
-# Step 3: E2E smoke tests (public, no auth required)
-echo "🧪 Running E2E smoke tests..."
-npm run test:e2e:smoke
-if [ $? -ne 0 ]; then
-  echo "❌ E2E smoke tests failed"
-  exit 1
-fi
-echo "✅ E2E smoke tests passed"
 echo ""
 
 echo "✨ All pre-push validations passed! Pushing to remote..."

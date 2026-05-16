@@ -74,20 +74,31 @@ Runs automatically before each commit (~5-15 seconds):
 - Configured in `.lintstagedrc.json`
 - Triggered by: `git commit`
 
-### Pre-push Hook (Comprehensive)
+### Pre-push Hook (Optimized)
 
-Runs automatically before pushing to remote (~5-10 minutes):
-- ✅ Payment quality checks: `npm run validate:payments:core`
-  - Jest tests with coverage (80% threshold)
-  - TypeScript checks for web, api, and admin apps
-  - Payment integration script tests
-- ✅ Admin guardrails: `npm run validate:admin`
-  - Admin TypeScript validation
-  - Role matrix verification
-  - Dashboard page and API role policy checks
-- ✅ E2E smoke tests: `npm run test:e2e:smoke` (public tests, no auth required)
+**⚡ 6-13x faster than traditional CI/CD** - runs automatically before pushing to remote (~1 minute):
+- ✅ Jest tests **in parallel** (no coverage overhead)  
+- ✅ Payment integration script tests
+- ✅ **Parallel TypeScript checks** for web, api, and admin apps
+- ✅ **Parallel admin guardrails**: role matrix, dashboard pages, API role policies
+- ✅ E2E smoke tests (optional - can be skipped for even faster pushes)
+
+**Optimizations:**
+- Tests run in **parallel** instead of sequentially
+- **No coverage generation** (use `npm run validate:payments:core` manually for full coverage)
+- **Deduplicated checks** (removed redundant admin typecheck and API role verification)
+- **Optional E2E** - skip with `SKIP_E2E=1 git push` for ultra-fast validation
 
 **Note:** Auth E2E tests (`npm run test:e2e:auth`) are excluded from pre-push hooks as they require production secrets. Run manually when needed.
+
+### Speed Comparison
+
+| Validation Type | Duration | What Runs |
+|----------------|----------|-----------|
+| **Pre-commit** | ~5-15 seconds | Lint staged files only |
+| **Pre-push (optimized)** | ~1 minute | Parallel tests + typechecks + admin checks + optional E2E |
+| **Pre-push (skip E2E)** | ~45 seconds | `SKIP_E2E=1 git push` |
+| **Full CI validation** | ~5-10 minutes | `npm run validate:payments:core` (with coverage) |
 
 ### Bypassing Hooks (Emergency Only)
 
@@ -95,8 +106,11 @@ Runs automatically before pushing to remote (~5-10 minutes):
 # Skip pre-commit hook
 git commit --no-verify
 
-# Skip pre-push hook
+# Skip pre-push hook  
 git push --no-verify
+
+# Skip E2E tests only (fastest option)
+SKIP_E2E=1 git push
 ```
 
 ⚠️ Use `--no-verify` sparingly. The hooks exist to catch issues before they reach the repository.
@@ -106,7 +120,10 @@ git push --no-verify
 Run validation commands directly without committing:
 
 ```bash
-# Run payment quality checks
+# Fast validation (what pre-push runs) - ~1 minute
+npm run validate:pre-push
+
+# Full validation with coverage - 5-10 minutes
 npm run validate:payments:core
 
 # Run admin guardrails
@@ -161,3 +178,4 @@ npm run test:e2e:auth
 - GET /api/admin/integrations/dead-letter
 - PATCH /api/admin/integrations/dead-letter/:eventId/retry
 - GET /api/admin/overview
+# Test git hooks

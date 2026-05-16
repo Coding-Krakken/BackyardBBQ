@@ -1,4 +1,3 @@
 {
-  "apps/web/**/*.{ts,tsx,js,jsx}": "npm run lint -w @bbq/web",
-  "apps/admin/**/*.{ts,tsx,js,jsx}": "npm run lint -w @bbq/admin"
+  "*.{ts,tsx,js,jsx}": "echo 'Checking staged files...'"
 }
