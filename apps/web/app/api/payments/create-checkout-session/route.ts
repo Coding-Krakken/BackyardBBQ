@@ -191,10 +191,11 @@ export async function POST(request: NextRequest) {
     // Compute tax server-side (Syracuse, NY: 8% on prepared food)
     const taxCents = Math.round(lineItemAmountCents * SERVER_TAX_RATE);
 
-    // Create Checkout Session with ui_mode: "embedded" for Payment Element
+    // Create Checkout Session with ui_mode: "custom" for PaymentElement / ExpressCheckoutElement
+    // Note: "custom" is valid per the Stripe API but not yet in the stripe@16 SDK types
     const checkoutSession = await stripe.checkout.sessions.create(
       {
-        ui_mode: "embedded",
+        ui_mode: "custom" as Stripe.Checkout.SessionCreateParams.UiMode,
         mode: "payment",
         customer: stripeCustomerId,
         line_items: [
