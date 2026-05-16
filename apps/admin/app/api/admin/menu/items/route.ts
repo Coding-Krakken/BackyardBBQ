@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { prisma } from "@/lib/prisma";
 
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
     include: {
       location: { select: { name: true } }
     },
-    orderBy: [{ locationId: 'asc' }, { name: 'asc' }]
+    orderBy: [{ category: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }]
   });
 
   return NextResponse.json({ data: items });
@@ -31,6 +32,12 @@ export async function POST(request: NextRequest) {
     name: string;
     description?: string;
     basePriceCents: number;
+    imageUrl?: string;
+    category: string;
+    sortOrder?: number;
+    customizations?: unknown;
+    notes?: string;
+    isFeatured?: boolean;
     isAvailable?: boolean;
   };
 
@@ -40,6 +47,14 @@ export async function POST(request: NextRequest) {
       name: body.name,
       description: body.description ?? null,
       basePriceCents: body.basePriceCents,
+      imageUrl: body.imageUrl ?? null,
+      category: body.category,
+      sortOrder: body.sortOrder ?? 0,
+      customizations: body.customizations != null
+        ? (body.customizations as Prisma.InputJsonValue)
+        : Prisma.DbNull,
+      notes: body.notes ?? null,
+      isFeatured: body.isFeatured ?? false,
       isAvailable: body.isAvailable ?? true
     }
   });

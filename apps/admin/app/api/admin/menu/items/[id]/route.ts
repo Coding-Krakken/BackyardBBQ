@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { prisma } from "@/lib/prisma";
 
@@ -14,12 +15,24 @@ export async function PUT(
     name?: string;
     description?: string;
     basePriceCents?: number;
+    imageUrl?: string;
+    category?: string;
+    sortOrder?: number;
+    customizations?: unknown;
+    notes?: string;
+    isFeatured?: boolean;
     isAvailable?: boolean;
   };
 
+  const { customizations, ...rest } = body;
   const updated = await prisma.menuItem.update({
     where: { id },
-    data: body
+    data: {
+      ...rest,
+      ...(customizations !== undefined && {
+        customizations: customizations as Prisma.InputJsonValue,
+      }),
+    },
   });
 
   return NextResponse.json({ data: updated });
@@ -33,11 +46,14 @@ export async function PATCH(
   if (auth instanceof NextResponse) return auth;
 
   const { id } = params;
-  const body = (await request.json()) as { isAvailable?: boolean };
+  const body = (await request.json()) as { isAvailable?: boolean; sortOrder?: number };
 
   const updated = await prisma.menuItem.update({
     where: { id },
-    data: { isAvailable: body.isAvailable }
+    data: { 
+      isAvailable: body.isAvailable,
+      sortOrder: body.sortOrder
+    }
   });
 
   return NextResponse.json({ data: updated });
