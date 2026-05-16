@@ -612,20 +612,19 @@ input[type="checkbox"] {
 
 /* ── Dashboard Shell ──────────────────────────────────────── */
 .admin-shell {
-  display: grid;
-  grid-template-columns: var(--sidebar-width) 1fr;
   min-height: 100vh;
   background: var(--bg-midnight);
-  transition: grid-template-columns var(--duration-slow) var(--ease-spring);
-}
-.admin-shell.collapsed {
-  grid-template-columns: var(--sidebar-collapsed) 1fr;
 }
 .admin-main {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
   background: var(--bg-midnight);
+  margin-left: var(--sidebar-width);
+  transition: margin-left var(--duration-slow) var(--ease-spring);
+}
+.admin-shell.collapsed .admin-main {
+  margin-left: var(--sidebar-collapsed);
 }
 .admin-content {
   flex: 1;
@@ -1253,9 +1252,9 @@ input[type="checkbox"] {
   .grid-cards-3,
   .grid-cards-2 { grid-template-columns: 1fr; }
 
-  /* Shell goes single column */
-  .admin-shell {
-    grid-template-columns: 1fr;
+  /* Shell goes single column - no sidebar margin */
+  .admin-main {
+    margin-left: 0;
   }
 
   /* Sidebar becomes off-canvas drawer */
@@ -1356,7 +1355,7 @@ input[type="checkbox"] {
 /* ── Print ────────────────────────────────────────────────── */
 @media print {
   .sidebar, .topbar, .sidebar-overlay { display: none !important; }
-  .admin-shell { grid-template-columns: 1fr !important; }
+  .admin-main { margin-left: 0 !important; }
   .admin-content { padding: 0 !important; }
   body { background: white; color: black; }
   .panel, .card { background: white; border: 1px solid #ccc; box-shadow: none; backdrop-filter: none; }
