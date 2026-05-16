@@ -143,8 +143,7 @@ describe("POST /api/payments/create-checkout-session", () => {
     expect(mockCheckoutSessionsCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         customer: "cus_existing",
-        automatic_tax: { enabled: true },
-        customer_update: { address: "auto" },
+        automatic_tax: { enabled: false },
         metadata: expect.objectContaining({
           source: "web-checkout",
           orderId: "ord_2",

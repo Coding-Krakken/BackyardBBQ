@@ -207,14 +207,13 @@ export async function POST(request: NextRequest) {
             quantity: 1,
           },
         ],
-        // Stripe Tax computes final tax based on customer location.
+        // Automatic tax requires a head-office address in the Stripe dashboard.
+        // Tax is calculated server-side using SERVER_TAX_RATE instead.
+        // To enable Stripe Tax, configure your address at
+        // https://dashboard.stripe.com/settings/tax then set enabled: true.
         automatic_tax: {
-          enabled: true,
+          enabled: false,
         },
-        // customer_update requires a customer to be set
-        ...(stripeCustomerId
-          ? { customer_update: { address: "auto" } }
-          : {}),
         payment_intent_data: {
           setup_future_usage: stripeCustomerId ? "off_session" : undefined,
         },
