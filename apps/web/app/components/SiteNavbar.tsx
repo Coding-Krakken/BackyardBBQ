@@ -8,11 +8,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { orderingLinks } from "../config/content";
 import { MagneticButton } from "./MagneticButton";
 import { springs } from "../lib/animations";
+import { CartIcon } from "./cart/CartIcon";
 
 const navLinks = [
   { href: "/", label: "Home" },
   { href: "/#story", label: "About" },
-  { href: "/#menu", label: "Menu" },
+  { href: "/menu", label: "Menu" },
   { href: "/#catering", label: "Contact" }
 ] as const;
 
@@ -178,6 +179,7 @@ export function SiteNavbar() {
                 </Link>
               </motion.span>
             )}
+            <CartIcon />
             {isAdmin && (
               <motion.span
                 whileHover={{ y: -2 }}

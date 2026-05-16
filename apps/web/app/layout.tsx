@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import { Cormorant_Garamond, Manrope } from "next/font/google";
 import { SessionProvider } from "./components/SessionProvider";
 import { SmoothScrollProvider } from "./components/SmoothScrollProvider";
+import { CartProvider } from "./components/cart/CartContext";
+import { CartDrawer } from "./components/cart/CartDrawer";
 
 const displayFont = Cormorant_Garamond({
   subsets: ["latin"],
@@ -57,10 +59,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`${displayFont.variable} ${bodyFont.variable}`}>
         <SessionProvider>
           <SmoothScrollProvider>
-            <a className="skip-link" href="#main-content">
-              Skip to content
-            </a>
-            {children}
+            <CartProvider>
+              <a className="skip-link" href="#main-content">
+                Skip to content
+              </a>
+              {children}
+              <CartDrawer />
+            </CartProvider>
           </SmoothScrollProvider>
         </SessionProvider>
       </body>

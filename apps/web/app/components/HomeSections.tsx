@@ -351,8 +351,25 @@ export function QuickInfoSection() {
   );
 }
 
-export function FeaturedMenuSection() {
-  const featuredItems = menuItems.slice(0, 4);
+interface FeaturedMenuItem {
+  id: string;
+  name: string;
+  description: string | null;
+  basePriceCents: number;
+  imageUrl: string | null;
+}
+
+export function FeaturedMenuSection({ items }: { items: FeaturedMenuItem[] }) {
+  const featuredItems = items.map(item => ({
+    name: item.name,
+    description: item.description || '',
+    price: `$${(item.basePriceCents / 100).toFixed(2)}`,
+    image: {
+      src: item.imageUrl || '/images/placeholder-food.jpg',
+      alt: item.name
+    }
+  }));
+  
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: "-100px" });
   const [selectedItem, setSelectedItem] = useState<null | { name: string; description: string; price: string; image: { src: string; alt: string } }>(null);
@@ -404,8 +421,8 @@ export function FeaturedMenuSection() {
             Explore signature brisket, ribs, smoked sides, and crowd-favorite classics prepared with championship pit
             technique.
           </p>
-          <SmartLink className="btn btn-secondary" href="/checkout">
-            View Menu
+          <SmartLink className="btn btn-secondary" href="/menu">
+            View Full Menu
           </SmartLink>
         </div>
       </div>
@@ -562,9 +579,9 @@ export function FeaturedMenuSection() {
                     <div style={{ flex: 1 }}>
                       <SmartLink 
                         className="btn btn-primary" 
-                        href="/checkout"
+                        href="/menu"
                       >
-                        Order Now
+                        View on Menu
                       </SmartLink>
                     </div>
                     <button
