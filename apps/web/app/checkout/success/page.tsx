@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -8,6 +8,8 @@ import { SiteNavbar } from "../../components/SiteNavbar";
 import { SiteFooter } from "../../components/HomeSections";
 import { siteImages } from "../../config/images";
 import { useCart } from "../../components/cart/CartContext";
+
+export const dynamic = 'force-dynamic';
 
 interface PaymentSummary {
   currency?: string | null;
@@ -23,7 +25,7 @@ function formatMoney(amountCents: number, currency = "usd") {
   }).format(amountCents / 100);
 }
 
-export default function CheckoutSuccessPage() {
+function CheckoutSuccessContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("session_id");
@@ -204,5 +206,28 @@ export default function CheckoutSuccessPage() {
 
       <SiteFooter />
     </main>
+  );
+}
+
+export default function CheckoutSuccessPage() {
+  return (
+    <Suspense fallback={
+      <main id="main-content">
+        <div style={{ 
+          minHeight: '100vh', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          padding: '2rem' 
+        }}>
+          <div style={{ textAlign: 'center' }}>
+            <h1>Confirming Your Order</h1>
+            <p>Please wait while we confirm your payment...</p>
+          </div>
+        </div>
+      </main>
+    }>
+      <CheckoutSuccessContent />
+    </Suspense>
   );
 }

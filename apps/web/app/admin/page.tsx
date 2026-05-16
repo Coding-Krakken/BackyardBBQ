@@ -1,5 +1,7 @@
 import { permanentRedirect } from 'next/navigation';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * Legacy admin route - redirects to the new dedicated admin app.
  * The admin dashboard has been migrated to apps/admin/ and deployed separately.
