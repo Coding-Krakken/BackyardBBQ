@@ -44,6 +44,17 @@ const requestSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    // Validate required environment variables
+    if (!process.env.NEXT_PUBLIC_SITE_URL) {
+      console.error("Missing NEXT_PUBLIC_SITE_URL environment variable");
+      return NextResponse.json(
+        {
+          error: "Server configuration error. Please contact support.",
+        },
+        { status: 500 }
+      );
+    }
+
     const ip = getRequestIp(request);
     const rateCheck = checkRateLimit({
       key: `checkout:${ip}`,
