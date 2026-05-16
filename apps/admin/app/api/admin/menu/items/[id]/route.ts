@@ -48,12 +48,13 @@ export async function PATCH(
   const { id } = params;
   const body = (await request.json()) as { isAvailable?: boolean; sortOrder?: number };
 
+  const data: { isAvailable?: boolean; sortOrder?: number } = {};
+  if (body.isAvailable !== undefined) data.isAvailable = body.isAvailable;
+  if (body.sortOrder !== undefined) data.sortOrder = body.sortOrder;
+
   const updated = await prisma.menuItem.update({
     where: { id },
-    data: { 
-      isAvailable: body.isAvailable,
-      sortOrder: body.sortOrder
-    }
+    data
   });
 
   return NextResponse.json({ data: updated });
