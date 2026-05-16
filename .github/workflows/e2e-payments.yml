@@ -58,7 +58,7 @@ jobs:
   e2e-auth:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name == 'workflow_dispatch' || (secrets.E2E_ADMIN_EMAIL != '' && secrets.E2E_ADMIN_PASSWORD != '')
+    if: always()
 
     env:
       E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL }}
