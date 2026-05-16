@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import rawBody from "fastify-raw-body";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import Stripe from "stripe";
 import { prisma, Prisma } from "./prisma.js";
@@ -416,6 +417,61 @@ app.get("/api/health/webhook", async () => {
   };
 });
 
+app.get("/api/health/delivery/:channel", async (request, reply) => {
+  const parsedParams = deliveryWebhookParamsSchema.safeParse(request.params);
+  if (!parsedParams.success) {
+    return reply.status(400).send({
+      message: "Invalid delivery channel",
+      errors: parsedParams.error.flatten()
+    });
+  }
+
+  if (!hasDatabaseUrl) {
+    return {
+      channel: parsedParams.data.channel,
+      status: "unknown",
+      databaseConfigured: false,
+      lastEventAt: null
+    };
+  }
+
+  const channel = parsedParams.data.channel;
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const events = await prisma.integrationEvent.findMany({
+    where: {
+      channel,
+      createdAt: { gte: since }
+    },
+    orderBy: { createdAt: "desc" },
+    take: 200,
+    select: {
+      status: true,
+      createdAt: true
+    }
+  });
+
+  const failedCount = events.filter((event) => event.status === "failed").length;
+  const deadLetterCount = events.filter((event) => event.status === "dead_letter").length;
+  const processedCount = events.filter((event) => event.status === "processed").length;
+  const total = events.length;
+  const failureRate = total > 0 ? (failedCount + deadLetterCount) / total : 0;
+  const status = failureRate >= 0.5 ? "down" : failureRate > 0 ? "degraded" : "healthy";
+
+  return {
+    channel,
+    status,
+    windowHours: 24,
+    counts: {
+      total,
+      processed: processedCount,
+      failed: failedCount,
+      deadLetter: deadLetterCount
+    },
+    failureRate,
+    lastEventAt: events[0]?.createdAt.toISOString() ?? null
+  };
+});
+
 app.get("/api/metrics/payments", async (request, reply) => {
   const querySchema = z.object({
     days: z.coerce.number().int().min(1).max(90).default(30),
@@ -465,6 +521,12 @@ const createOrderSchema = z.object({
     .min(1),
   tipCents: z.number().int().min(0).default(0),
   taxCents: z.number().int().min(0).default(0)
+});
+
+const createDispatchRequestSchema = z.object({
+  orderId: z.string().min(1),
+  channel: z.enum(["doordash", "ubereats", "grubhub"]),
+  priority: z.enum(["normal", "high"]).default("normal")
 });
 
 const createBookingSchema = z.object({
@@ -588,6 +650,28 @@ const deliveryWebhookBodySchema = z.object({
   payload: z.record(z.unknown()).default({})
 });
 
+const inboundDeliveryItemSchema = z.object({
+  name: z.string().min(1),
+  quantity: z.number().int().min(1),
+  unitPriceCents: z.number().int().min(0),
+  notes: z.string().optional()
+});
+
+const inboundDeliveryOrderSchema = z.object({
+  externalOrderId: z.string().min(1),
+  customerEmail: z.string().email().optional(),
+  locationId: z.string().optional(),
+  subtotalCents: z.number().int().min(0),
+  taxCents: z.number().int().min(0).default(0),
+  tipCents: z.number().int().min(0).default(0),
+  items: z.array(inboundDeliveryItemSchema).min(1)
+});
+
+const inboundDeliveryStatusUpdateSchema = z.object({
+  internalOrderId: z.string().min(1).optional(),
+  status: z.enum(["pending", "confirmed", "preparing", "ready", "completed", "cancelled"])
+});
+
 const deliveryWebhookSecretByChannel: Record<(typeof integrationChannels)[number], string | undefined> = {
   doordash: process.env.DOORDASH_WEBHOOK_SECRET,
   ubereats: process.env.UBEREATS_WEBHOOK_SECRET,
@@ -596,6 +680,69 @@ const deliveryWebhookSecretByChannel: Record<(typeof integrationChannels)[number
 
 function isSupportedIntegrationChannel(channel: string): channel is (typeof integrationChannels)[number] {
   return integrationChannels.includes(channel as (typeof integrationChannels)[number]);
+}
+
+function stripKnownSignaturePrefixes(signature: string) {
+  const trimmed = signature.trim();
+  return trimmed.replace(/^(sha256=|v1=)/i, "");
+}
+
+function verifyHmacSha256Signature(input: {
+  rawBody: string;
+  signature: string;
+  secret: string;
+}) {
+  const normalizedSignature = stripKnownSignaturePrefixes(input.signature);
+  const computedSignature = createHmac("sha256", input.secret).update(input.rawBody, "utf8").digest("hex");
+
+  const signatureBuffer = Buffer.from(normalizedSignature, "hex");
+  const computedBuffer = Buffer.from(computedSignature, "hex");
+
+  if (signatureBuffer.length === 0 || computedBuffer.length === 0) {
+    return false;
+  }
+
+  if (signatureBuffer.length !== computedBuffer.length) {
+    return false;
+  }
+
+  return timingSafeEqual(signatureBuffer, computedBuffer);
+}
+
+function parseIncomingDeliveryOrder(
+  payload: Record<string, unknown>,
+  channel: (typeof integrationChannels)[number]
+) {
+  const parsedOrder = inboundDeliveryOrderSchema.safeParse(payload.order ?? payload);
+  if (!parsedOrder.success) {
+    return {
+      ok: false as const,
+      errors: parsedOrder.error.flatten()
+    };
+  }
+
+  return {
+    ok: true as const,
+    value: {
+      ...parsedOrder.data,
+      source: channel
+    }
+  };
+}
+
+function parseIncomingDeliveryStatusUpdate(payload: Record<string, unknown>) {
+  const parsedStatus = inboundDeliveryStatusUpdateSchema.safeParse(payload.statusUpdate ?? payload);
+  if (!parsedStatus.success) {
+    return {
+      ok: false as const,
+      errors: parsedStatus.error.flatten()
+    };
+  }
+
+  return {
+    ok: true as const,
+    value: parsedStatus.data
+  };
 }
 
 function hasDeliveryWebhookSignature(input: {
@@ -608,11 +755,19 @@ function hasDeliveryWebhookSignature(input: {
     return false;
   }
 
-  const providedSignature =
+  const providedSignatureRaw =
     (typeof input.headers["x-delivery-signature"] === "string" ? input.headers["x-delivery-signature"] : undefined) ??
     (typeof input.headers["x-signature"] === "string" ? input.headers["x-signature"] : undefined);
 
-  return Boolean(providedSignature && input.rawBody.length > 0);
+  if (!providedSignatureRaw || input.rawBody.length === 0) {
+    return false;
+  }
+
+  return verifyHmacSha256Signature({
+    rawBody: input.rawBody,
+    signature: providedSignatureRaw,
+    secret: configuredSecret
+  });
 }
 
 const allowedOrderTransitions: Record<z.infer<typeof orderStatusSchema>, z.infer<typeof orderStatusSchema>[]> = {
@@ -710,6 +865,71 @@ app.post("/api/orders", async (request, reply) => {
   });
 
   return order;
+});
+
+app.post("/api/delivery/dispatch", async (request, reply) => {
+  const parsed = createDispatchRequestSchema.safeParse(request.body);
+  if (!parsed.success) {
+    return reply.status(400).send({
+      message: "Invalid dispatch request payload",
+      errors: parsed.error.flatten()
+    });
+  }
+
+  if (!hasDatabaseUrl) {
+    return {
+      queued: true,
+      dispatchId: `demo-dispatch-${Date.now()}`,
+      channel: parsed.data.channel,
+      orderId: parsed.data.orderId
+    };
+  }
+
+  const order = await prisma.order.findUnique({
+    where: { id: parsed.data.orderId },
+    select: {
+      id: true,
+      source: true,
+      status: true,
+      totalCents: true
+    }
+  });
+
+  if (!order) {
+    return reply.status(404).send({ message: "Order not found" });
+  }
+
+  if (order.status === "completed" || order.status === "cancelled") {
+    return reply.status(409).send({
+      message: "Order is no longer dispatchable",
+      status: order.status
+    });
+  }
+
+  const dispatchId = `${parsed.data.channel}-${order.id}-${Date.now()}`;
+
+  await prisma.integrationEvent.create({
+    data: {
+      orderId: order.id,
+      channel: parsed.data.channel,
+      eventType: "delivery.dispatch.requested",
+      status: "queued",
+      payload: {
+        dispatchId,
+        orderId: order.id,
+        priority: parsed.data.priority,
+        amountCents: order.totalCents,
+        queuedAt: new Date().toISOString()
+      } as Prisma.InputJsonValue
+    }
+  });
+
+  return {
+    queued: true,
+    dispatchId,
+    channel: parsed.data.channel,
+    orderId: order.id
+  };
 });
 
 app.post("/api/catering/bookings", async (request, reply) => {
@@ -2344,7 +2564,19 @@ app.post(
       return { received: true, duplicate: true };
     }
 
-    if (hasDatabaseUrl) {
+    const parsedDeliveryOrder = parseIncomingDeliveryOrder(parsedBody.data.payload, channel);
+    const parsedStatusUpdate = parseIncomingDeliveryStatusUpdate(parsedBody.data.payload);
+
+    if (!hasDatabaseUrl) {
+      return {
+        received: true,
+        channel,
+        eventId: parsedBody.data.eventId,
+        ingestedOrder: parsedDeliveryOrder.ok ? parsedDeliveryOrder.value.externalOrderId : null
+      };
+    }
+
+    {
       const duplicateEvent = await prisma.integrationEvent.findFirst({
         where: {
           channel,
@@ -2364,16 +2596,98 @@ app.post(
         return { received: true, duplicate: true };
       }
 
+      let orderId: string | undefined;
+      let ingestStatus: "processed" | "ignored" | "failed" = "ignored";
+      let ingestReason: string | undefined;
+
+      if (parsedBody.data.eventType.includes("order") && !parsedBody.data.eventType.includes("status")) {
+        if (!parsedDeliveryOrder.ok) {
+          ingestStatus = "failed";
+          ingestReason = "invalid_order_payload";
+        } else {
+          const locationId = await resolveLocationId(parsedDeliveryOrder.value.locationId);
+          if (!locationId) {
+            ingestStatus = "failed";
+            ingestReason = "location_not_found";
+          } else {
+            let customerId: string | undefined;
+            if (parsedDeliveryOrder.value.customerEmail) {
+              const customer = await prisma.customer.upsert({
+                where: { email: parsedDeliveryOrder.value.customerEmail },
+                update: {},
+                create: { email: parsedDeliveryOrder.value.customerEmail }
+              });
+              customerId = customer.id;
+            }
+
+            const totalCents =
+              parsedDeliveryOrder.value.subtotalCents +
+              parsedDeliveryOrder.value.taxCents +
+              parsedDeliveryOrder.value.tipCents;
+
+            const createdOrder = await prisma.order.create({
+              data: {
+                customerId,
+                locationId,
+                source: parsedDeliveryOrder.value.source,
+                subtotalCents: parsedDeliveryOrder.value.subtotalCents,
+                taxCents: parsedDeliveryOrder.value.taxCents,
+                tipCents: parsedDeliveryOrder.value.tipCents,
+                totalCents,
+                items: {
+                  create: parsedDeliveryOrder.value.items.map((item) => ({
+                    menuItemName: item.name,
+                    quantity: item.quantity,
+                    unitPriceCents: item.unitPriceCents,
+                    notes: item.notes
+                  }))
+                }
+              },
+              select: { id: true }
+            });
+
+            orderId = createdOrder.id;
+            ingestStatus = "processed";
+          }
+        }
+      } else if (parsedBody.data.eventType.includes("status")) {
+        if (!parsedStatusUpdate.ok || !parsedStatusUpdate.value.internalOrderId) {
+          ingestStatus = "failed";
+          ingestReason = "invalid_status_payload";
+        } else {
+          const updated = await prisma.order.updateMany({
+            where: {
+              id: parsedStatusUpdate.value.internalOrderId
+            },
+            data: {
+              status: parsedStatusUpdate.value.status
+            }
+          });
+
+          if (updated.count > 0) {
+            ingestStatus = "processed";
+            orderId = parsedStatusUpdate.value.internalOrderId;
+          } else {
+            ingestStatus = "failed";
+            ingestReason = "order_not_found_for_status_update";
+          }
+        }
+      }
+
       await prisma.integrationEvent.create({
         data: {
+          orderId,
           channel,
           eventType: parsedBody.data.eventType,
-          status: "received",
+          status: ingestStatus,
           payload: {
             eventId: parsedBody.data.eventId,
             orderExternalId: parsedBody.data.orderExternalId ?? null,
             requestIp: request.ip,
             receivedAt: new Date().toISOString(),
+            ingestReason: ingestReason ?? null,
+            orderParseErrors: parsedDeliveryOrder.ok ? null : parsedDeliveryOrder.errors,
+            statusParseErrors: parsedStatusUpdate.ok ? null : parsedStatusUpdate.errors,
             payload: parsedBody.data.payload
           } as Prisma.InputJsonValue
         }

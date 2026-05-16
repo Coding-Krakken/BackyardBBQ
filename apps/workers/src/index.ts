@@ -213,9 +213,17 @@ async function runSyncCycle() {
       });
     }
 
-    const latencyMs = Math.round(latencyTotal / Math.max(inboundBatch.length, 1));
+    const providerHealth = await adapters[channel].checkHealth();
+    const latencyMs =
+      Math.round(latencyTotal / Math.max(inboundBatch.length, 1)) +
+      Math.round(providerHealth.latencyMs / 2);
     const failureRate = inboundBatch.length > 0 ? failedCount / inboundBatch.length : 0;
-    const status = failureRate >= 0.5 ? "down" : failureRate > 0 ? "degraded" : "healthy";
+    const status =
+      !providerHealth.healthy || failureRate >= 0.5
+        ? "down"
+        : failureRate > 0
+          ? "degraded"
+          : "healthy";
 
     await persistHealthEvent({
       channel,
@@ -224,6 +232,18 @@ async function runSyncCycle() {
       failedCount,
       deadLetterCount,
       latencyMs
+    });
+
+    await persistIngestEvent({
+      channel,
+      eventType: "delivery.sync.provider-health",
+      status,
+      payload: {
+        healthy: providerHealth.healthy,
+        providerLatencyMs: providerHealth.latencyMs,
+        reason: providerHealth.reason ?? null,
+        checkedAt: new Date().toISOString()
+      }
     });
   }
 }
@@ -310,6 +330,69 @@ async function runOutboundStatusSyncCycle() {
   }
 }
 
+async function runMenuPublishSyncCycle() {
+  if (!hasDatabaseUrl) {
+    return;
+  }
+
+  const locations = await prisma.location.findMany({
+    where: { isActive: true },
+    select: {
+      id: true,
+      menuItems: {
+        where: { isAvailable: true },
+        select: {
+          id: true,
+          name: true,
+          basePriceCents: true,
+          isAvailable: true
+        }
+      }
+    }
+  });
+
+  for (const location of locations) {
+    for (const channel of deliveryChannels) {
+      try {
+        const publishResult = await adapters[channel].publishMenuSnapshot({
+          locationId: location.id,
+          items: location.menuItems.map((item) => ({
+            externalItemId: item.id,
+            name: item.name,
+            priceCents: item.basePriceCents,
+            available: item.isAvailable
+          })),
+          publishedAt: new Date().toISOString()
+        });
+
+        await persistIngestEvent({
+          channel,
+          eventType: "delivery.menu.publish",
+          status: "processed",
+          payload: {
+            locationId: location.id,
+            itemCount: location.menuItems.length,
+            latencyMs: publishResult.latencyMs,
+            publishedAt: new Date().toISOString()
+          }
+        });
+      } catch (error) {
+        await persistIngestEvent({
+          channel,
+          eventType: "delivery.menu.publish",
+          status: "failed",
+          payload: {
+            locationId: location.id,
+            itemCount: location.menuItems.length,
+            reason: error instanceof Error ? error.message : "Unknown menu publish error",
+            publishedAt: new Date().toISOString()
+          }
+        });
+      }
+    }
+  }
+}
+
 setInterval(() => {
   runSyncCycle().catch((error) => {
     console.error("[workers] sync cycle failed", error);
@@ -321,5 +404,11 @@ setInterval(() => {
     console.error("[workers] outbound status sync cycle failed", error);
   });
 }, 15000);
+
+setInterval(() => {
+  runMenuPublishSyncCycle().catch((error) => {
+    console.error("[workers] menu publish sync cycle failed", error);
+  });
+}, 60000);
 
 console.log("[workers] started integration worker service");

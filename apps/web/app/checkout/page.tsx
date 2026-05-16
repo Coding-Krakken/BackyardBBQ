@@ -113,6 +113,9 @@ export default function CheckoutPage() {
   const router = useRouter();
   const { state, isHydrated, subtotalCents, estimatedTaxCents } = useCart();
   const items = state.items;
+  const [fulfillmentMode, setFulfillmentMode] = useState<"delivery" | "pickup">("delivery");
+  const [fulfillmentSpeed, setFulfillmentSpeed] = useState<"asap" | "scheduled">("asap");
+  const [scheduledFor, setScheduledFor] = useState("");
   const idempotencyKeyRef = useRef(`checkout-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(() => {
@@ -159,6 +162,9 @@ export default function CheckoutPage() {
             metadata: {
               checkoutContext: "direct-web-order",
               itemCount: items.length,
+              fulfillmentMode,
+              fulfillmentSpeed,
+              scheduledFor: fulfillmentSpeed === "scheduled" ? scheduledFor : "",
               subtotalCents,
               clientTaxCents: estimatedTaxCents,
               idempotencyKey: idempotencyKeyRef.current,
@@ -181,7 +187,15 @@ export default function CheckoutPage() {
     createCheckoutSession().catch(() => {
       setErrorMessage("Unable to initialize checkout.");
     });
-  }, [isHydrated, items, subtotalCents, estimatedTaxCents]);
+  }, [
+    isHydrated,
+    items,
+    subtotalCents,
+    estimatedTaxCents,
+    fulfillmentMode,
+    fulfillmentSpeed,
+    scheduledFor
+  ]);
 
   const checkoutOptions = useMemo(
     () =>
@@ -213,6 +227,43 @@ export default function CheckoutPage() {
           <span className="eyebrow">Checkout</span>
           <h2>Secure Checkout</h2>
           <p>Powered by Stripe with Link for faster checkout, Express payment options, and secure card processing.</p>
+          <div style={{ marginTop: "1rem", marginBottom: "1rem", display: "grid", gap: "0.75rem" }}>
+            <label style={{ display: "grid", gap: "0.35rem" }}>
+              <span style={{ fontSize: "0.9rem", color: "var(--warm-gray)" }}>Fulfillment</span>
+              <select
+                value={fulfillmentMode}
+                onChange={(event) => setFulfillmentMode(event.target.value as "delivery" | "pickup")}
+                style={{ padding: "0.6rem", borderRadius: "0.5rem", border: "1px solid var(--line)" }}
+              >
+                <option value="delivery">Delivery</option>
+                <option value="pickup">Pickup</option>
+              </select>
+            </label>
+
+            <label style={{ display: "grid", gap: "0.35rem" }}>
+              <span style={{ fontSize: "0.9rem", color: "var(--warm-gray)" }}>When</span>
+              <select
+                value={fulfillmentSpeed}
+                onChange={(event) => setFulfillmentSpeed(event.target.value as "asap" | "scheduled")}
+                style={{ padding: "0.6rem", borderRadius: "0.5rem", border: "1px solid var(--line)" }}
+              >
+                <option value="asap">As soon as possible</option>
+                <option value="scheduled">Schedule for later</option>
+              </select>
+            </label>
+
+            {fulfillmentSpeed === "scheduled" ? (
+              <label style={{ display: "grid", gap: "0.35rem" }}>
+                <span style={{ fontSize: "0.9rem", color: "var(--warm-gray)" }}>Scheduled time</span>
+                <input
+                  type="datetime-local"
+                  value={scheduledFor}
+                  onChange={(event) => setScheduledFor(event.target.value)}
+                  style={{ padding: "0.6rem", borderRadius: "0.5rem", border: "1px solid var(--line)" }}
+                />
+              </label>
+            ) : null}
+          </div>
           {errorMessage ? <p className="status-text">{errorMessage}</p> : null}
           {checkoutOptions && stripePromise ? (
             <CheckoutElementsProvider stripe={stripePromise} options={checkoutOptions}>
