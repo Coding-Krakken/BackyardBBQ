@@ -19,3 +19,7 @@ packages/*/.turbo
 packages/*/dist
 packages/*/tsconfig.tsbuildinfo
 packages/database/prisma/dev.db
+
+# Playwright test artifacts
+playwright-report/
+test-results/
