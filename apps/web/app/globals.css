@@ -384,11 +384,17 @@ input:focus-visible {
 .site-nav-links {
   display: inline-flex;
   justify-self: center;
+  align-items: center;
   gap: 0.78rem;
   color: var(--warm-gray);
 }
 
 .site-nav-links a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  line-height: 1;
   font-size: 0.64rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -396,6 +402,27 @@ input:focus-visible {
 }
 
 .site-nav-links a:hover {
+  color: var(--cream);
+}
+
+.site-nav-links .nav-link-admin {
+  color: var(--ember-soft);
+  font-weight: 600;
+}
+
+.site-nav-links .nav-link-admin:hover {
+  color: var(--ember);
+}
+
+.site-nav-links .cart-icon-button {
+  min-height: 32px;
+  min-width: 32px;
+  padding: 0.3rem;
+  color: var(--warm-gray);
+}
+
+.site-nav-links .cart-icon-button:hover {
+  opacity: 1;
   color: var(--cream);
 }
 

@@ -174,7 +174,7 @@ export function SiteNavbar() {
                 whileTap={{ scale: 0.95 }}
                 style={{ display: "inline-flex", alignItems: "center" }}
               >
-                <Link href={authLink.href}>
+                <Link className="nav-link" href={authLink.href}>
                   {authLink.label}
                 </Link>
               </motion.span>
@@ -186,7 +186,7 @@ export function SiteNavbar() {
                 whileTap={{ scale: 0.95 }}
                 style={{ display: "inline-flex", alignItems: "center" }}
               >
-                <Link href={process.env.NEXT_PUBLIC_ADMIN_URL ?? "/admin"} style={{ color: "var(--ember, #e05c1a)", fontWeight: 600 }}>
+                <Link className="nav-link nav-link-admin" href={process.env.NEXT_PUBLIC_ADMIN_URL ?? "/admin"}>
                   Admin
                 </Link>
               </motion.span>
