@@ -411,6 +411,146 @@ async function runMenuPublishSyncCycle() {
   }
 }
 
+async function runDispatchQueueCycle() {
+  if (!hasDatabaseUrl) {
+    return;
+  }
+
+  const queuedDispatches = await prisma.integrationEvent.findMany({
+    where: {
+      eventType: "delivery.dispatch.requested",
+      status: {
+        in: ["queued", "pending"]
+      }
+    },
+    orderBy: {
+      createdAt: "asc"
+    },
+    take: 100
+  });
+
+  for (const dispatchEvent of queuedDispatches) {
+    const channel = dispatchEvent.channel as DeliveryChannel;
+    if (!deliveryChannels.includes(channel)) {
+      await prisma.integrationEvent.update({
+        where: { id: dispatchEvent.id },
+        data: {
+          status: "dead_letter",
+          payload: {
+            ...(dispatchEvent.payload as Prisma.JsonObject),
+            reason: "unsupported_channel",
+            failedAt: new Date().toISOString()
+          }
+        }
+      });
+      continue;
+    }
+
+    const payload = dispatchEvent.payload as Prisma.JsonObject;
+    const orderId = typeof payload.orderId === "string" ? payload.orderId : undefined;
+    const attempts = typeof payload.attempts === "number" ? payload.attempts : 0;
+    const maxAttempts = 5;
+
+    if (!orderId) {
+      await prisma.integrationEvent.update({
+        where: { id: dispatchEvent.id },
+        data: {
+          status: "dead_letter",
+          payload: {
+            ...payload,
+            reason: "missing_order_id",
+            failedAt: new Date().toISOString()
+          }
+        }
+      });
+      continue;
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        status: true,
+        updatedAt: true,
+        source: true
+      }
+    });
+
+    if (!order) {
+      await prisma.integrationEvent.update({
+        where: { id: dispatchEvent.id },
+        data: {
+          status: "dead_letter",
+          payload: {
+            ...payload,
+            attempts: attempts + 1,
+            reason: "order_not_found",
+            failedAt: new Date().toISOString()
+          }
+        }
+      });
+      continue;
+    }
+
+    const externalOrderId =
+      typeof payload.orderExternalId === "string"
+        ? payload.orderExternalId
+        : `${channel}:${order.id}`;
+
+    try {
+      const result = await adapters[channel].syncOrderStatus({
+        externalOrderId,
+        status: "accepted",
+        occurredAt: new Date().toISOString()
+      });
+
+      await prisma.integrationEvent.update({
+        where: { id: dispatchEvent.id },
+        data: {
+          status: "processed",
+          payload: {
+            ...payload,
+            attempts: attempts + 1,
+            orderExternalId: externalOrderId,
+            acceptedAt: new Date().toISOString(),
+            latencyMs: result.latencyMs
+          }
+        }
+      });
+
+      await persistStatusSyncEvent({
+        channel,
+        status: "processed",
+        payload: {
+          orderId: order.id,
+          externalOrderId,
+          mappedStatus: "accepted",
+          latencyMs: result.latencyMs,
+          sourceEventId: dispatchEvent.id,
+          syncedAt: new Date().toISOString()
+        }
+      });
+    } catch (error) {
+      const nextAttempts = attempts + 1;
+      const shouldDeadLetter = nextAttempts >= maxAttempts;
+
+      await prisma.integrationEvent.update({
+        where: { id: dispatchEvent.id },
+        data: {
+          status: shouldDeadLetter ? "dead_letter" : "queued",
+          payload: {
+            ...payload,
+            attempts: nextAttempts,
+            orderExternalId: externalOrderId,
+            lastError: error instanceof Error ? error.message : "dispatch_sync_failed",
+            failedAt: new Date().toISOString()
+          }
+        }
+      });
+    }
+  }
+}
+
 setInterval(() => {
   runSyncCycle().catch((error) => {
     console.error("[workers] sync cycle failed", error);
@@ -428,5 +568,11 @@ setInterval(() => {
     console.error("[workers] menu publish sync cycle failed", error);
   });
 }, 60000);
+
+setInterval(() => {
+  runDispatchQueueCycle().catch((error) => {
+    console.error("[workers] dispatch queue cycle failed", error);
+  });
+}, 10000);
 
 console.log("[workers] started integration worker service");

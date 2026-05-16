@@ -58,6 +58,42 @@ export async function POST(
 
   const dispatchId = `${body.channel}-${order.id}-${Date.now()}`;
 
+  const duplicateDispatch = await prisma.integrationEvent.findFirst({
+    where: {
+      orderId: order.id,
+      channel: body.channel,
+      eventType: "delivery.dispatch.requested",
+      status: { in: ["queued", "pending", "processed"] },
+      createdAt: { gte: new Date(Date.now() - 15 * 60 * 1000) }
+    },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      payload: true,
+      status: true,
+      createdAt: true
+    }
+  });
+
+  if (duplicateDispatch) {
+    const payload = duplicateDispatch.payload as Record<string, unknown>;
+    return NextResponse.json({
+      data: {
+        queued: duplicateDispatch.status !== "processed",
+        duplicate: true,
+        dispatchId:
+          typeof payload.dispatchId === "string"
+            ? payload.dispatchId
+            : `${body.channel}-${order.id}`,
+        channel: body.channel,
+        orderId: order.id,
+        priority,
+        status: duplicateDispatch.status,
+        createdAt: duplicateDispatch.createdAt.toISOString()
+      }
+    });
+  }
+
   await prisma.integrationEvent.create({
     data: {
       orderId: order.id,

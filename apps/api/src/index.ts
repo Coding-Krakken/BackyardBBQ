@@ -908,6 +908,43 @@ app.post("/api/delivery/dispatch", async (request, reply) => {
 
   const dispatchId = `${parsed.data.channel}-${order.id}-${Date.now()}`;
 
+  const duplicateDispatch = await prisma.integrationEvent.findFirst({
+    where: {
+      orderId: order.id,
+      channel: parsed.data.channel,
+      eventType: "delivery.dispatch.requested",
+      status: {
+        in: ["queued", "pending", "processed"]
+      },
+      createdAt: {
+        gte: new Date(Date.now() - 15 * 60 * 1000)
+      }
+    },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      payload: true,
+      createdAt: true,
+      status: true
+    }
+  });
+
+  if (duplicateDispatch) {
+    const payload = duplicateDispatch.payload as Record<string, unknown>;
+    return {
+      queued: duplicateDispatch.status !== "processed",
+      duplicate: true,
+      dispatchId:
+        typeof payload.dispatchId === "string"
+          ? payload.dispatchId
+          : `${parsed.data.channel}-${order.id}`,
+      channel: parsed.data.channel,
+      orderId: order.id,
+      status: duplicateDispatch.status,
+      createdAt: duplicateDispatch.createdAt.toISOString()
+    };
+  }
+
   await prisma.integrationEvent.create({
     data: {
       orderId: order.id,

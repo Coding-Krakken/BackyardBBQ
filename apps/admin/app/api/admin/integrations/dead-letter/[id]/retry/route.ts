@@ -14,11 +14,17 @@ export async function PATCH(
   if (!event) return NextResponse.json({ message: "Event not found" }, { status: 404 });
 
   const prevPayload = event.payload as Record<string, unknown>;
+  const previousAttempts = typeof prevPayload.attempts === "number" ? prevPayload.attempts : 0;
   const updated = await prisma.integrationEvent.update({
     where: { id },
     data: {
-      status: "pending",
-      payload: { ...prevPayload, retriedAt: new Date().toISOString() }
+      status: "queued",
+      payload: {
+        ...prevPayload,
+        attempts: previousAttempts + 1,
+        retriedAt: new Date().toISOString(),
+        retryRequestedByRole: auth.role
+      }
     }
   });
 
