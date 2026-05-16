@@ -13,6 +13,7 @@ import { fetcher, formatCurrency } from '@/lib/utils';
 
 interface MenuItem {
   id: string;
+  locationId: string;
   name: string;
   description: string | null;
   basePriceCents: number;
@@ -105,6 +106,7 @@ export default function MenuPage() {
 
   const openEditItem = (item: MenuItem) => {
     setEditingItem(item);
+    setFormLocationId(item.locationId);
     setFormName(item.name);
     setFormDescription(item.description ?? '');
     setFormPrice(String(item.basePriceCents / 100));
@@ -337,12 +339,11 @@ export default function MenuPage() {
               {activeTab === 'items' ? (
                 <div className="form-stack">
                   <div className="form-group">
-                    <label className="form-label">Location</label>
+                    <label className="form-label">Location *</label>
                     <select 
                       className="select" 
                       value={formLocationId} 
                       onChange={(e) => setFormLocationId(e.target.value)}
-                      disabled={!!editingItem}
                     >
                       <option value="">Select location...</option>
                       {locationsData?.data?.map(loc => (
