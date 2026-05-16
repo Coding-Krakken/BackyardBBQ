@@ -211,9 +211,10 @@ export async function POST(request: NextRequest) {
         automatic_tax: {
           enabled: true,
         },
-        customer_update: {
-          address: "auto",
-        },
+        // customer_update requires a customer to be set
+        ...(stripeCustomerId
+          ? { customer_update: { address: "auto" } }
+          : {}),
         payment_intent_data: {
           setup_future_usage: stripeCustomerId ? "off_session" : undefined,
         },
