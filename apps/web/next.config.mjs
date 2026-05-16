@@ -22,6 +22,10 @@ const nextConfig = {
       {
         protocol: "https",
         hostname: "cdn.pixabay.com"
+      },
+      {
+        protocol: "https",
+        hostname: "i.postimg.cc"
       }
     ],
     formats: ["image/avif", "image/webp"],
