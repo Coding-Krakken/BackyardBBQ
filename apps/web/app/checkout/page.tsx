@@ -90,7 +90,6 @@ function CheckoutForm() {
         options={{
           layout: {
             type: "accordion",
-            defaultCollapsed: false,
             radios: "auto",
             spacedAccordionItems: true
           }
