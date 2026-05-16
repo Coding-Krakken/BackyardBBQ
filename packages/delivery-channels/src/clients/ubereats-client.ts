@@ -10,6 +10,7 @@ import {
   type ProviderStatusSyncInput,
   verifyWebhookHmac
 } from "./base-client";
+import { mapProviderActionPayload } from "./status-mapping";
 
 export class UberEatsClient implements DeliveryProviderClient {
   readonly channel = "ubereats" as const;
@@ -48,13 +49,19 @@ export class UberEatsClient implements DeliveryProviderClient {
       return;
     }
 
+    const mapped = mapProviderActionPayload({
+      channel: this.channel,
+      status: _input.status,
+      reason: _input.reason
+    });
+
     await performProviderRequest({
       url: `${this.baseUrl}/v1/eats/stores/${encodeURIComponent(this.credentials.storeId)}/orders/${encodeURIComponent(_input.externalOrderId)}/status`,
       method: "POST",
       apiKey: this.credentials.apiKey,
       body: {
-        status: _input.status,
-        reason: _input.reason,
+        status: mapped.providerStatus,
+        reasonCode: mapped.providerReasonCode,
         occurredAt: _input.occurredAt
       }
     });
