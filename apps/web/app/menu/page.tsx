@@ -10,6 +10,9 @@ export const metadata = {
   description: 'Browse our full menu of premium BBQ items, sides, drinks, and more.'
 };
 
+// Revalidate every 60 seconds to show fresh menu data
+export const revalidate = 60;
+
 export default async function MenuPage() {
   // Fetch all available menu items from database
   const menuItems = await prisma.menuItem.findMany({

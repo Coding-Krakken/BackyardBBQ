@@ -180,6 +180,16 @@ export default function MenuPage() {
       if (response.ok) {
         addToast({ type: 'success', message: `Item ${editingItem ? 'updated' : 'created'} successfully` });
         await mutateItems();
+        
+        // Trigger revalidation of the web app menu page
+        try {
+          await fetch(`${process.env.NEXT_PUBLIC_WEB_URL || 'https://backyard-bbq.vercel.app'}/api/revalidate-menu`, {
+            method: 'POST'
+          });
+        } catch (e) {
+          console.log('Revalidation triggered (best effort)');
+        }
+        
         resetForm();
       } else {
         addToast({ type: 'error', message: 'Failed to save item' });
@@ -224,6 +234,17 @@ export default function MenuPage() {
       if (response.ok) {
         addToast({ type: 'success', message: `${type === 'item' ? 'Item' : 'Location'} deleted` });
         type === 'item' ? await mutateItems() : await mutateLocations();
+        
+        // Trigger revalidation of the web app menu page if item was deleted
+        if (type === 'item') {
+          try {
+            await fetch(`${process.env.NEXT_PUBLIC_WEB_URL || 'https://backyard-bbq.vercel.app'}/api/revalidate-menu`, {
+              method: 'POST'
+            });
+          } catch (e) {
+            console.log('Revalidation triggered (best effort)');
+          }
+        }
       }
     } catch {
       addToast({ type: 'error', message: 'Failed to delete' });
