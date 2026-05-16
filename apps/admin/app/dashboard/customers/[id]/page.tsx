@@ -2,7 +2,9 @@ import { prisma } from '@/lib/prisma';
 import { notFound, redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { hasAnyRole, type Role } from '@/lib/roles';
 import { StatusBadge } from '@/components/StatusBadge';
+import { CustomerPaymentHistory } from '@/components/CustomerPaymentHistory';
 import Link from 'next/link';
 import { formatCurrency, formatDateShort } from '@/lib/utils';
 
@@ -10,7 +12,7 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
   const session = await getServerSession(authOptions);
   if (!session?.user) redirect('/auth/login');
   const role = (session.user as { role?: string })?.role;
-  if (!role || !['owner', 'admin', 'manager'].includes(role)) redirect('/dashboard');
+  if (!hasAnyRole(role, ['owner', 'admin', 'manager'] satisfies Role[])) redirect('/dashboard');
 
   const customer = await prisma.customer.findUnique({
     where: { id: params.id },
@@ -164,6 +166,10 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
           </table>
         </div>
       )}
+
+      <div className="mt-lg">
+        <CustomerPaymentHistory customerId={customer.id} />
+      </div>
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
-  apiVersion: "2024-11-20.acacia",
+  apiVersion: "2024-06-20",
 });
 
 export async function GET(request: NextRequest) {
@@ -17,13 +17,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Retrieve the Checkout Session
+    // Retrieve the Checkout Session with line item totals.
     const session = await stripe.checkout.sessions.retrieve(sessionId);
 
     return NextResponse.json({
       status: session.status,
       paymentStatus: session.payment_status,
       customerEmail: session.customer_details?.email,
+      currency: session.currency,
+      amountSubtotal: session.amount_subtotal,
+      amountTax: session.total_details?.amount_tax ?? 0,
       amountTotal: session.amount_total,
     });
   } catch (error) {

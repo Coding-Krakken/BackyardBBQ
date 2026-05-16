@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = 'force-dynamic';
+
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { signIn, getSession } from "next-auth/react";

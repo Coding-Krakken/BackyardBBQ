@@ -4,6 +4,8 @@ import rawBody from "fastify-raw-body";
 import { z } from "zod";
 import Stripe from "stripe";
 import { prisma, Prisma } from "./prisma.js";
+import { getCheckoutSessionIdentifiers, shouldTreatWebhookEventAsDuplicate } from "./webhook/utils.js";
+import { isPersistedDuplicateWebhookEvent } from "./webhook/persisted-dedupe.js";
 import type { PaymentStatus } from "@prisma/client";
 
 export async function buildApp() {
@@ -12,6 +14,335 @@ const app = Fastify({ logger: true });
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
 const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
+const paymentAlertWebhookUrl = process.env.PAYMENT_ALERT_WEBHOOK_URL?.trim() || undefined;
+const disputeRateThresholdPercent = Number(process.env.DISPUTE_RATE_ALERT_THRESHOLD ?? "2");
+const refundRateThresholdPercent = Number(process.env.REFUND_RATE_ALERT_THRESHOLD ?? "5");
+const alertCooldownMs = Number(process.env.PAYMENT_ALERT_COOLDOWN_MS ?? String(1000 * 60 * 30));
+const lastAlertByType = new Map<string, number>();
+const webhookRateLimitStore = new Map<string, { count: number; resetAt: number }>();
+const webhookRateLimit = Number(process.env.WEBHOOK_RATE_LIMIT_PER_MINUTE ?? "100");
+const webhookRateWindowMs = 60 * 1000;
+const processedWebhookEvents = new Map<string, number>();
+const webhookEventTtlMs = Number(process.env.WEBHOOK_EVENT_TTL_MS ?? String(24 * 60 * 60 * 1000));
+const webhookAllowedIps = (process.env.STRIPE_WEBHOOK_ALLOWED_IPS ?? "")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
+const metricsApiKey = process.env.METRICS_API_KEY?.trim() || "";
+
+function getRequestIps(request: { ip: string; headers: Record<string, unknown> }) {
+  const forwarded = request.headers["x-forwarded-for"];
+  const fromForwarded = typeof forwarded === "string"
+    ? forwarded
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean)
+    : [];
+
+  return [request.ip, ...fromForwarded].filter(Boolean);
+}
+
+function isWebhookIpAllowed(request: { ip: string; headers: Record<string, unknown> }) {
+  if (webhookAllowedIps.length === 0) {
+    return true;
+  }
+
+  const requestIps = getRequestIps(request);
+  return requestIps.some((ip) => webhookAllowedIps.includes(ip));
+}
+
+function isWebhookRateLimited(ip: string, now = Date.now()) {
+  const key = ip || "unknown";
+  const current = webhookRateLimitStore.get(key);
+
+  if (!current || current.resetAt <= now) {
+    webhookRateLimitStore.set(key, {
+      count: 1,
+      resetAt: now + webhookRateWindowMs
+    });
+    return false;
+  }
+
+  if (current.count >= webhookRateLimit) {
+    return true;
+  }
+
+  current.count += 1;
+  webhookRateLimitStore.set(key, current);
+  return false;
+}
+
+function isDuplicateWebhookEvent(eventId: string, now = Date.now()) {
+  return shouldTreatWebhookEventAsDuplicate(processedWebhookEvents, eventId, webhookEventTtlMs, now);
+}
+
+async function isDuplicateWebhookEventInDatabase(event: Stripe.Event) {
+  return isPersistedDuplicateWebhookEvent({
+    hasDatabaseUrl,
+    integrationEvent: prisma.integrationEvent,
+    event,
+    webhookEventTtlMs
+  });
+}
+
+async function sendOperationalAlert(input: {
+  type: string;
+  severity: "warning" | "critical";
+  message: string;
+  details?: Record<string, unknown>;
+}) {
+  const lastAlertAt = lastAlertByType.get(input.type) ?? 0;
+  const now = Date.now();
+  if (now - lastAlertAt < alertCooldownMs) {
+    return;
+  }
+
+  lastAlertByType.set(input.type, now);
+
+  app.log.warn(
+    {
+      alertType: input.type,
+      severity: input.severity,
+      ...(input.details ?? {})
+    },
+    input.message
+  );
+
+  if (!paymentAlertWebhookUrl) {
+    return;
+  }
+
+  try {
+    await fetch(paymentAlertWebhookUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        source: "backyard-bbq-api",
+        type: input.type,
+        severity: input.severity,
+        message: input.message,
+        details: input.details ?? {},
+        sentAt: new Date().toISOString()
+      })
+    });
+  } catch (error) {
+    app.log.error({ error, alertType: input.type }, "Failed to deliver payment alert webhook");
+  }
+}
+
+async function evaluateRiskThresholds(trigger: string) {
+  if (!hasDatabaseUrl) {
+    return;
+  }
+
+  const windowStart = new Date(Date.now() - 1000 * 60 * 60 * 24 * 30);
+
+  const [transactionCount, disputeCount, refundedAmount, totalSettledAmount] = await Promise.all([
+    prisma.paymentTransaction.count({ where: { createdAt: { gte: windowStart } } }),
+    prisma.integrationEvent.count({
+      where: {
+        channel: "stripe",
+        eventType: { contains: "charge.dispute" },
+        createdAt: { gte: windowStart }
+      }
+    }),
+    prisma.paymentTransaction.aggregate({
+      where: {
+        createdAt: { gte: windowStart },
+        status: { in: ["refunded", "partially_refunded"] }
+      },
+      _sum: { amountCents: true }
+    }),
+    prisma.paymentTransaction.aggregate({
+      where: {
+        createdAt: { gte: windowStart },
+        status: { in: ["succeeded", "refunded", "partially_refunded"] }
+      },
+      _sum: { amountCents: true }
+    })
+  ]);
+
+  const disputeRate = transactionCount > 0 ? (disputeCount / transactionCount) * 100 : 0;
+  const refundedCents = refundedAmount._sum.amountCents ?? 0;
+  const settledCents = totalSettledAmount._sum.amountCents ?? 0;
+  const refundRate = settledCents > 0 ? (refundedCents / settledCents) * 100 : 0;
+
+  if (disputeRate > disputeRateThresholdPercent) {
+    await sendOperationalAlert({
+      type: "high_dispute_rate",
+      severity: "critical",
+      message: "Dispute rate exceeded threshold",
+      details: {
+        trigger,
+        disputeRate,
+        thresholdPercent: disputeRateThresholdPercent,
+        disputeCount,
+        transactionCount,
+        windowDays: 30
+      }
+    });
+  }
+
+  if (refundRate > refundRateThresholdPercent) {
+    await sendOperationalAlert({
+      type: "high_refund_rate",
+      severity: "warning",
+      message: "Refund rate exceeded threshold",
+      details: {
+        trigger,
+        refundRate,
+        thresholdPercent: refundRateThresholdPercent,
+        refundedCents,
+        settledCents,
+        windowDays: 30
+      }
+    });
+  }
+}
+
+async function buildPaymentMetricsSnapshot(days: number) {
+  if (!hasDatabaseUrl) {
+    return {
+      windowDays: days,
+      generatedAt: new Date().toISOString(),
+      kpis: {
+        totalTransactions: 0,
+        successfulTransactions: 0,
+        refundedTransactions: 0,
+        settledVolumeCents: 0,
+        refundedVolumeCents: 0,
+        disputeCount: 0,
+        successRate: 0,
+        refundRate: 0,
+        disputeRate: 0,
+        averagePaymentCents: 0,
+        webhookEvents: 0,
+        averageWebhookLatencyMs: 0,
+        lastWebhookAt: null as string | null
+      }
+    };
+  }
+
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+  const [payments, stripeEvents] = await Promise.all([
+    prisma.paymentTransaction.findMany({
+      where: { createdAt: { gte: since } },
+      select: {
+        amountCents: true,
+        status: true,
+        createdAt: true
+      }
+    }),
+    prisma.integrationEvent.findMany({
+      where: {
+        channel: "stripe",
+        createdAt: { gte: since }
+      },
+      select: {
+        eventType: true,
+        payload: true,
+        createdAt: true
+      }
+    })
+  ]);
+
+  const totalTransactions = payments.length;
+  const successfulTransactions = payments.filter((payment) => payment.status === "succeeded").length;
+  const refundedTransactions = payments.filter(
+    (payment) => payment.status === "refunded" || payment.status === "partially_refunded"
+  ).length;
+
+  const settledVolumeCents = payments
+    .filter((payment) => ["succeeded", "refunded", "partially_refunded"].includes(payment.status))
+    .reduce((sum, payment) => sum + payment.amountCents, 0);
+
+  const refundedVolumeCents = payments
+    .filter((payment) => payment.status === "refunded" || payment.status === "partially_refunded")
+    .reduce((sum, payment) => sum + payment.amountCents, 0);
+
+  const disputeEvents = stripeEvents.filter((event) => event.eventType.includes("charge.dispute"));
+
+  const webhookWithLatency = stripeEvents
+    .map((event) => {
+      const payload = event.payload as Record<string, unknown>;
+      const updatedAt = typeof payload.updatedAt === "number" ? payload.updatedAt : null;
+      if (!updatedAt) {
+        return null;
+      }
+
+      const latencyMs = event.createdAt.getTime() - updatedAt * 1000;
+      return latencyMs >= 0 ? latencyMs : null;
+    })
+    .filter((value): value is number => typeof value === "number");
+
+  const averageWebhookLatencyMs =
+    webhookWithLatency.length > 0
+      ? Math.round(webhookWithLatency.reduce((sum, latency) => sum + latency, 0) / webhookWithLatency.length)
+      : 0;
+
+  const successRate = totalTransactions > 0 ? (successfulTransactions / totalTransactions) * 100 : 0;
+  const refundRate = settledVolumeCents > 0 ? (refundedVolumeCents / settledVolumeCents) * 100 : 0;
+  const disputeRate = totalTransactions > 0 ? (disputeEvents.length / totalTransactions) * 100 : 0;
+  const averagePaymentCents = totalTransactions > 0 ? Math.round(settledVolumeCents / totalTransactions) : 0;
+
+  return {
+    windowDays: days,
+    generatedAt: new Date().toISOString(),
+    kpis: {
+      totalTransactions,
+      successfulTransactions,
+      refundedTransactions,
+      settledVolumeCents,
+      refundedVolumeCents,
+      disputeCount: disputeEvents.length,
+      successRate,
+      refundRate,
+      disputeRate,
+      averagePaymentCents,
+      webhookEvents: stripeEvents.length,
+      averageWebhookLatencyMs,
+      lastWebhookAt: stripeEvents.length > 0 ? stripeEvents[stripeEvents.length - 1]?.createdAt.toISOString() ?? null : null
+    }
+  };
+}
+
+function toPrometheusMetrics(snapshot: {
+  windowDays: number;
+  kpis: {
+    totalTransactions: number;
+    successfulTransactions: number;
+    refundedTransactions: number;
+    settledVolumeCents: number;
+    refundedVolumeCents: number;
+    disputeCount: number;
+    successRate: number;
+    refundRate: number;
+    disputeRate: number;
+    averagePaymentCents: number;
+    webhookEvents: number;
+    averageWebhookLatencyMs: number;
+  };
+}) {
+  const lines = [
+    `bbq_payments_total_transactions{window_days="${snapshot.windowDays}"} ${snapshot.kpis.totalTransactions}`,
+    `bbq_payments_successful_transactions{window_days="${snapshot.windowDays}"} ${snapshot.kpis.successfulTransactions}`,
+    `bbq_payments_refunded_transactions{window_days="${snapshot.windowDays}"} ${snapshot.kpis.refundedTransactions}`,
+    `bbq_payments_settled_volume_cents{window_days="${snapshot.windowDays}"} ${snapshot.kpis.settledVolumeCents}`,
+    `bbq_payments_refunded_volume_cents{window_days="${snapshot.windowDays}"} ${snapshot.kpis.refundedVolumeCents}`,
+    `bbq_payments_dispute_count{window_days="${snapshot.windowDays}"} ${snapshot.kpis.disputeCount}`,
+    `bbq_payments_success_rate_percent{window_days="${snapshot.windowDays}"} ${snapshot.kpis.successRate}`,
+    `bbq_payments_refund_rate_percent{window_days="${snapshot.windowDays}"} ${snapshot.kpis.refundRate}`,
+    `bbq_payments_dispute_rate_percent{window_days="${snapshot.windowDays}"} ${snapshot.kpis.disputeRate}`,
+    `bbq_payments_average_payment_cents{window_days="${snapshot.windowDays}"} ${snapshot.kpis.averagePaymentCents}`,
+    `bbq_payments_webhook_events{window_days="${snapshot.windowDays}"} ${snapshot.kpis.webhookEvents}`,
+    `bbq_payments_average_webhook_latency_ms{window_days="${snapshot.windowDays}"} ${snapshot.kpis.averageWebhookLatencyMs}`
+  ];
+
+  return `${lines.join("\n")}\n`;
+}
 
 await app.register(cors, {
   origin: true
@@ -30,6 +361,91 @@ app.get("/api/payments/health", async () => ({
   stripeConfigured: Boolean(stripe),
   databaseConfigured: hasDatabaseUrl
 }));
+
+app.get("/api/health/stripe", async (_request, reply) => {
+  if (!stripe) {
+    return reply.status(503).send({
+      status: "degraded",
+      stripeConfigured: false,
+      message: "Stripe is not configured"
+    });
+  }
+
+  try {
+    await stripe.balance.retrieve();
+    return {
+      status: "ok",
+      stripeConfigured: true,
+      checkedAt: new Date().toISOString()
+    };
+  } catch (error) {
+    return reply.status(502).send({
+      status: "degraded",
+      stripeConfigured: true,
+      checkedAt: new Date().toISOString(),
+      message: error instanceof Error ? error.message : "Stripe connectivity check failed"
+    });
+  }
+});
+
+app.get("/api/health/webhook", async () => {
+  if (!hasDatabaseUrl) {
+    return {
+      status: "unknown",
+      databaseConfigured: false,
+      lastWebhookAt: null
+    };
+  }
+
+  const latestWebhook = await prisma.integrationEvent.findFirst({
+    where: { channel: "stripe" },
+    orderBy: { createdAt: "desc" },
+    select: {
+      createdAt: true,
+      eventType: true,
+      status: true
+    }
+  });
+
+  return {
+    status: latestWebhook ? "ok" : "idle",
+    databaseConfigured: true,
+    lastWebhookAt: latestWebhook?.createdAt.toISOString() ?? null,
+    lastEventType: latestWebhook?.eventType ?? null,
+    lastEventStatus: latestWebhook?.status ?? null
+  };
+});
+
+app.get("/api/metrics/payments", async (request, reply) => {
+  const querySchema = z.object({
+    days: z.coerce.number().int().min(1).max(90).default(30),
+    format: z.enum(["json", "prometheus"]).default("json")
+  });
+
+  const parsed = querySchema.safeParse(request.query);
+  if (!parsed.success) {
+    return reply.status(400).send({
+      message: "Invalid metrics query",
+      errors: parsed.error.flatten()
+    });
+  }
+
+  if (metricsApiKey) {
+    const headerKey = typeof request.headers["x-metrics-key"] === "string" ? request.headers["x-metrics-key"] : "";
+    if (!headerKey || headerKey !== metricsApiKey) {
+      return reply.status(401).send({ message: "Unauthorized metrics access" });
+    }
+  }
+
+  const snapshot = await buildPaymentMetricsSnapshot(parsed.data.days);
+
+  if (parsed.data.format === "prometheus") {
+    reply.type("text/plain; version=0.0.4; charset=utf-8");
+    return toPrometheusMetrics(snapshot);
+  }
+
+  return snapshot;
+});
 
 const orderSourceSchema = z.enum(["direct", "doordash", "ubereats", "grubhub", "catering"]);
 
@@ -132,6 +548,10 @@ function mapStripeStatusToPaymentStatus(status: Stripe.PaymentIntent.Status): Pa
   };
 
   return map[status] ?? "failed";
+}
+
+function normalizeDisputeStatus(status: Stripe.Dispute.Status): string {
+  return status;
 }
 
 function getDayRange(dateInput?: string) {
@@ -599,10 +1019,35 @@ app.post("/api/admin/payments/refunds", async (request, reply) => {
     return reply.status(500).send({ message: "Stripe is not configured" });
   }
 
-  const refund = await stripe.refunds.create({
-    payment_intent: parsed.data.paymentIntentId,
-    amount: parsed.data.amountCents
-  });
+  let refund: Stripe.Response<Stripe.Refund>;
+  try {
+    refund = await stripe.refunds.create({
+      payment_intent: parsed.data.paymentIntentId,
+      amount: parsed.data.amountCents
+    });
+  } catch (error) {
+    await sendOperationalAlert({
+      type: "refund_creation_failed",
+      severity: "critical",
+      message: "Stripe refund creation failed",
+      details: {
+        paymentIntentId: parsed.data.paymentIntentId,
+        amountCents: parsed.data.amountCents,
+        error: error instanceof Error ? error.message : "Unknown Stripe error"
+      }
+    });
+    return reply.status(502).send({ message: "Stripe refund failed" });
+  }
+
+  request.log.info(
+    {
+      paymentIntentId: parsed.data.paymentIntentId,
+      refundId: refund.id,
+      amountCents: refund.amount,
+      status: refund.status
+    },
+    "Refund processed"
+  );
 
   if (hasDatabaseUrl) {
     const payment = await prisma.paymentTransaction.findUnique({
@@ -630,6 +1075,8 @@ app.post("/api/admin/payments/refunds", async (request, reply) => {
         status: refund.status
       }
     });
+
+    await evaluateRiskThresholds("admin_refund_created");
   }
 
   return {
@@ -1802,79 +2249,6 @@ app.post("/api/catering/availability", async (request, reply) => {
   };
 });
 
-app.post("/api/payments/create-intent", async (request, reply) => {
-  const payloadSchema = z.object({
-    amountCents: z.number().int().min(50),
-    currency: z.string().default("usd"),
-    orderId: z.string().optional(),
-    customerEmail: z.string().email().optional(),
-    metadata: z.record(z.string()).optional()
-  });
-
-  const parsed = payloadSchema.safeParse(request.body);
-  if (!parsed.success) {
-    return reply.status(400).send({
-      message: "Invalid payment intent payload",
-      errors: parsed.error.flatten()
-    });
-  }
-
-  if (!stripe) {
-    return reply.status(500).send({ message: "Stripe is not configured" });
-  }
-
-  const paymentIntent = await stripe.paymentIntents.create({
-    amount: parsed.data.amountCents,
-    currency: parsed.data.currency,
-    receipt_email: parsed.data.customerEmail,
-    automatic_payment_methods: { enabled: true },
-    metadata: {
-      ...(parsed.data.metadata ?? {}),
-      orderId: parsed.data.orderId ?? ""
-    }
-  });
-
-  if (hasDatabaseUrl && parsed.data.orderId) {
-    try {
-      await prisma.order.update({
-        where: { id: parsed.data.orderId },
-        data: { stripeIntentId: paymentIntent.id }
-      });
-    } catch (error) {
-      request.log.warn({ error }, "Unable to link payment intent to order");
-    }
-  }
-
-  if (hasDatabaseUrl) {
-    try {
-      await prisma.paymentTransaction.upsert({
-        where: { stripePaymentIntentId: paymentIntent.id },
-        update: {
-          amountCents: paymentIntent.amount,
-          currency: paymentIntent.currency,
-          status: paymentIntent.status
-        },
-        create: {
-          orderId: parsed.data.orderId,
-          stripePaymentIntentId: paymentIntent.id,
-          amountCents: paymentIntent.amount,
-          currency: paymentIntent.currency,
-          status: paymentIntent.status
-        }
-      });
-    } catch (error) {
-      request.log.warn({ error }, "Unable to persist payment transaction");
-    }
-  }
-
-  return {
-    clientSecret: paymentIntent.client_secret,
-    paymentIntentId: paymentIntent.id,
-    amountCents: paymentIntent.amount,
-    currency: paymentIntent.currency
-  };
-});
-
 app.post(
   "/api/payments/webhook",
   {
@@ -1883,10 +2257,45 @@ app.post(
     }
   },
   async (request, reply) => {
+    if (isWebhookRateLimited(request.ip)) {
+      request.log.warn({ ip: request.ip }, "Stripe webhook rate limit exceeded");
+      return reply.status(429).send({ message: "Too many webhook requests" });
+    }
+
+    if (!isWebhookIpAllowed(request)) {
+      request.log.warn(
+        {
+          requestIp: request.ip,
+          requestIps: getRequestIps(request),
+        },
+        "Stripe webhook blocked by IP allowlist"
+      );
+      await sendOperationalAlert({
+        type: "webhook_ip_not_allowed",
+        severity: "critical",
+        message: "Stripe webhook request blocked by IP allowlist",
+        details: {
+          requestIp: request.ip,
+          requestIps: getRequestIps(request),
+        }
+      });
+      return reply.status(403).send({ message: "Webhook IP not allowed" });
+    }
+
     const signature = request.headers["stripe-signature"];
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
     if (!stripe || !signature || !webhookSecret) {
+      await sendOperationalAlert({
+        type: "webhook_misconfigured",
+        severity: "critical",
+        message: "Stripe webhook received while webhook configuration is incomplete",
+        details: {
+          stripeConfigured: Boolean(stripe),
+          hasSignature: Boolean(signature),
+          hasWebhookSecret: Boolean(webhookSecret)
+        }
+      });
       return reply.status(400).send({ message: "Webhook is not configured" });
     }
 
@@ -1901,7 +2310,180 @@ app.post(
       event = stripe.webhooks.constructEvent(raw, signature, webhookSecret);
     } catch (error) {
       request.log.warn({ error }, "Invalid Stripe webhook signature");
+      await sendOperationalAlert({
+        type: "webhook_signature_invalid",
+        severity: "critical",
+        message: "Stripe webhook signature verification failed",
+        details: {
+          error: error instanceof Error ? error.message : "Invalid signature"
+        }
+      });
       return reply.status(400).send({ message: "Invalid signature" });
+    }
+
+    if (isDuplicateWebhookEvent(event.id)) {
+      request.log.info({ eventId: event.id, eventType: event.type }, "Duplicate Stripe webhook event ignored");
+      return { received: true, duplicate: true };
+    }
+
+    if (hasDatabaseUrl) {
+      try {
+        const isPersistedDuplicate = await isDuplicateWebhookEventInDatabase(event);
+        if (isPersistedDuplicate) {
+          request.log.info(
+            { eventId: event.id, eventType: event.type },
+            "Duplicate Stripe webhook event ignored via persisted lookup"
+          );
+          return { received: true, duplicate: true };
+        }
+      } catch (error) {
+        request.log.error(
+          { 
+            error, 
+            eventId: event.id, 
+            eventType: event.type,
+            alertType: 'duplicate_check_failure',
+            severity: 'high',
+            impact: 'potential_duplicate_processing'
+          }, 
+          "ALERT: Failed persisted webhook duplicate check; continuing with processing - potential duplicate events may be processed"
+        );
+      }
+    }
+
+    if (event.type === "checkout.session.completed") {
+      const completedSession = event.data.object as Stripe.Checkout.Session;
+
+      if (hasDatabaseUrl) {
+        try {
+          const { stripeCustomerId, paymentIntentId, orderId } = getCheckoutSessionIdentifiers(completedSession);
+
+          const writeCheckoutEvent = async (
+            status: string,
+            details: Record<string, unknown>
+          ) => {
+            await prisma.integrationEvent.create({
+              data: {
+                orderId,
+                channel: "stripe",
+                eventType: event.type,
+                status,
+                payload: {
+                  eventId: event.id,
+                  sessionId: completedSession.id,
+                  stripeCustomerId: stripeCustomerId ?? null,
+                  paymentIntentId: paymentIntentId ?? null,
+                  ...details
+                } as Prisma.InputJsonValue
+              }
+            });
+          };
+
+          if (!stripeCustomerId || !paymentIntentId) {
+            await writeCheckoutEvent("ignored", {
+              reason: "missing_customer_or_payment_intent"
+            });
+            return { received: true };
+          }
+
+          const customer = await prisma.customer.findFirst({
+            where: { stripeCustomerId },
+            select: {
+              id: true,
+              defaultPaymentMethodId: true
+            }
+          });
+
+          if (!customer) {
+            await writeCheckoutEvent("ignored", {
+              reason: "customer_not_found"
+            });
+            return { received: true };
+          }
+
+          const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId, {
+            expand: ["payment_method"]
+          });
+
+          const paymentMethod =
+            typeof paymentIntent.payment_method === "string"
+              ? await stripe.paymentMethods.retrieve(paymentIntent.payment_method)
+              : paymentIntent.payment_method;
+
+          if (!paymentMethod || paymentMethod.type !== "card" || !paymentMethod.card) {
+            await writeCheckoutEvent("ignored", {
+              reason: "unsupported_or_missing_payment_method",
+              paymentMethodType: paymentMethod?.type ?? null
+            });
+            return { received: true };
+          }
+
+          const shouldBeDefault = !customer.defaultPaymentMethodId;
+
+          request.log.info(
+            {
+              eventType: event.type,
+              stripeCustomerId,
+              paymentIntentId
+            },
+            "Processing completed checkout session"
+          );
+
+          await prisma.$transaction(async (tx) => {
+            if (shouldBeDefault) {
+              await tx.savedPaymentMethod.updateMany({
+                where: { customerId: customer.id },
+                data: { isDefault: false }
+              });
+            }
+
+            await tx.savedPaymentMethod.upsert({
+              where: { stripePaymentMethodId: paymentMethod.id },
+              update: {
+                brand: paymentMethod.card?.brand ?? "card",
+                last4: paymentMethod.card?.last4 ?? "0000",
+                expMonth: paymentMethod.card?.exp_month ?? 1,
+                expYear: paymentMethod.card?.exp_year ?? 1970,
+                isDefault: shouldBeDefault
+              },
+              create: {
+                customerId: customer.id,
+                stripePaymentMethodId: paymentMethod.id,
+                brand: paymentMethod.card?.brand ?? "card",
+                last4: paymentMethod.card?.last4 ?? "0000",
+                expMonth: paymentMethod.card?.exp_month ?? 1,
+                expYear: paymentMethod.card?.exp_year ?? 1970,
+                isDefault: shouldBeDefault
+              }
+            });
+
+            if (shouldBeDefault) {
+              await tx.customer.update({
+                where: { id: customer.id },
+                data: { defaultPaymentMethodId: paymentMethod.id }
+              });
+            }
+          });
+
+          await writeCheckoutEvent("processed", {
+            customerId: customer.id,
+            stripePaymentMethodId: paymentMethod.id,
+            shouldSetDefault: shouldBeDefault
+          });
+        } catch (error) {
+          request.log.error({ error }, "Failed to sync checkout session payment method");
+          await sendOperationalAlert({
+            type: "checkout_session_sync_failed",
+            severity: "critical",
+            message: "Checkout session webhook synchronization failed",
+            details: {
+              eventType: event.type,
+              error: error instanceof Error ? error.message : "Unknown processing error"
+            }
+          });
+          return reply.status(500).send({ message: "Webhook processing failed" });
+        }
+      }
     }
 
     if (event.type.startsWith("payment_intent.")) {
@@ -1912,6 +2494,27 @@ app.post(
           const orderId = typeof paymentIntent.metadata.orderId === "string" && paymentIntent.metadata.orderId
             ? paymentIntent.metadata.orderId
             : undefined;
+          const bookingId =
+            typeof paymentIntent.metadata.bookingId === "string" && paymentIntent.metadata.bookingId
+              ? paymentIntent.metadata.bookingId
+              : undefined;
+          const paymentType =
+            typeof paymentIntent.metadata.paymentType === "string" && paymentIntent.metadata.paymentType
+              ? paymentIntent.metadata.paymentType
+              : "order";
+
+          request.log.info(
+            {
+              eventType: event.type,
+              paymentIntentId: paymentIntent.id,
+              amountCents: paymentIntent.amount,
+              status: paymentIntent.status,
+              orderId,
+              bookingId,
+              paymentType
+            },
+            "Reconciling payment intent webhook"
+          );
 
           await prisma.paymentTransaction.upsert({
             where: { stripePaymentIntentId: paymentIntent.id },
@@ -1919,14 +2522,18 @@ app.post(
               amountCents: paymentIntent.amount,
               currency: paymentIntent.currency,
               status: mapStripeStatusToPaymentStatus(paymentIntent.status),
-              orderId
+              orderId,
+              bookingId,
+              paymentType
             },
             create: {
               stripePaymentIntentId: paymentIntent.id,
               amountCents: paymentIntent.amount,
               currency: paymentIntent.currency,
               status: mapStripeStatusToPaymentStatus(paymentIntent.status),
-              orderId
+              orderId,
+              bookingId,
+              paymentType
             }
           });
 
@@ -1944,6 +2551,7 @@ app.post(
               eventType: event.type,
               status: "processed",
               payload: {
+                eventId: event.id,
                 paymentIntentId: paymentIntent.id,
                 status: paymentIntent.status
               } as Prisma.InputJsonValue
@@ -1951,6 +2559,16 @@ app.post(
           });
         } catch (error) {
           request.log.error({ error }, "Failed to reconcile payment intent webhook");
+          await sendOperationalAlert({
+            type: "payment_intent_reconcile_failed",
+            severity: "critical",
+            message: "Payment intent webhook reconciliation failed",
+            details: {
+              eventType: event.type,
+              paymentIntentId: paymentIntent.id,
+              error: error instanceof Error ? error.message : "Unknown processing error"
+            }
+          });
           return reply.status(500).send({ message: "Webhook processing failed" });
         }
       }
@@ -1961,24 +2579,103 @@ app.post(
 
       if (hasDatabaseUrl) {
         try {
-          await prisma.integrationEvent.create({
-            data: {
-              channel: "stripe",
+          const paymentIntentId =
+            typeof dispute.payment_intent === "string" ? dispute.payment_intent : undefined;
+          const disputeStatus = normalizeDisputeStatus(dispute.status);
+
+          request.log.info(
+            {
               eventType: event.type,
-              status: "needs_response",
-              payload: {
-                disputeId: dispute.id,
-                paymentIntentId:
-                  typeof dispute.payment_intent === "string" ? dispute.payment_intent : "unknown",
-                amountCents: dispute.amount,
-                currency: dispute.currency,
-                reason: dispute.reason,
-                evidenceDetails: JSON.parse(JSON.stringify(dispute.evidence_details))
-              } as Prisma.InputJsonValue
+              disputeId: dispute.id,
+              paymentIntentId,
+              disputeStatus,
+              amountCents: dispute.amount,
+              reason: dispute.reason
+            },
+            "Reconciling dispute webhook"
+          );
+
+          const linkedPayment = paymentIntentId
+            ? await prisma.paymentTransaction.findUnique({
+                where: { stripePaymentIntentId: paymentIntentId },
+                select: { orderId: true }
+              })
+            : null;
+
+          if (disputeStatus === "lost" && paymentIntentId) {
+            await prisma.paymentTransaction.updateMany({
+              where: { stripePaymentIntentId: paymentIntentId },
+              data: { status: "failed" }
+            });
+          }
+
+          const recentDisputeEvents = await prisma.integrationEvent.findMany({
+            where: {
+              channel: "stripe",
+              eventType: { contains: "charge.dispute" }
+            },
+            orderBy: { createdAt: "desc" },
+            take: 200,
+            select: {
+              id: true,
+              payload: true
             }
           });
+
+          const existing = recentDisputeEvents.find((candidate) => {
+            const payload = candidate.payload as Record<string, unknown>;
+            return payload.disputeId === dispute.id;
+          });
+
+          const nextPayload = {
+            ...(existing ? (existing.payload as Record<string, unknown>) : {}),
+            eventId: event.id,
+            disputeId: dispute.id,
+            paymentIntentId: paymentIntentId ?? "unknown",
+            amountCents: dispute.amount,
+            currency: dispute.currency,
+            reason: dispute.reason,
+            disputeStatus,
+            evidenceDueBy: dispute.evidence_details?.due_by ?? null,
+            updatedAt: event.created,
+            evidenceDetails: JSON.parse(JSON.stringify(dispute.evidence_details ?? {}))
+          } as Prisma.InputJsonValue;
+
+          if (existing) {
+            await prisma.integrationEvent.update({
+              where: { id: existing.id },
+              data: {
+                orderId: linkedPayment?.orderId,
+                eventType: event.type,
+                status: disputeStatus,
+                payload: nextPayload
+              }
+            });
+          } else {
+            await prisma.integrationEvent.create({
+              data: {
+                orderId: linkedPayment?.orderId,
+                channel: "stripe",
+                eventType: event.type,
+                status: disputeStatus,
+                payload: nextPayload
+              }
+            });
+          }
+
+          await evaluateRiskThresholds("dispute_webhook_event");
         } catch (error) {
           request.log.error({ error }, "Failed to persist dispute webhook event");
+          await sendOperationalAlert({
+            type: "dispute_reconcile_failed",
+            severity: "critical",
+            message: "Dispute webhook reconciliation failed",
+            details: {
+              eventType: event.type,
+              disputeId: dispute.id,
+              error: error instanceof Error ? error.message : "Unknown processing error"
+            }
+          });
           return reply.status(500).send({ message: "Webhook processing failed" });
         }
       }

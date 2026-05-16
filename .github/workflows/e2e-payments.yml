@@ -1,0 +1,99 @@
+name: e2e-payments
+
+on:
+  pull_request:
+    paths:
+      - "e2e/**"
+      - "playwright.config.ts"
+      - "package.json"
+      - "package-lock.json"
+      - "docs/STRIPE-FEATURES.md"
+      - ".github/workflows/e2e-payments.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "e2e/**"
+      - "playwright.config.ts"
+      - "package.json"
+      - "package-lock.json"
+      - "docs/STRIPE-FEATURES.md"
+      - ".github/workflows/e2e-payments.yml"
+  workflow_dispatch:
+
+jobs:
+  e2e-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run public smoke E2E lane
+        run: npm run test:e2e:smoke
+
+      - name: Upload smoke E2E artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-smoke-artifacts
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+
+  e2e-auth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: always()
+
+    env:
+      E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL }}
+      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+      E2E_ADMIN_REFUND_ROW_TOKEN: ${{ secrets.E2E_ADMIN_REFUND_ROW_TOKEN }}
+      E2E_ADMIN_DISPUTE_ROW_TOKEN: ${{ secrets.E2E_ADMIN_DISPUTE_ROW_TOKEN }}
+      E2E_ADMIN_ENABLE_MUTATIONS: ${{ secrets.E2E_ADMIN_ENABLE_MUTATIONS }}
+      E2E_ADMIN_MUTATION_DISPUTE_ROW_TOKEN: ${{ secrets.E2E_ADMIN_MUTATION_DISPUTE_ROW_TOKEN }}
+      E2E_ADMIN_EVIDENCE_SUMMARY: ${{ secrets.E2E_ADMIN_EVIDENCE_SUMMARY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run authenticated E2E lane
+        run: npm run test:e2e:auth
+
+      - name: Upload auth E2E artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-auth-artifacts
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore

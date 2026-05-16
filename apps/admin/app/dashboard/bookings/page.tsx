@@ -74,7 +74,7 @@ export default function BookingsPage() {
   };
 
   return (
-    <RoleGate allowedRoles={['owner', 'admin', 'manager']}>
+    <RoleGate allowedRoles={['owner', 'admin', 'manager', 'staff']}>
       <AnimatedPage>
         <PageHeader
           title="Catering Bookings"

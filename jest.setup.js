@@ -1,4 +1,4 @@
-import "@testing-library/jest-dom";
+require("@testing-library/jest-dom");
 
 // Mock Next.js router
 jest.mock("next/navigation", () => ({
@@ -30,7 +30,7 @@ jest.mock("framer-motion", () => ({
     a: "a",
     span: "span",
   },
-  AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
+  AnimatePresence: ({ children }) => children,
   useInView: () => true,
   useScroll: () => ({ scrollYProgress: 0 }),
   useTransform: () => 0,
@@ -41,7 +41,7 @@ jest.mock("framer-motion", () => ({
 // Suppress console errors in tests
 const originalError = console.error;
 beforeAll(() => {
-  console.error = (...args: any[]) => {
+  console.error = (...args) => {
     if (
       typeof args[0] === "string" &&
       (args[0].includes("Warning: ReactDOM.render") ||

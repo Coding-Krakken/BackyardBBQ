@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useReducer, useEffect, useState, ReactNode } from 'react';
 import { TAX_RATE } from '../../config/constants';
 
 export interface CartCustomization {
@@ -129,6 +129,7 @@ function cartReducer(state: CartState, action: CartAction): CartState {
 interface CartContextValue {
   state: CartState;
   dispatch: React.Dispatch<CartAction>;
+  isHydrated: boolean;
   subtotalCents: number;
   estimatedTaxCents: number;
   estimatedTotalCents: number;
@@ -139,6 +140,7 @@ const CartContext = createContext<CartContextValue | undefined>(undefined);
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(cartReducer, initialState);
+  const [isHydrated, setIsHydrated] = useState(false);
 
   // Hydrate from localStorage on mount
   useEffect(() => {
@@ -151,6 +153,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         // Invalid stored data, ignore
       }
     }
+    setIsHydrated(true);
   }, []);
 
   // Persist to localStorage on state change
@@ -173,6 +176,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       value={{
         state,
         dispatch,
+        isHydrated,
         subtotalCents,
         estimatedTaxCents,
         estimatedTotalCents,

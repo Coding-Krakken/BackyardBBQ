@@ -26,6 +26,11 @@ export async function GET(request: NextRequest) {
       paymentIntentId: (p.paymentIntentId as string | undefined) ?? "",
       amountCents: (p.amountCents as number | undefined) ?? 0,
       reason: (p.reason as string | undefined) ?? "unknown",
+      disputeStatus: (p.disputeStatus as string | undefined) ?? e.status,
+      dueBy:
+        typeof p.evidenceDueBy === "number"
+          ? new Date(p.evidenceDueBy * 1000).toISOString()
+          : null,
       status: e.status,
       createdAt: e.createdAt.toISOString()
     };

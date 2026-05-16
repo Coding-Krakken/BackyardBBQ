@@ -1,0 +1,92 @@
+name: stripe-replay-checks
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: "API base URL that exposes /api/payments/webhook and admin disputes endpoints"
+        required: true
+        default: "https://backyard-bbq-backend.vercel.app"
+        type: string
+      webhook_path:
+        description: "Webhook route path for replay requests"
+        required: true
+        default: "/api/payments/webhook"
+        type: string
+      disputes_path:
+        description: "Admin disputes API path used for dispute lookup"
+        required: true
+        default: "/api/admin/payments/disputes?limit=100"
+        type: string
+      checkout_event_id:
+        description: "Stripe event ID for checkout.session.completed replay"
+        required: true
+        type: string
+      dispute_event_id:
+        description: "Stripe event ID for charge.dispute.* replay"
+        required: true
+        type: string
+      admin_role:
+        description: "Admin role header used for dispute lookup endpoint"
+        required: true
+        default: "owner"
+        type: choice
+        options:
+          - owner
+          - admin
+          - accounting
+
+jobs:
+  replay-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+      STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate required secrets
+        run: |
+          if [ -z "${STRIPE_SECRET_KEY}" ]; then
+            echo "Missing STRIPE_SECRET_KEY secret" >&2
+            exit 1
+          fi
+          if [ -z "${STRIPE_WEBHOOK_SECRET}" ]; then
+            echo "Missing STRIPE_WEBHOOK_SECRET secret" >&2
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run payments integration replay checks
+        run: |
+          npm run test:payments:integration -- \
+            --checkout-event-id "${{ inputs.checkout_event_id }}" \
+            --dispute-event-id "${{ inputs.dispute_event_id }}" \
+            --api-base-url "${{ inputs.api_base_url }}" \
+            --webhook-path "${{ inputs.webhook_path }}" \
+            --disputes-path "${{ inputs.disputes_path }}" \
+            --admin-role "${{ inputs.admin_role }}" \
+            --output-dir artifacts/stripe-replay
+
+      - name: Publish replay summary
+        if: always()
+        run: npm run report:payments:integration -- --input-dir artifacts/stripe-replay --require-files true --require-pass true
+
+      - name: Upload replay artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stripe-replay-artifacts
+          path: artifacts/stripe-replay/
+          if-no-files-found: error

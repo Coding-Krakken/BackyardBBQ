@@ -41,12 +41,42 @@ Enterprise-grade platform for Backyard BBQ King, with:
 5. Run database seed data for local demos:
    npm run db:seed -w @bbq/database
 
+## Stripe payments and operations
+
+- Core implementation details are documented in [docs/STRIPE-FEATURES.md](docs/STRIPE-FEATURES.md).
+- Webhook processing supports checkout completion, payment-intent reconciliation, and dispute lifecycle updates.
+- Webhook hardening includes signature validation, optional IP allowlisting, rate limiting, and duplicate-event suppression.
+- Operational endpoints include Stripe/webhook health checks and payment metrics export (`json` or `prometheus`).
+- Admin payments supports partial and bulk refunds, dispute evidence submission, and Stripe dashboard drill-through links.
+- Integration replay commands:
+   - `npm run test:stripe:webhook-replay -- --event-id evt_123 --api-base-url http://localhost:4000`
+   - `npm run test:stripe:dispute-replay -- --event-id evt_123 --api-base-url http://localhost:4000`
+   - `npm run test:payments:integration -- --checkout-event-id evt_checkout --dispute-event-id evt_dispute --api-base-url http://localhost:4000`
+      - includes preflight validation for required Stripe env vars, event-id format (`evt_...`), URL/path shape, and admin role values
+   - `npm run report:payments:integration -- --input-dir artifacts/stripe-replay`
+   - strict mode (fails when replay JSON files are missing): `npm run report:payments:integration -- --input-dir artifacts/stripe-replay --require-files true`
+   - strict pass mode (fails when replay checks do not pass): `npm run report:payments:integration -- --input-dir artifacts/stripe-replay --require-files true --require-pass true`
+   - script-level replay guardrail tests: `npm run test:payments:scripts`
+- Core payment quality gate command (same command used by CI): `npm run validate:payments:core`
+- Payment-focused coverage command: `npm run test:payments:coverage` (80% global threshold via `jest.payments.config.js`)
+- Payment coverage summary command: `npm run report:payments:coverage` (expects `coverage/coverage-summary.json` from prior coverage run)
+- `payments-quality` CI workflow publishes a payment coverage summary table and uploads `payments-coverage-artifacts` (`coverage/`).
+- Manual CI replay workflow: `.github/workflows/stripe-replay-checks.yml` (workflow_dispatch with API URL/path inputs plus checkout/dispute event IDs; publishes a replay summary table and JSON artifacts)
+
+### E2E lanes in CI
+
+- Workflow: `.github/workflows/e2e-payments.yml`
+- Core validation workflow: `.github/workflows/payments-quality.yml`
+- Default lane: `npm run test:e2e:smoke` (runs on PR/push when E2E-related files change)
+- Auth lane: `npm run test:e2e:auth` (runs only when admin E2E secrets are configured)
+- On lane failure, Playwright reports and test artifacts are uploaded by CI for debugging.
+- Failure triage runbook: see `docs/STRIPE-FEATURES.md` ("CI Failure Triage Runbook").
+
 ## Implemented API surface
 
 - POST /api/orders
 - POST /api/catering/bookings
 - POST /api/catering/availability
-- POST /api/payments/create-intent
 - POST /api/payments/webhook
 - GET /api/admin/orders
 - PATCH /api/admin/orders/:orderId/status

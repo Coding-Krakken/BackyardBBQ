@@ -126,9 +126,10 @@ If you want to remove this deployment:
 - `PATCH /api/admin/catering/bookings/:id/status` - Update booking status (admin)
 
 ### Payments
-- `POST /api/payments/create-intent` - Create Stripe payment intent
 - `POST /api/payments/webhook` - Stripe webhook handler
 - `GET /api/payments/health` - Payment system health
+- `GET /api/health/stripe` - Stripe connectivity check
+- `GET /api/health/webhook` - Last Stripe webhook status check
 - `POST /api/admin/payments/refunds` - Process refund (admin)
 - `GET /api/admin/payments` - List payments (admin)
 - `GET /api/admin/payments/disputes` - List disputes (admin)
@@ -161,6 +162,11 @@ If you want to remove this deployment:
 ### Overview
 - `GET /api/admin/overview` - Dashboard overview (admin)
 
+### Metrics & Health
+- `GET /api/health/stripe` - Stripe connectivity health check
+- `GET /api/health/webhook` - Last Stripe webhook health/status check
+- `GET /api/metrics/payments?days=30&format=json|prometheus` - Pull payment KPIs for monitoring (optional `x-metrics-key` header)
+
 ### Notifications
 - `POST /api/admin/notifications` - Send notification (admin)
 
@@ -184,6 +190,14 @@ If you want to remove this deployment:
 - `DATABASE_URL` - PostgreSQL connection string
 - `STRIPE_SECRET_KEY` - Stripe API key (optional)
 - `STRIPE_WEBHOOK_SECRET` - Webhook signature verification (optional)
+- `PAYMENT_ALERT_WEBHOOK_URL` - Alert destination for payment/dispute incidents (optional)
+- `DISPUTE_RATE_ALERT_THRESHOLD` - Dispute rate alert percentage threshold (optional, default 2)
+- `REFUND_RATE_ALERT_THRESHOLD` - Refund rate alert percentage threshold (optional, default 5)
+- `PAYMENT_ALERT_COOLDOWN_MS` - Alert deduplication cooldown in milliseconds (optional)
+- `WEBHOOK_RATE_LIMIT_PER_MINUTE` - Stripe webhook request limit per IP per minute (optional, default 100)
+- `STRIPE_WEBHOOK_ALLOWED_IPS` - Comma-separated IP allowlist for Stripe webhooks (optional; disabled when empty)
+- `WEBHOOK_EVENT_TTL_MS` - Duplicate webhook event suppression window in milliseconds (optional, default 24h)
+- `METRICS_API_KEY` - Optional API key required in `x-metrics-key` for `/api/metrics/payments`
 - `VERCEL` - Auto-set by Vercel platform
 
 ### Build Process
@@ -202,6 +216,11 @@ vercel deploy --prod
 ```
 
 ## Maintenance
+
+### Webhook Reliability Notes
+- Stripe webhook events are deduplicated in two layers:
+   - In-memory cache for fast repeat suppression on the same instance.
+   - Persisted lookup against recent Stripe integration events (same event type + `eventId` in payload) to reduce duplicate processing after cold starts/redeploys.
 
 Even though dormant, this deployment:
 - ✅ Incurs minimal cost (serverless, pay-per-request)
