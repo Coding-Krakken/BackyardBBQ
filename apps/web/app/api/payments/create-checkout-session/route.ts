@@ -188,6 +188,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Compute tax server-side (Syracuse, NY: 8% on prepared food)
+    const taxCents = Math.round(lineItemAmountCents * SERVER_TAX_RATE);
+
     // Create Checkout Session with ui_mode: "embedded" for Payment Element
     const checkoutSession = await stripe.checkout.sessions.create(
       {
@@ -206,14 +209,22 @@ export async function POST(request: NextRequest) {
             },
             quantity: 1,
           },
+          ...(taxCents > 0
+            ? [
+                {
+                  price_data: {
+                    currency,
+                    unit_amount: taxCents,
+                    product_data: {
+                      name: "Sales Tax",
+                      description: `NY State + Onondaga County (${(SERVER_TAX_RATE * 100).toFixed(0)}%)`,
+                    },
+                  },
+                  quantity: 1,
+                },
+              ]
+            : []),
         ],
-        // Automatic tax requires a head-office address in the Stripe dashboard.
-        // Tax is calculated server-side using SERVER_TAX_RATE instead.
-        // To enable Stripe Tax, configure your address at
-        // https://dashboard.stripe.com/settings/tax then set enabled: true.
-        automatic_tax: {
-          enabled: false,
-        },
         payment_intent_data: {
           setup_future_usage: stripeCustomerId ? "off_session" : undefined,
         },

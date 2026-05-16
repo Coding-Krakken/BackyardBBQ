@@ -187,35 +187,7 @@ export default function CheckoutPage() {
   const checkoutOptions = useMemo(
     () =>
       clientSecret
-        ? {
-            clientSecret,
-            appearance: {
-              theme: "night",
-              labels: "floating",
-              variables: {
-                colorPrimary: "#d4491b",
-                colorBackground: "#1a1410",
-                colorText: "#f4eee8",
-                colorDanger: "#d4491b",
-                fontFamily: "system-ui, -apple-system, sans-serif",
-                spacingUnit: "4px",
-                borderRadius: "8px"
-              },
-              rules: {
-                ".Input": {
-                  border: "1px solid #3d2f28",
-                  boxShadow: "none"
-                },
-                ".Input:focus": {
-                  border: "1px solid #d4491b",
-                  boxShadow: "0 0 0 1px #d4491b"
-                },
-                ".Label": {
-                  color: "#bfa996"
-                }
-              }
-            }
-          }
+        ? { clientSecret }
         : undefined,
     [clientSecret]
   );

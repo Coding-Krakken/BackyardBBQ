@@ -143,7 +143,20 @@ describe("POST /api/payments/create-checkout-session", () => {
     expect(mockCheckoutSessionsCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         customer: "cus_existing",
-        automatic_tax: { enabled: false },
+        line_items: expect.arrayContaining([
+          expect.objectContaining({
+            price_data: expect.objectContaining({
+              unit_amount: 2000,
+              product_data: expect.objectContaining({ name: "Backyard BBQ Order" }),
+            }),
+          }),
+          expect.objectContaining({
+            price_data: expect.objectContaining({
+              unit_amount: 160,
+              product_data: expect.objectContaining({ name: "Sales Tax" }),
+            }),
+          }),
+        ]),
         metadata: expect.objectContaining({
           source: "web-checkout",
           orderId: "ord_2",
