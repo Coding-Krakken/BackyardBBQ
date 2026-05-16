@@ -4,8 +4,16 @@ import Image from "next/image";
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
+import { 
+  CheckoutElementsProvider, 
+  PaymentElement,
+  LinkAuthenticationElement,
+  AddressElement,
+  ExpressCheckoutElement,
+  useCheckout 
+} from "@stripe/react-stripe-js/checkout";
 import { loadStripe } from "@stripe/stripe-js";
+import type { StripeCheckoutElementsOptions } from "@stripe/stripe-js";
 import { SiteFooter } from "../components/HomeSections";
 import { SiteNavbar } from "../components/SiteNavbar";
 import { useCart } from "../components/cart/CartContext";
@@ -19,42 +27,137 @@ const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ?? "";
 
 function CheckoutForm() {
-  const stripe = useStripe();
-  const elements = useElements();
+  const checkout = useCheckout();
   const [status, setStatus] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
+  const [email, setEmail] = useState<string>("");
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!stripe || !elements) {
+    if (!checkout) {
       return;
     }
 
     setSubmitting(true);
     setStatus("");
 
-    const result = await stripe.confirmPayment({
-      elements,
-      redirect: "if_required"
-    });
+    try {
+      // Load available actions
+      const loadActionsResult = await checkout.loadActions();
+      
+      if (loadActionsResult.error) {
+        setStatus(loadActionsResult.error.message ?? "Payment failed. Please try again.");
+        setSubmitting(false);
+        return;
+      }
 
-    if (result.error) {
-      setStatus(result.error.message ?? "Payment failed. Please try again.");
-    } else if (result.paymentIntent) {
-      setStatus(`Payment status: ${result.paymentIntent.status}`);
+      const { actions } = loadActionsResult;
+      
+      if (!actions) {
+        setStatus("Unable to process payment. Please try again.");
+        setSubmitting(false);
+        return;
+      }
+
+      // Confirm the payment using Checkout Sessions API
+      const confirmError = await actions.confirm();
+
+      if (confirmError) {
+        setStatus(confirmError.message ?? "Payment failed. Please try again.");
+      }
+      // On success, user will be redirected to return_url
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Payment failed. Please try again.");
+    } finally {
+      setSubmitting(false);
     }
-
-    setSubmitting(false);
   };
 
   return (
     <form onSubmit={onSubmit} className="checkout-form">
-      <PaymentElement />
-      <button className="btn btn-primary" style={{ marginTop: "1rem" }} type="submit" disabled={submitting}>
+      {/* Express Checkout for one-click payments */}
+      <div style={{ marginBottom: "1.5rem" }}>
+        <ExpressCheckoutElement 
+          options={{
+            buttonType: {
+              applePay: "buy",
+              googlePay: "buy",
+              paypal: "buynow"
+            }
+          }}
+        />
+      </div>
+
+      <div style={{ 
+        textAlign: "center", 
+        margin: "1.5rem 0",
+        position: "relative"
+      }}>
+        <span style={{
+          background: "var(--bg-dark)",
+          padding: "0 1rem",
+          position: "relative",
+          zIndex: 1,
+          color: "var(--warm-gray)"
+        }}>
+          Or pay with card
+        </span>
+        <div style={{
+          position: "absolute",
+          top: "50%",
+          left: 0,
+          right: 0,
+          height: "1px",
+          background: "var(--line)",
+          zIndex: 0
+        }} />
+      </div>
+
+      {/* Link Authentication for faster checkout */}
+      <div style={{ marginBottom: "1.5rem" }}>
+        <LinkAuthenticationElement 
+          onChange={(e) => {
+            if (e.value.email) {
+              setEmail(e.value.email);
+            }
+          }}
+        />
+      </div>
+
+      {/* Address Element for shipping/billing */}
+      <div style={{ marginBottom: "1.5rem" }}>
+        <AddressElement 
+          options={{
+            mode: "billing",
+            defaultValues: {
+              email: email || undefined
+            }
+          }}
+        />
+      </div>
+
+      {/* Payment Element with accordion layout */}
+      <PaymentElement 
+        options={{
+          layout: {
+            type: "accordion",
+            defaultCollapsed: false,
+            radios: true,
+            spacedAccordionItems: true
+          }
+        }}
+      />
+      
+      <button 
+        className="btn btn-primary" 
+        style={{ marginTop: "1.5rem", width: "100%" }} 
+        type="submit" 
+        disabled={submitting}
+      >
         {submitting ? "Processing..." : "Pay Securely"}
       </button>
-      {status ? <p className="status-text">{status}</p> : null}
+      {status ? <p className="status-text" style={{ marginTop: "1rem", color: "var(--ember)" }}>{status}</p> : null}
     </form>
   );
 }
@@ -100,9 +203,9 @@ export default function CheckoutPage() {
       return;
     }
 
-    const createIntent = async () => {
+    const createCheckoutSession = async () => {
       try {
-        const response = await fetch(`${apiBaseUrl}/api/payments/create-intent`, {
+        const response = await fetch(`${apiBaseUrl}/api/payments/create-checkout-session`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
@@ -115,35 +218,58 @@ export default function CheckoutPage() {
               itemCount: items.length,
               subtotalCents,
               taxCents: estimatedTaxCents,
-              taxRate: TAX_RATE
+              taxRate: TAX_RATE,
+              timestamp: new Date().toISOString()
             }
           })
         });
 
         if (!response.ok) {
-          throw new Error("Unable to initialize payment.");
+          throw new Error("Unable to initialize checkout.");
         }
 
-        const payload = (await response.json()) as { clientSecret: string };
+        const payload = (await response.json()) as { clientSecret: string; sessionId: string };
         setClientSecret(payload.clientSecret);
       } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : "Unable to initialize payment.");
+        setErrorMessage(error instanceof Error ? error.message : "Unable to initialize checkout.");
       }
     };
 
-    createIntent().catch(() => {
-      setErrorMessage("Unable to initialize payment.");
+    createCheckoutSession().catch(() => {
+      setErrorMessage("Unable to initialize checkout.");
     });
   }, [items, estimatedTotalCents, subtotalCents, estimatedTaxCents]);
 
-  const elementOptions = useMemo(
+  const checkoutOptions: StripeCheckoutElementsOptions | undefined = useMemo(
     () =>
       clientSecret
         ? {
             clientSecret,
             appearance: {
-              theme: "night" as const,
-              labels: "floating" as const
+              theme: "night",
+              labels: "floating",
+              variables: {
+                colorPrimary: "#d4491b",
+                colorBackground: "#1a1410",
+                colorText: "#f4eee8",
+                colorDanger: "#d4491b",
+                fontFamily: "system-ui, -apple-system, sans-serif",
+                spacingUnit: "4px",
+                borderRadius: "8px"
+              },
+              rules: {
+                ".Input": {
+                  border: "1px solid #3d2f28",
+                  boxShadow: "none"
+                },
+                ".Input:focus": {
+                  border: "1px solid #d4491b",
+                  boxShadow: "0 0 0 1px #d4491b"
+                },
+                ".Label": {
+                  color: "#bfa996"
+                }
+              }
             }
           }
         : undefined,
@@ -171,12 +297,12 @@ export default function CheckoutPage() {
         <article className="panel checkout-panel">
           <span className="eyebrow">Checkout</span>
           <h2>Secure Checkout</h2>
-          <p>Stripe Payment Element uses a server-created PaymentIntent for secure processing.</p>
+          <p>Powered by Stripe with Link for faster checkout, Express payment options, and secure card processing.</p>
           {errorMessage ? <p className="status-text">{errorMessage}</p> : null}
-          {elementOptions && stripePromise ? (
-            <Elements stripe={stripePromise} options={elementOptions}>
+          {checkoutOptions && stripePromise ? (
+            <CheckoutElementsProvider stripe={stripePromise} options={checkoutOptions}>
               <CheckoutForm />
-            </Elements>
+            </CheckoutElementsProvider>
           ) : !errorMessage ? (
             <p className="status-text">Preparing secure payment...</p>
           ) : null}

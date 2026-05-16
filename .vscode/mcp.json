@@ -1,0 +1,19 @@
+{
+  "servers": {
+    "stripe": {
+      "command": "npx",
+      "args": ["-y", "@stripe/mcp@latest"],
+      "env": {
+        "STRIPE_SECRET_KEY": "${input:stripe_secret_key}"
+      }
+    }
+  },
+  "inputs": [
+    {
+      "id": "stripe_secret_key",
+      "type": "promptString",
+      "description": "Stripe secret API key",
+      "password": true
+    }
+  ]
+}
