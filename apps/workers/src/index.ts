@@ -472,7 +472,8 @@ async function runDispatchQueueCycle() {
         id: true,
         status: true,
         updatedAt: true,
-        source: true
+        source: true,
+        externalOrderId: true
       }
     });
 
@@ -495,7 +496,7 @@ async function runDispatchQueueCycle() {
     const externalOrderId =
       typeof payload.orderExternalId === "string"
         ? payload.orderExternalId
-        : `${channel}:${order.id}`;
+        : order.externalOrderId ?? `${channel}:${order.id}`;
 
     try {
       const result = await adapters[channel].syncOrderStatus({

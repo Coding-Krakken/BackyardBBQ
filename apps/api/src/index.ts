@@ -2642,6 +2642,22 @@ app.post(
           ingestStatus = "failed";
           ingestReason = "invalid_order_payload";
         } else {
+          const externalOrderId =
+            parsedBody.data.orderExternalId ?? parsedDeliveryOrder.value.externalOrderId;
+
+          const existingOrder = await prisma.order.findFirst({
+            where: {
+              externalChannel: channel,
+              externalOrderId
+            },
+            select: { id: true }
+          });
+
+          if (existingOrder) {
+            orderId = existingOrder.id;
+            ingestStatus = "processed";
+            ingestReason = "duplicate_external_order_ignored";
+          } else {
           const locationId = await resolveLocationId(parsedDeliveryOrder.value.locationId);
           if (!locationId) {
             ingestStatus = "failed";
@@ -2667,6 +2683,8 @@ app.post(
                 customerId,
                 locationId,
                 source: parsedDeliveryOrder.value.source,
+                externalChannel: channel,
+                externalOrderId,
                 subtotalCents: parsedDeliveryOrder.value.subtotalCents,
                 taxCents: parsedDeliveryOrder.value.taxCents,
                 tipCents: parsedDeliveryOrder.value.tipCents,
@@ -2686,15 +2704,24 @@ app.post(
             orderId = createdOrder.id;
             ingestStatus = "processed";
           }
+          }
         }
       } else if (parsedBody.data.eventType.includes("status")) {
-        if (!parsedStatusUpdate.ok || !parsedStatusUpdate.value.internalOrderId) {
+        const externalOrderId = parsedBody.data.orderExternalId;
+        const internalOrderId = parsedStatusUpdate.ok ? parsedStatusUpdate.value.internalOrderId : undefined;
+
+        if (!parsedStatusUpdate.ok || (!internalOrderId && !externalOrderId)) {
           ingestStatus = "failed";
           ingestReason = "invalid_status_payload";
         } else {
           const updated = await prisma.order.updateMany({
             where: {
-              id: parsedStatusUpdate.value.internalOrderId
+              ...(internalOrderId
+                ? { id: internalOrderId }
+                : {
+                    externalChannel: channel,
+                    externalOrderId
+                  })
             },
             data: {
               status: parsedStatusUpdate.value.status
@@ -2703,7 +2730,18 @@ app.post(
 
           if (updated.count > 0) {
             ingestStatus = "processed";
-            orderId = parsedStatusUpdate.value.internalOrderId;
+            if (internalOrderId) {
+              orderId = internalOrderId;
+            } else if (externalOrderId) {
+              const matchedOrder = await prisma.order.findFirst({
+                where: {
+                  externalChannel: channel,
+                  externalOrderId
+                },
+                select: { id: true }
+              });
+              orderId = matchedOrder?.id;
+            }
           } else {
             ingestStatus = "failed";
             ingestReason = "order_not_found_for_status_update";
