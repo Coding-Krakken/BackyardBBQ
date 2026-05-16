@@ -11,28 +11,65 @@ export async function GET() {
 
   const events = await prisma.integrationEvent.findMany({
     where: { createdAt: { gte: since } },
-    select: { channel: true, status: true, createdAt: true }
+    select: { channel: true, status: true, createdAt: true, eventType: true, payload: true }
   });
 
-  const channelMap: Record<string, { processed: number; failed: number; deadLetter: number; latencies: number[] }> = {};
+  const channelMap: Record<
+    string,
+    {
+      processed: number;
+      failed: number;
+      deadLetter: number;
+      queued: number;
+      dispatchQueued: number;
+      dispatchProcessed: number;
+      latencies: number[];
+      lastCheck: string;
+    }
+  > = {};
+
   for (const e of events) {
-    if (!channelMap[e.channel]) channelMap[e.channel] = { processed: 0, failed: 0, deadLetter: 0, latencies: [] };
+    if (!channelMap[e.channel]) {
+      channelMap[e.channel] = {
+        processed: 0,
+        failed: 0,
+        deadLetter: 0,
+        queued: 0,
+        dispatchQueued: 0,
+        dispatchProcessed: 0,
+        latencies: [],
+        lastCheck: e.createdAt.toISOString()
+      };
+    }
+
     const c = channelMap[e.channel]!;
     if (e.status === "processed" || e.status === "completed") c.processed += 1;
     else if (e.status === "failed") { c.failed += 1; c.deadLetter += 1; }
     else if (e.status === "dead_letter") c.deadLetter += 1;
-    // Approximate latency as ms since creation (not meaningful but keeps shape correct)
-    c.latencies.push(Date.now() - e.createdAt.getTime());
+    else if (e.status === "queued" || e.status === "pending") c.queued += 1;
+
+    if (e.eventType === "delivery.dispatch.requested") {
+      if (e.status === "queued" || e.status === "pending") c.dispatchQueued += 1;
+      if (e.status === "processed") c.dispatchProcessed += 1;
+    }
+
+    const payload = e.payload as Record<string, unknown>;
+    const payloadLatency = typeof payload.latencyMs === "number" ? payload.latencyMs : undefined;
+    c.latencies.push(payloadLatency ?? Math.max(1, Date.now() - e.createdAt.getTime()));
+    c.lastCheck = e.createdAt.toISOString();
   }
 
   const data = Object.entries(channelMap).map(([channel, v]) => ({
     channel,
-    status: v.failed > v.processed ? "degraded" : "healthy",
+    status: v.deadLetter > 0 || v.failed > v.processed ? "degraded" : "healthy",
     processedCount: v.processed,
     failedCount: v.failed,
     deadLetterCount: v.deadLetter,
+    queuedCount: v.queued,
+    dispatchQueuedCount: v.dispatchQueued,
+    dispatchProcessedCount: v.dispatchProcessed,
     latencyMs: v.latencies.length > 0 ? Math.round(v.latencies.reduce((a, b) => a + b, 0) / v.latencies.length) : 0,
-    recordedAt: new Date().toISOString()
+    recordedAt: v.lastCheck
   }));
 
   return NextResponse.json({ data });

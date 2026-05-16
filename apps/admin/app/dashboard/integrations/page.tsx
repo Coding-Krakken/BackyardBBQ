@@ -17,6 +17,9 @@ interface ServiceHealth {
   processedCount: number;
   failedCount: number;
   deadLetterCount: number;
+  queuedCount: number;
+  dispatchQueuedCount: number;
+  dispatchProcessedCount: number;
 }
 
 interface Alert {
@@ -112,6 +115,9 @@ export default function IntegrationsPage() {
                 </div>
                 <div style={{ marginTop: '0.65rem', fontSize: '0.78rem', color: 'var(--warm-gray)' }}>
                   {service.processedCount} processed / {service.failedCount} failed / {service.deadLetterCount} dead-letter
+                </div>
+                <div style={{ marginTop: '0.4rem', fontSize: '0.78rem', color: 'var(--warm-gray)' }}>
+                  {service.queuedCount} queued / {service.dispatchQueuedCount} dispatch queued / {service.dispatchProcessedCount} dispatch processed
                 </div>
                 {/* Latency bar indicator */}
                 <div style={{ marginTop: '0.65rem', height: '3px', background: 'var(--line-soft)', borderRadius: '2px', overflow: 'hidden' }}>
