@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
-import { TAX_RATE } from '../config/constants';
+import { TAX_RATE } from '../../config/constants';
 
 export interface CartCustomization {
   name: string;

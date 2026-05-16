@@ -1,0 +1,42 @@
+.menuHero {
+  padding-top: 3rem;
+  padding-bottom: 2rem;
+  text-align: center;
+}
+
+.menuHeroContent {
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.heroEyebrow {
+  display: inline-block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-accent, #ff6b35);
+  margin-bottom: 1rem;
+}
+
+.menuHero h1 {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  line-height: 1.2;
+}
+
+.menuHero p {
+  font-size: 1.125rem;
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 1.6;
+}
+
+@media (max-width: 768px) {
+  .menuHero h1 {
+    font-size: 2rem;
+  }
+  
+  .menuHero p {
+    font-size: 1rem;
+  }
+}
