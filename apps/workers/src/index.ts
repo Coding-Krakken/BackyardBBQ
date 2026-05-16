@@ -4,15 +4,33 @@ import {
   deliveryChannels,
   type DeliveryChannel,
   type InboundOrderEnvelope,
+  type DeliveryProviderCredentials,
   type ProviderStatusSyncInput
 } from "@bbq/delivery-channels";
 
 const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
+function readChannelCredentials(channel: DeliveryChannel): DeliveryProviderCredentials {
+  const upper = channel.toUpperCase();
+
+  return {
+    apiKey: process.env[`${upper}_API_KEY`] ?? "",
+    apiSecret: process.env[`${upper}_API_SECRET`],
+    webhookSecret: process.env[`${upper}_WEBHOOK_SECRET`],
+    merchantId: process.env[`${upper}_MERCHANT_ID`],
+    storeId: process.env[`${upper}_STORE_ID`]
+  };
+}
+
 const adapters = createDeliveryChannelAdapters({
   retryPolicy: {
     maxAttempts: 3,
     backoffBaseMs: 140,
     backoffMultiplier: 2
+  },
+  credentialsByChannel: {
+    doordash: readChannelCredentials("doordash"),
+    ubereats: readChannelCredentials("ubereats"),
+    grubhub: readChannelCredentials("grubhub")
   }
 });
 const fallbackQueue = new Map<DeliveryChannel, InboundOrderEnvelope[]>();
