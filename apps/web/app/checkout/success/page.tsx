@@ -43,7 +43,7 @@ function CheckoutSuccessContent() {
     const verifySession = async () => {
       try {
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/payments/verify-session?session_id=${sessionId}`
+          `/api/payments/verify-session?session_id=${sessionId}`
         );
         
         if (response.ok) {
