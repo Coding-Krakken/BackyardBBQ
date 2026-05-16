@@ -281,6 +281,9 @@ export default function CustomerDashboardPage() {
                 <Link className="btn btn-ghost" href="/dashboard/profile">
                   Update Profile
                 </Link>
+                <Link className="btn btn-ghost" href="/dashboard/payment-methods">
+                  Manage Payment Methods
+                </Link>
               </div>
             </article>
           </div>

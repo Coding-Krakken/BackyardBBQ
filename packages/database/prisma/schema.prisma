@@ -74,6 +74,8 @@ enum CustomerRole {
 model Customer {
   id                    String            @id @default(cuid())
   email                 String            @unique
+  stripeCustomerId      String?           @unique
+  defaultPaymentMethodId String?
   passwordHash          String?
   firstName             String?
   lastName              String?
@@ -88,10 +90,27 @@ model Customer {
   orders                Order[]
   bookings              CateringBooking[]
   payments              PaymentTransaction[]
+  savedPaymentMethods   SavedPaymentMethod[]
   addresses             Address[]
   referralsSent         Referral[]        @relation("ReferrerRelation")
   referralsReceived     Referral[]        @relation("RefereeRelation")
   notifications         Notification[]
+}
+
+model SavedPaymentMethod {
+  id                    String   @id @default(cuid())
+  customerId            String
+  stripePaymentMethodId String   @unique
+  brand                 String
+  last4                 String
+  expMonth              Int
+  expYear               Int
+  isDefault             Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  customer              Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
 }
 
 model Location {
@@ -185,6 +204,8 @@ model PaymentTransaction {
   id                 String        @id @default(cuid())
   customerId         String?
   orderId            String?       @unique
+  bookingId          String?
+  paymentType        String        @default("order")
   stripePaymentIntentId String     @unique
   amountCents        Int
   currency           String        @default("usd")
@@ -193,6 +214,8 @@ model PaymentTransaction {
   updatedAt          DateTime      @updatedAt
   customer           Customer?     @relation(fields: [customerId], references: [id])
   order              Order?        @relation(fields: [orderId], references: [id])
+
+  @@index([bookingId])
 }
 
 model IntegrationEvent {

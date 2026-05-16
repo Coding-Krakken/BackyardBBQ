@@ -49,8 +49,43 @@ export async function GET(request: NextRequest) {
       prisma.cateringBooking.count({ where })
     ]);
 
+    const bookingIds = bookings.map((booking) => booking.id);
+    const successfulPayments = bookingIds.length
+      ? await prisma.paymentTransaction.findMany({
+          where: {
+            bookingId: { in: bookingIds },
+            status: "succeeded",
+          },
+          select: {
+            bookingId: true,
+            amountCents: true,
+            paymentType: true,
+          },
+        })
+      : [];
+
+    const depositPaidByBookingId = new Map<string, number>();
+    for (const payment of successfulPayments) {
+      if (!payment.bookingId || payment.paymentType !== "deposit") {
+        continue;
+      }
+      const current = depositPaidByBookingId.get(payment.bookingId) ?? 0;
+      depositPaidByBookingId.set(payment.bookingId, current + payment.amountCents);
+    }
+
+    const enrichedBookings = bookings.map((booking) => {
+      const depositPaidCents = depositPaidByBookingId.get(booking.id) ?? 0;
+      const depositDueCents = Math.max(0, (booking.depositCents ?? 0) - depositPaidCents);
+
+      return {
+        ...booking,
+        depositPaidCents,
+        depositDueCents,
+      };
+    });
+
     return NextResponse.json({
-      bookings,
+      bookings: enrichedBookings,
       pagination: {
         total,
         limit,

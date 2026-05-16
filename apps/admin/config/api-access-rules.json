@@ -24,8 +24,23 @@
     "/api/admin/payments/disputes": {
       "GET": ["owner", "admin", "accounting"]
     },
+    "/api/admin/payments/analytics": {
+      "GET": ["owner", "admin", "accounting"]
+    },
+    "/api/admin/payments/ops-metrics": {
+      "GET": ["owner", "admin", "accounting"]
+    },
+    "/api/admin/payments/disputes/[id]": {
+      "GET": ["owner", "admin", "accounting"]
+    },
+    "/api/admin/payments/disputes/[id]/evidence": {
+      "POST": ["owner", "admin", "accounting"]
+    },
     "/api/admin/payments/disputes/[id]/review": {
       "PATCH": ["owner", "admin"]
+    },
+    "/api/admin/payments/[transactionId]/refund": {
+      "POST": ["owner", "admin", "accounting"]
     },
     "/api/admin/accounting/daily-close": {
       "GET": ["owner", "admin", "accounting"]
@@ -69,6 +84,9 @@
     "/api/admin/customers/[id]": {
       "GET": ["owner", "admin", "manager"],
       "PATCH": ["owner", "admin"]
+    },
+    "/api/admin/customers/[id]/payments": {
+      "GET": ["owner", "admin", "manager", "accounting"]
     },
     "/api/admin/menu/items": {
       "GET": ["owner", "admin", "manager"],

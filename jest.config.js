@@ -15,7 +15,7 @@ const config = {
     "!apps/web/app/**/__tests__/**",
     "!apps/web/app/**/node_modules/**",
   ],
-  coverageThresholds: {
+  coverageThreshold: {
     global: {
       branches: 70,
       functions: 70,
@@ -27,6 +27,8 @@ const config = {
     "^.+\\.(ts|tsx)$": ["ts-jest", {
       tsconfig: {
         jsx: "react-jsx",
+        esModuleInterop: true,
+        types: ["jest", "@testing-library/jest-dom"],
       },
     }],
   },

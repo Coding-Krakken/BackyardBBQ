@@ -18,6 +18,8 @@ interface Booking {
   estimatedTotalCents?: number;
   depositCents?: number;
   finalPaymentCents?: number;
+  depositPaidCents?: number;
+  depositDueCents?: number;
   notes?: string;
   createdAt: string;
   updatedAt: string;
@@ -265,9 +267,20 @@ function BookingCard({
           {isExpanded ? "Hide Details" : "View Details"}
         </button>
         {booking.status === "approved" && (
-          <Link href="/catering" className="btn btn-ghost" style={{ flex: "1", minWidth: "120px" }}>
-            Modify Booking
-          </Link>
+          <>
+            {(booking.depositDueCents ?? booking.depositCents ?? 0) > 0 ? (
+              <Link
+                href={`/catering/bookings/${booking.id}/deposit`}
+                className="btn btn-primary"
+                style={{ flex: "1", minWidth: "160px" }}
+              >
+                Pay Deposit
+              </Link>
+            ) : null}
+            <Link href="/catering" className="btn btn-ghost" style={{ flex: "1", minWidth: "120px" }}>
+              Modify Booking
+            </Link>
+          </>
         )}
       </div>
 
@@ -334,6 +347,22 @@ function BookingCard({
                     </span>
                   </div>
                 )}
+                {typeof booking.depositPaidCents === "number" ? (
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ color: "var(--warm-gray)" }}>Deposit Paid</span>
+                    <span style={{ color: "var(--cream)", fontWeight: 500 }}>
+                      ${(booking.depositPaidCents / 100).toFixed(2)}
+                    </span>
+                  </div>
+                ) : null}
+                {typeof booking.depositDueCents === "number" ? (
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ color: "var(--warm-gray)" }}>Deposit Due</span>
+                    <span style={{ color: "var(--ember-soft)", fontWeight: 600 }}>
+                      ${(booking.depositDueCents / 100).toFixed(2)}
+                    </span>
+                  </div>
+                ) : null}
                 {booking.finalPaymentCents && (
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <span style={{ color: "var(--warm-gray)" }}>Final Payment</span>

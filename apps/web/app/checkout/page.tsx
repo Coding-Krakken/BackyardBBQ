@@ -7,19 +7,15 @@ import { useRouter } from "next/navigation";
 import { 
   CheckoutElementsProvider, 
   PaymentElement,
-  LinkAuthenticationElement,
-  AddressElement,
   ExpressCheckoutElement,
   useCheckout 
 } from "@stripe/react-stripe-js/checkout";
 import { loadStripe } from "@stripe/stripe-js";
-import type { StripeCheckoutElementsOptions } from "@stripe/stripe-js";
 import { SiteFooter } from "../components/HomeSections";
 import { SiteNavbar } from "../components/SiteNavbar";
 import { useCart } from "../components/cart/CartContext";
 import { businessInfo } from "../config/content";
 import { siteImages } from "../config/images";
-import { TAX_RATE } from "../config/constants";
 import type { CartItem } from "../components/cart/CartContext";
 
 const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim() ?? "";
@@ -27,44 +23,26 @@ const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ?? "";
 
 function CheckoutForm() {
-  const checkout = useCheckout();
+  const checkoutState = useCheckout();
   const [status, setStatus] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
-  const [email, setEmail] = useState<string>("");
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!checkout) {
+    if (checkoutState.type !== "success") {
       return;
     }
+
+    const { checkout } = checkoutState;
 
     setSubmitting(true);
     setStatus("");
 
     try {
-      // Load available actions
-      const loadActionsResult = await checkout.loadActions();
-      
-      if (loadActionsResult.error) {
-        setStatus(loadActionsResult.error.message ?? "Payment failed. Please try again.");
-        setSubmitting(false);
-        return;
-      }
-
-      const { actions } = loadActionsResult;
-      
-      if (!actions) {
-        setStatus("Unable to process payment. Please try again.");
-        setSubmitting(false);
-        return;
-      }
-
-      // Confirm the payment using Checkout Sessions API
-      const confirmError = await actions.confirm();
-
-      if (confirmError) {
-        setStatus(confirmError.message ?? "Payment failed. Please try again.");
+      const confirmResult = await checkout.confirm();
+      if (confirmResult.type === "error") {
+        setStatus(confirmResult.error.message ?? "Payment failed. Please try again.");
       }
       // On success, user will be redirected to return_url
     } catch (error) {
@@ -78,15 +56,7 @@ function CheckoutForm() {
     <form onSubmit={onSubmit} className="checkout-form">
       {/* Express Checkout for one-click payments */}
       <div style={{ marginBottom: "1.5rem" }}>
-        <ExpressCheckoutElement 
-          options={{
-            buttonType: {
-              applePay: "buy",
-              googlePay: "buy",
-              paypal: "buynow"
-            }
-          }}
-        />
+        <ExpressCheckoutElement onConfirm={() => undefined} />
       </div>
 
       <div style={{ 
@@ -114,36 +84,13 @@ function CheckoutForm() {
         }} />
       </div>
 
-      {/* Link Authentication for faster checkout */}
-      <div style={{ marginBottom: "1.5rem" }}>
-        <LinkAuthenticationElement 
-          onChange={(e) => {
-            if (e.value.email) {
-              setEmail(e.value.email);
-            }
-          }}
-        />
-      </div>
-
-      {/* Address Element for shipping/billing */}
-      <div style={{ marginBottom: "1.5rem" }}>
-        <AddressElement 
-          options={{
-            mode: "billing",
-            defaultValues: {
-              email: email || undefined
-            }
-          }}
-        />
-      </div>
-
       {/* Payment Element with accordion layout */}
       <PaymentElement 
         options={{
           layout: {
             type: "accordion",
             defaultCollapsed: false,
-            radios: true,
+            radios: "auto",
             spacedAccordionItems: true
           }
         }}
@@ -164,8 +111,9 @@ function CheckoutForm() {
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { state, dispatch, subtotalCents, estimatedTaxCents, estimatedTotalCents } = useCart();
+  const { state, isHydrated, subtotalCents, estimatedTaxCents } = useCart();
   const items = state.items;
+  const idempotencyKeyRef = useRef(`checkout-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(() => {
     if (!stripePromise) {
@@ -182,13 +130,17 @@ export default function CheckoutPage() {
 
   // Redirect if cart is empty
   useEffect(() => {
+    if (!isHydrated) {
+      return;
+    }
+
     if (items.length === 0) {
       router.push('/menu');
     }
-  }, [items.length, router]);
+  }, [isHydrated, items.length, router]);
 
   useEffect(() => {
-    if (initializedRef.current || items.length === 0) {
+    if (!isHydrated || initializedRef.current || items.length === 0) {
       return;
     }
     initializedRef.current = true;
@@ -211,14 +163,14 @@ export default function CheckoutPage() {
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
-            amountCents: estimatedTotalCents,
+            amountCents: subtotalCents,
             currency: "usd",
             metadata: {
               checkoutContext: "direct-web-order",
               itemCount: items.length,
               subtotalCents,
-              taxCents: estimatedTaxCents,
-              taxRate: TAX_RATE,
+              clientTaxCents: estimatedTaxCents,
+              idempotencyKey: idempotencyKeyRef.current,
               timestamp: new Date().toISOString()
             }
           })
@@ -238,9 +190,9 @@ export default function CheckoutPage() {
     createCheckoutSession().catch(() => {
       setErrorMessage("Unable to initialize checkout.");
     });
-  }, [items, estimatedTotalCents, subtotalCents, estimatedTaxCents]);
+  }, [isHydrated, items, subtotalCents, estimatedTaxCents]);
 
-  const checkoutOptions: StripeCheckoutElementsOptions | undefined = useMemo(
+  const checkoutOptions = useMemo(
     () =>
       clientSecret
         ? {
@@ -349,8 +301,8 @@ export default function CheckoutPage() {
               <span>${(subtotalCents / 100).toFixed(2)}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', color: 'var(--warm-gray)' }}>
-              <span>Est. Tax ({(TAX_RATE * 100).toFixed(0)}%):</span>
-              <span>${(estimatedTaxCents / 100).toFixed(2)}</span>
+              <span>Tax:</span>
+              <span>Calculated securely at checkout</span>
             </div>
             <div style={{ 
               display: 'flex', 
@@ -362,8 +314,8 @@ export default function CheckoutPage() {
               fontWeight: 'bold',
               color: 'var(--ember)'
             }}>
-              <span>Total:</span>
-              <span>${(estimatedTotalCents / 100).toFixed(2)}</span>
+              <span>Subtotal Before Tax:</span>
+              <span>${(subtotalCents / 100).toFixed(2)}</span>
             </div>
           </div>
           <div className="booking-contact" style={{ marginTop: '2rem' }}>

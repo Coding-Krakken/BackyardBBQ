@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { StatusBadge } from '@/components/StatusBadge';
+import { CustomerPaymentHistory } from '@/components/CustomerPaymentHistory';
 import Link from 'next/link';
 import { formatCurrency, formatDateShort } from '@/lib/utils';
 
@@ -164,6 +165,10 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
           </table>
         </div>
       )}
+
+      <div className="mt-lg">
+        <CustomerPaymentHistory customerId={customer.id} />
+      </div>
     </div>
   );
 }
