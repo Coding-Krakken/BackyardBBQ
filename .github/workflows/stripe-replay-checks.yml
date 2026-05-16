@@ -81,7 +81,7 @@ jobs:
 
       - name: Publish replay summary
         if: always()
-        run: npm run report:payments:integration -- --input-dir artifacts/stripe-replay
+        run: npm run report:payments:integration -- --input-dir artifacts/stripe-replay --require-files true --require-pass true
 
       - name: Upload replay artifacts
         if: always()

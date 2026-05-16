@@ -95,4 +95,133 @@ describe("DELETE /api/customer/payment-methods/[id]", () => {
       data: { defaultPaymentMethodId: "pm_2" },
     });
   });
+
+  it("deletes non-default method without reassigning defaults", async () => {
+    (getServerSession as jest.Mock).mockResolvedValue({ user: { id: "cust_1" } });
+
+    jest.spyOn(prisma.savedPaymentMethod, "findFirst").mockResolvedValue({
+      id: "spm_non_default",
+      customerId: "cust_1",
+      stripePaymentMethodId: "pm_non_default",
+      isDefault: false,
+    } as never);
+
+    jest.spyOn(prisma.customer, "findUnique").mockResolvedValue({
+      id: "cust_1",
+      stripeCustomerId: null,
+      defaultPaymentMethodId: "pm_other",
+    } as never);
+
+    const deleteMock = jest.fn().mockResolvedValue({ id: "spm_non_default" });
+    const findNextDefaultMock = jest.fn();
+    const updateManyMock = jest.fn();
+    const updateMock = jest.fn();
+    const updateCustomerMock = jest.fn();
+
+    jest.spyOn(prisma, "$transaction").mockImplementation(async (fn: any) => {
+      return fn({
+        savedPaymentMethod: {
+          delete: deleteMock,
+          findFirst: findNextDefaultMock,
+          updateMany: updateManyMock,
+          update: updateMock,
+        },
+        customer: {
+          update: updateCustomerMock,
+        },
+      });
+    });
+
+    const response = await DELETE(new Request("http://localhost"), {
+      params: Promise.resolve({ id: "spm_non_default" }),
+    });
+
+    const payload = await response.json();
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(deleteMock).toHaveBeenCalledWith({ where: { id: "spm_non_default" } });
+    expect(findNextDefaultMock).not.toHaveBeenCalled();
+    expect(updateManyMock).not.toHaveBeenCalled();
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(updateCustomerMock).not.toHaveBeenCalled();
+  });
+
+  it("clears customer default when deleting default with no replacement", async () => {
+    (getServerSession as jest.Mock).mockResolvedValue({ user: { id: "cust_1" } });
+
+    jest.spyOn(prisma.savedPaymentMethod, "findFirst").mockResolvedValue({
+      id: "spm_default",
+      customerId: "cust_1",
+      stripePaymentMethodId: "pm_default",
+      isDefault: true,
+    } as never);
+
+    jest.spyOn(prisma.customer, "findUnique").mockResolvedValue({
+      id: "cust_1",
+      stripeCustomerId: null,
+      defaultPaymentMethodId: "pm_default",
+    } as never);
+
+    const deleteMock = jest.fn().mockResolvedValue({ id: "spm_default" });
+    const findNextDefaultMock = jest.fn().mockResolvedValue(null);
+    const updateManyMock = jest.fn().mockResolvedValue({ count: 0 });
+    const updateMock = jest.fn();
+    const updateCustomerMock = jest.fn().mockResolvedValue({ id: "cust_1" });
+
+    jest.spyOn(prisma, "$transaction").mockImplementation(async (fn: any) => {
+      return fn({
+        savedPaymentMethod: {
+          delete: deleteMock,
+          findFirst: findNextDefaultMock,
+          updateMany: updateManyMock,
+          update: updateMock,
+        },
+        customer: {
+          update: updateCustomerMock,
+        },
+      });
+    });
+
+    const response = await DELETE(new Request("http://localhost"), {
+      params: Promise.resolve({ id: "spm_default" }),
+    });
+
+    const payload = await response.json();
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(updateCustomerMock).toHaveBeenCalledWith({
+      where: { id: "cust_1" },
+      data: { defaultPaymentMethodId: null },
+    });
+  });
+
+  it("returns 500 when transactional delete fails", async () => {
+    (getServerSession as jest.Mock).mockResolvedValue({ user: { id: "cust_1" } });
+
+    jest.spyOn(prisma.savedPaymentMethod, "findFirst").mockResolvedValue({
+      id: "spm_1",
+      customerId: "cust_1",
+      stripePaymentMethodId: "pm_1",
+      isDefault: false,
+    } as never);
+
+    jest.spyOn(prisma.customer, "findUnique").mockResolvedValue({
+      id: "cust_1",
+      stripeCustomerId: null,
+      defaultPaymentMethodId: "pm_other",
+    } as never);
+
+    jest
+      .spyOn(prisma, "$transaction")
+      .mockRejectedValue(new Error("Database unavailable") as never);
+
+    const response = await DELETE(new Request("http://localhost"), {
+      params: Promise.resolve({ id: "spm_1" }),
+    });
+
+    const payload = await response.json();
+    expect(response.status).toBe(500);
+    expect(payload.error).toBe("Failed to remove payment method");
+  });
 });

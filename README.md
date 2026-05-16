@@ -52,7 +52,11 @@ Enterprise-grade platform for Backyard BBQ King, with:
    - `npm run test:stripe:webhook-replay -- --event-id evt_123 --api-base-url http://localhost:4000`
    - `npm run test:stripe:dispute-replay -- --event-id evt_123 --api-base-url http://localhost:4000`
    - `npm run test:payments:integration -- --checkout-event-id evt_checkout --dispute-event-id evt_dispute --api-base-url http://localhost:4000`
+      - includes preflight validation for required Stripe env vars, event-id format (`evt_...`), URL/path shape, and admin role values
    - `npm run report:payments:integration -- --input-dir artifacts/stripe-replay`
+   - strict mode (fails when replay JSON files are missing): `npm run report:payments:integration -- --input-dir artifacts/stripe-replay --require-files true`
+   - strict pass mode (fails when replay checks do not pass): `npm run report:payments:integration -- --input-dir artifacts/stripe-replay --require-files true --require-pass true`
+   - script-level replay guardrail tests: `npm run test:payments:scripts`
 - Core payment quality gate command (same command used by CI): `npm run validate:payments:core`
 - Payment-focused coverage command: `npm run test:payments:coverage` (80% global threshold via `jest.payments.config.js`)
 - Payment coverage summary command: `npm run report:payments:coverage` (expects `coverage/coverage-summary.json` from prior coverage run)

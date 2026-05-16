@@ -35,6 +35,8 @@ jest.mock("next-auth", () => ({
 }));
 
 describe("POST /api/payments/create-checkout-session", () => {
+  const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
   beforeAll(() => {
     process.env.STRIPE_SECRET_KEY = "sk_test_123";
     process.env.NEXT_PUBLIC_SITE_URL = "https://example.com";
@@ -43,6 +45,10 @@ describe("POST /api/payments/create-checkout-session", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     clearRateLimitStore();
+  });
+
+  afterAll(() => {
+    warnSpy.mockRestore();
   });
 
   it("returns 400 for invalid payload", async () => {
@@ -77,6 +83,25 @@ describe("POST /api/payments/create-checkout-session", () => {
     expect(response.status).toBe(400);
     expect(payload.error).toBe("Subtotal validation failed");
     expect(payload.details.expectedSubtotalCents).toBe(1000);
+    expect(mockCheckoutSessionsCreate).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for invalid checkout metadata", async () => {
+    const request = new NextRequest("http://localhost/api/payments/create-checkout-session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        amountCents: 1000,
+        currency: "usd",
+        metadata: { idempotencyKey: "short", orderId: "ord_meta_invalid" },
+      }),
+    });
+
+    const response = await POST(request);
+    const payload = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(payload.error).toBe("Invalid checkout metadata");
     expect(mockCheckoutSessionsCreate).not.toHaveBeenCalled();
   });
 
@@ -213,6 +238,94 @@ describe("POST /api/payments/create-checkout-session", () => {
       }),
       { idempotencyKey: "checkout-idem-12345" }
     );
+  });
+
+  it("uses metadata idempotency key when request header key is missing", async () => {
+    (getServerSession as jest.Mock).mockResolvedValue(null);
+    mockCheckoutSessionsCreate.mockResolvedValue({
+      client_secret: "seti_client_secret_4",
+      id: "cs_test_101",
+    });
+
+    const request = new NextRequest("http://localhost/api/payments/create-checkout-session", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        amountCents: 2100,
+        currency: "usd",
+        metadata: {
+          subtotalCents: 2100,
+          idempotencyKey: "checkout-metadata-idem-123",
+          orderId: "ord_5",
+        },
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    expect(mockCheckoutSessionsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "payment",
+      }),
+      { idempotencyKey: "checkout-metadata-idem-123" }
+    );
+  });
+
+  it("logs a warning when client tax drift exceeds threshold", async () => {
+    (getServerSession as jest.Mock).mockResolvedValue(null);
+    mockCheckoutSessionsCreate.mockResolvedValue({
+      client_secret: "seti_client_secret_5",
+      id: "cs_test_102",
+    });
+
+    const request = new NextRequest("http://localhost/api/payments/create-checkout-session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        amountCents: 1000,
+        currency: "usd",
+        metadata: {
+          subtotalCents: 1000,
+          clientTaxCents: 20,
+          orderId: "ord_drift_warn",
+        },
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    expect(warnSpy).toHaveBeenCalledWith(
+      "Checkout tax drift warning",
+      expect.objectContaining({
+        subtotalCents: 1000,
+        clientTaxCents: 20,
+      })
+    );
+  });
+
+  it("returns 500 when Stripe session creation throws", async () => {
+    (getServerSession as jest.Mock).mockResolvedValue(null);
+    mockCheckoutSessionsCreate.mockRejectedValue(new Error("Stripe unavailable"));
+
+    const request = new NextRequest("http://localhost/api/payments/create-checkout-session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        amountCents: 2200,
+        currency: "usd",
+        metadata: { subtotalCents: 2200, orderId: "ord_6" },
+      }),
+    });
+
+    const response = await POST(request);
+    const payload = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(payload.error).toBe("Stripe unavailable");
   });
 
   it("enforces checkout rate limiting by IP", async () => {

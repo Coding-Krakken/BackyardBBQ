@@ -145,6 +145,35 @@ describe("POST /api/payments/create-catering-deposit-session", () => {
     expect(payload.error).toBe("Deposit amount is not configured");
   });
 
+  it("returns 404 when customer record is missing", async () => {
+    (getServerSession as jest.Mock).mockResolvedValue({ user: { id: "cust_404" } });
+
+    jest.spyOn(prisma.cateringBooking, "findFirst").mockResolvedValue({
+      id: "booking_404",
+      eventDate: new Date("2026-10-01T12:00:00.000Z"),
+      partySize: 20,
+      packageName: "Family Feast",
+      status: "approved",
+      depositCents: 10000,
+      estimatedTotalCents: 30000,
+    } as never);
+
+    jest.spyOn(prisma.customer, "findUnique").mockResolvedValue(null as never);
+
+    const request = new NextRequest("http://localhost/api/payments/create-catering-deposit-session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ bookingId: "booking_404" }),
+    });
+
+    const response = await POST(request);
+    const payload = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(payload.error).toBe("Customer not found");
+    expect(mockCheckoutSessionsCreate).not.toHaveBeenCalled();
+  });
+
   it("creates a checkout session with existing stripe customer", async () => {
     (getServerSession as jest.Mock).mockResolvedValue({ user: { id: "cust_1" } });
 
@@ -260,6 +289,62 @@ describe("POST /api/payments/create-catering-deposit-session", () => {
     expect(mockCheckoutSessionsCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         customer: "cus_new_2",
+      })
+    );
+  });
+
+  it("creates stripe customer without name when profile names are empty", async () => {
+    (getServerSession as jest.Mock).mockResolvedValue({ user: { id: "cust_3" } });
+
+    jest.spyOn(prisma.cateringBooking, "findFirst").mockResolvedValue({
+      id: "booking_new_2",
+      eventDate: new Date("2026-12-01T16:00:00.000Z"),
+      partySize: 24,
+      packageName: "Smoked Sampler",
+      status: "pending_approval",
+      depositCents: 12000,
+      estimatedTotalCents: null,
+    } as never);
+
+    jest.spyOn(prisma.customer, "findUnique").mockResolvedValue({
+      id: "cust_3",
+      email: "noname@example.com",
+      firstName: "",
+      lastName: "",
+      stripeCustomerId: null,
+    } as never);
+
+    jest
+      .spyOn(prisma.customer, "update")
+      .mockResolvedValue({ id: "cust_3", stripeCustomerId: "cus_new_3" } as never);
+
+    mockCustomersCreate.mockResolvedValue({ id: "cus_new_3" });
+    mockCheckoutSessionsCreate.mockResolvedValue({
+      client_secret: "seti_deposit_789",
+      id: "cs_deposit_789",
+    });
+
+    const request = new NextRequest("http://localhost/api/payments/create-catering-deposit-session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ bookingId: "booking_new_2" }),
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(200);
+
+    expect(mockCustomersCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: "noname@example.com",
+        name: undefined,
+      })
+    );
+
+    expect(mockCheckoutSessionsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          estimatedTotalCents: "0",
+        }),
       })
     );
   });

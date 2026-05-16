@@ -116,6 +116,8 @@ npm run dev:api
 npm run test:stripe:webhook-replay -- --event-id evt_123 --api-base-url http://localhost:4000
 ```
 
+- Script-level guardrail tests for replay tooling:
+	- `npm run test:payments:scripts`
 For dispute webhook flow verification, use the dispute replay checker. It validates duplicate suppression and confirms the replayed dispute is visible through the admin disputes API.
 
 ```bash
@@ -128,6 +130,8 @@ Unified integration command (runs checkout replay + dispute replay in sequence):
 ```bash
 npm run test:payments:integration -- --checkout-event-id evt_checkout --dispute-event-id evt_dispute --api-base-url http://localhost:4000
 ```
+
+This command now performs preflight validation before replay execution (required Stripe env vars, `evt_...` event id format, API URL format, route path shape, and allowed admin roles).
 
 Required environment variables:
 - `STRIPE_SECRET_KEY`
@@ -232,8 +236,8 @@ Manual replay workflow: `.github/workflows/stripe-replay-checks.yml`
 - `stripe-replay-checks` workflow runs on manual dispatch and validates:
 	- checkout webhook replay duplicate suppression (`checkout.session.completed` event)
 	- dispute webhook replay duplicate suppression + dispute persistence lookup via admin disputes API
-	- runs via `npm run test:payments:integration` for local/CI behavior parity
-	- uses `npm run report:payments:integration -- --input-dir artifacts/stripe-replay` to publish replay summary table
+	- runs via `npm run test:payments:integration` for local/CI behavior parity and shared preflight input validation
+	- uses `npm run report:payments:integration -- --input-dir artifacts/stripe-replay --require-files true --require-pass true` to publish replay summary table and fail when replay checks are not successful
 	- uploads `stripe-replay-artifacts` containing `checkout-replay.json` and `dispute-replay.json` outputs for audit and triage
 
 Required repository secrets for manual replay workflow:
