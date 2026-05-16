@@ -1,0 +1,39 @@
+#!/bin/sh
+
+# Pre-push hook: Run comprehensive validation before pushing to remote
+# Equivalent to CI/CD checks, but running locally
+
+echo "🔍 Running pre-push validation..."
+echo ""
+
+# Step 1: Payment quality validation
+echo "📋 Running payment quality checks..."
+npm run validate:payments:core
+if [ $? -ne 0 ]; then
+  echo "❌ Payment quality validation failed"
+  exit 1
+fi
+echo "✅ Payment quality checks passed"
+echo ""
+
+# Step 2: Admin guardrails validation
+echo "🔒 Running admin guardrails..."
+npm run validate:admin
+if [ $? -ne 0 ]; then
+  echo "❌ Admin guardrails validation failed"
+  exit 1
+fi
+echo "✅ Admin guardrails passed"
+echo ""
+
+# Step 3: E2E smoke tests (public, no auth required)
+echo "🧪 Running E2E smoke tests..."
+npm run test:e2e:smoke
+if [ $? -ne 0 ]; then
+  echo "❌ E2E smoke tests failed"
+  exit 1
+fi
+echo "✅ E2E smoke tests passed"
+echo ""
+
+echo "✨ All pre-push validations passed! Pushing to remote..."

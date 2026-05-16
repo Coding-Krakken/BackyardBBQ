@@ -1,0 +1,4 @@
+{
+  "apps/web/**/*.{ts,tsx,js,jsx}": "npm run lint -w @bbq/web",
+  "apps/admin/**/*.{ts,tsx,js,jsx}": "npm run lint -w @bbq/admin"
+}

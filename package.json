@@ -8,6 +8,7 @@
     "packages/*"
   ],
   "scripts": {
+    "prepare": "husky",
     "dev": "turbo run dev --parallel",
     "dev:web": "npm run dev -w @bbq/web",
     "dev:admin": "npm run dev -w @bbq/admin",
@@ -37,13 +38,15 @@
     "analyze": "cross-env ANALYZE=true turbo run build --filter=@bbq/web"
   },
   "devDependencies": {
+    "@playwright/test": "^1.55.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/jest": "^30.0.0",
-    "@playwright/test": "^1.55.0",
+    "husky": "^9.1.7",
     "identity-obj-proxy": "^3.0.0",
     "jest": "^30.4.2",
     "jest-environment-jsdom": "^30.4.1",
+    "lint-staged": "^17.0.5",
     "ts-jest": "^29.4.9",
     "tsx": "^4.19.1",
     "turbo": "^2.0.12",
