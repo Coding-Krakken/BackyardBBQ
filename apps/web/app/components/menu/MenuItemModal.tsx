@@ -51,7 +51,7 @@ export function MenuItemModal({ item, onClose }: MenuItemModalProps) {
   const handleAddToCart = () => {
     const selectedCustomizationsList: CartCustomization[] = Array.from(selectedCustomizations)
       .map(idx => customizations[idx])
-      .filter(Boolean);
+      .filter((c): c is CartCustomization => c !== undefined);
 
     dispatch({
       type: 'ADD_ITEM',

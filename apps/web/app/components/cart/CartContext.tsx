@@ -49,10 +49,13 @@ function cartReducer(state: CartState, action: CartAction): CartState {
       
       if (existingIndex >= 0) {
         const newItems = [...state.items];
-        newItems[existingIndex] = {
-          ...newItems[existingIndex],
-          quantity: newItems[existingIndex].quantity + action.payload.quantity
-        };
+        const existingItem = newItems[existingIndex];
+        if (existingItem) {
+          newItems[existingIndex] = {
+            ...existingItem,
+            quantity: existingItem.quantity + action.payload.quantity
+          };
+        }
         return { ...state, items: newItems, isOpen: true };
       }
       
