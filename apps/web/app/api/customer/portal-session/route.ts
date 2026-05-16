@@ -6,7 +6,7 @@ import { prisma } from "../../../../lib/prisma";
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim();
 const stripe = stripeSecretKey
-  ? new Stripe(stripeSecretKey, { apiVersion: "2024-06-20" })
+  ? new Stripe(stripeSecretKey, { apiVersion: "2026-04-22.dahlia" })
   : null;
 
 export async function POST(request: Request) {

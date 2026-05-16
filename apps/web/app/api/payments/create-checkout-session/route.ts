@@ -7,7 +7,7 @@ import { prisma } from "../../../../lib/prisma";
 import { checkRateLimit } from "../../../../lib/rate-limit";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
-  apiVersion: "2024-06-20",
+  apiVersion: "2026-04-22.dahlia",
 });
 
 const DEFAULT_TAX_RATE = 0.08;
@@ -191,11 +191,10 @@ export async function POST(request: NextRequest) {
     // Compute tax server-side (Syracuse, NY: 8% on prepared food)
     const taxCents = Math.round(lineItemAmountCents * SERVER_TAX_RATE);
 
-    // Create Checkout Session with ui_mode: "custom" for PaymentElement / ExpressCheckoutElement
-    // Note: "custom" is valid per the Stripe API but not yet in the stripe@16 SDK types
+    // Create Checkout Session with ui_mode: "elements" for PaymentElement / ExpressCheckoutElement
     const checkoutSession = await stripe.checkout.sessions.create(
       {
-        ui_mode: "custom" as Stripe.Checkout.SessionCreateParams.UiMode,
+        ui_mode: "elements",
         mode: "payment",
         customer: stripeCustomerId,
         line_items: [
