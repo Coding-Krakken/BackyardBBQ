@@ -31,6 +31,9 @@ export default function OrdersPage() {
   const [selectedOrder, setSelectedOrder] = useState<string | null>(null);
   const [newStatus, setNewStatus] = useState<string>('');
   const [isUpdating, setIsUpdating] = useState(false);
+  const [dispatchOrderId, setDispatchOrderId] = useState<string | null>(null);
+  const [dispatchChannel, setDispatchChannel] = useState<'doordash' | 'ubereats' | 'grubhub'>('doordash');
+  const [isDispatching, setIsDispatching] = useState(false);
 
   const limit = 20;
   const offset = (page - 1) * limit;
@@ -70,6 +73,30 @@ export default function OrdersPage() {
       addToast({ type: 'error', message: 'An error occurred' });
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const handleDispatch = async () => {
+    if (!dispatchOrderId) return;
+    setIsDispatching(true);
+    try {
+      const response = await fetch(`/api/admin/orders/${dispatchOrderId}/dispatch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel: dispatchChannel, priority: 'normal' }),
+      });
+
+      if (response.ok) {
+        addToast({ type: 'success', message: `Dispatch queued via ${dispatchChannel.toUpperCase()}` });
+        await mutate();
+        setDispatchOrderId(null);
+      } else {
+        addToast({ type: 'error', message: 'Failed to queue dispatch' });
+      }
+    } catch {
+      addToast({ type: 'error', message: 'Dispatch request failed' });
+    } finally {
+      setIsDispatching(false);
     }
   };
 
@@ -132,6 +159,17 @@ export default function OrdersPage() {
                     <button className="btn btn-secondary btn-xs" onClick={() => { setSelectedOrder(row.id); setNewStatus(row.status); }}>
                       Update Status
                     </button>
+                    {(row.status !== 'completed' && row.status !== 'cancelled') ? (
+                      <button
+                        className="btn btn-ghost btn-xs"
+                        onClick={() => {
+                          setDispatchOrderId(row.id);
+                          setDispatchChannel('doordash');
+                        }}
+                      >
+                        Dispatch
+                      </button>
+                    ) : null}
                   </div>
                 ),
               },
@@ -162,6 +200,34 @@ export default function OrdersPage() {
                 <button className="btn btn-ghost btn-sm" onClick={() => { setSelectedOrder(null); setNewStatus(''); }} disabled={isUpdating}>Cancel</button>
                 <button className="btn btn-primary btn-sm" onClick={handleStatusUpdate} disabled={isUpdating}>
                   {isUpdating ? 'Updating...' : 'Update'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Dispatch Dialog */}
+        {dispatchOrderId && (
+          <div className="overlay">
+            <div className="overlay-backdrop" onClick={() => setDispatchOrderId(null)} />
+            <div className="modal modal-sm">
+              <h3 className="modal-title">Queue Delivery Dispatch</h3>
+              <p className="text-muted mb-md">
+                Select the delivery provider for this order dispatch request.
+              </p>
+              <select
+                className="select"
+                value={dispatchChannel}
+                onChange={(event) => setDispatchChannel(event.target.value as 'doordash' | 'ubereats' | 'grubhub')}
+              >
+                <option value="doordash">DoorDash</option>
+                <option value="ubereats">UberEats</option>
+                <option value="grubhub">Grubhub</option>
+              </select>
+              <div className="modal-actions">
+                <button className="btn btn-ghost btn-sm" onClick={() => setDispatchOrderId(null)} disabled={isDispatching}>Cancel</button>
+                <button className="btn btn-primary btn-sm" onClick={handleDispatch} disabled={isDispatching}>
+                  {isDispatching ? 'Queueing...' : 'Queue Dispatch'}
                 </button>
               </div>
             </div>

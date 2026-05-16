@@ -3,19 +3,29 @@ import {
   type DeliveryProviderClient,
   type DeliveryProviderCredentials,
   type InboundWebhookValidationInput,
+  performProviderRequest,
   type ProviderHealthSnapshot,
   type ProviderInboundOrder,
   type ProviderMenuSnapshot,
-  type ProviderStatusSyncInput
+  type ProviderStatusSyncInput,
+  verifyWebhookHmac
 } from "./base-client";
 
 export class GrubhubClient implements DeliveryProviderClient {
   readonly channel = "grubhub" as const;
 
-  constructor(private readonly credentials: DeliveryProviderCredentials) {}
+  private readonly baseUrl: string;
+
+  constructor(private readonly credentials: DeliveryProviderCredentials) {
+    this.baseUrl = process.env.GRUBHUB_API_BASE_URL?.trim() || "https://api-gtm.grubhub.com";
+  }
 
   async verifyWebhookSignature(input: InboundWebhookValidationInput): Promise<boolean> {
-    return Boolean(input.signature && this.credentials.webhookSecret);
+    return verifyWebhookHmac({
+      rawBody: input.rawBody,
+      signature: input.signature,
+      secret: this.credentials.webhookSecret
+    });
   }
 
   async parseInboundOrder(payload: Record<string, unknown>): Promise<ProviderInboundOrder> {
@@ -34,14 +44,67 @@ export class GrubhubClient implements DeliveryProviderClient {
   }
 
   async syncOrderStatus(_input: ProviderStatusSyncInput): Promise<void> {
-    return;
+    if (!this.credentials.apiKey || !this.credentials.storeId) {
+      return;
+    }
+
+    await performProviderRequest({
+      url: `${this.baseUrl}/restaurants/${encodeURIComponent(this.credentials.storeId)}/orders/${encodeURIComponent(_input.externalOrderId)}/status`,
+      method: "POST",
+      apiKey: this.credentials.apiKey,
+      body: {
+        status: _input.status,
+        reason: _input.reason,
+        occurredAt: _input.occurredAt
+      }
+    });
   }
 
   async publishMenuSnapshot(_snapshot: ProviderMenuSnapshot): Promise<void> {
-    return;
+    if (!this.credentials.apiKey || !this.credentials.storeId) {
+      return;
+    }
+
+    await performProviderRequest({
+      url: `${this.baseUrl}/restaurants/${encodeURIComponent(this.credentials.storeId)}/menu`,
+      method: "PUT",
+      apiKey: this.credentials.apiKey,
+      body: {
+        locationId: _snapshot.locationId,
+        publishedAt: _snapshot.publishedAt,
+        items: _snapshot.items
+      }
+    });
   }
 
   async checkHealth(): Promise<ProviderHealthSnapshot> {
-    return buildSimulatedHealth(this.channel);
+    if (!this.credentials.apiKey) {
+      return {
+        healthy: false,
+        latencyMs: 0,
+        reason: "Grubhub credentials not configured"
+      };
+    }
+
+    const start = Date.now();
+    try {
+      await performProviderRequest({
+        url: `${this.baseUrl}/health`,
+        method: "GET",
+        apiKey: this.credentials.apiKey
+      });
+
+      return {
+        healthy: true,
+        latencyMs: Date.now() - start
+      };
+    } catch {
+      const fallback = buildSimulatedHealth(this.channel);
+      return {
+        healthy: false,
+        latencyMs: Date.now() - start || fallback.latencyMs,
+        reason: "Grubhub health request failed"
+      };
+    }
   }
 }

@@ -10,63 +10,55 @@ import { useToast } from '@/components/Toast';
 import { fetcher, formatDate } from '@/lib/utils';
 
 interface ServiceHealth {
-  name: string;
+  channel: string;
   status: 'healthy' | 'degraded' | 'down';
   latencyMs: number;
-  lastCheck: string;
+  recordedAt: string;
+  processedCount: number;
+  failedCount: number;
+  deadLetterCount: number;
 }
 
 interface Alert {
-  id: string;
-  service: string;
+  channel: string;
   message: string;
-  severity: string;
-  createdAt: string;
-  acknowledged: boolean;
+  severity: 'critical' | 'warning' | 'info';
 }
 
 interface DeadLetter {
   id: string;
-  queue: string;
-  payload: string;
-  error: string;
+  channel: string;
+  eventType: string;
+  payload: {
+    reason?: string;
+    orderExternalId?: string;
+    retriedAt?: string;
+  };
   createdAt: string;
 }
 
 export default function IntegrationsPage() {
   const { addToast } = useToast();
 
-  const { data: healthData } = useSWR<{ services: ServiceHealth[] }>(
+  const { data: healthData } = useSWR<{ data: ServiceHealth[] }>(
     '/api/admin/integrations/health',
     fetcher,
     { refreshInterval: 30000 }
   );
 
-  const { data: alertsData, mutate: mutateAlerts } = useSWR<{ data: Alert[] }>(
+  const { data: alertsData } = useSWR<{ alerts: Alert[] }>(
     '/api/admin/integrations/alerts',
     fetcher
   );
 
   const { data: dlqData, mutate: mutateDLQ } = useSWR<{ data: DeadLetter[] }>(
-    '/api/admin/integrations/dead-letters',
+    '/api/admin/integrations/dead-letter',
     fetcher
   );
 
-  const acknowledgeAlert = async (alertId: string) => {
-    try {
-      const response = await fetch(`/api/admin/integrations/alerts/${alertId}/acknowledge`, { method: 'POST' });
-      if (response.ok) {
-        addToast({ type: 'success', message: 'Alert acknowledged' });
-        await mutateAlerts();
-      }
-    } catch {
-      addToast({ type: 'error', message: 'Failed to acknowledge alert' });
-    }
-  };
-
   const retryDeadLetter = async (id: string) => {
     try {
-      const response = await fetch(`/api/admin/integrations/dead-letters/${id}/retry`, { method: 'POST' });
+      const response = await fetch(`/api/admin/integrations/dead-letter/${id}/retry`, { method: 'PATCH' });
       if (response.ok) {
         addToast({ type: 'success', message: 'Message retried' });
         await mutateDLQ();
@@ -92,7 +84,7 @@ export default function IntegrationsPage() {
 
         {/* Service Health */}
         <div className="grid-cards grid-cards-3 mb-xl">
-          {(healthData?.services ?? []).length === 0 ? (
+          {(healthData?.data ?? []).length === 0 ? (
             <div className="panel" style={{ gridColumn: '1 / -1' }}>
               <div className="empty-state">
                 <div className="empty-state-icon">🔌</div>
@@ -100,10 +92,10 @@ export default function IntegrationsPage() {
               </div>
             </div>
           ) : (
-            (healthData?.services ?? []).map((service) => (
-              <div key={service.name} className="card">
+            (healthData?.data ?? []).map((service) => (
+              <div key={service.channel} className="card">
                 <div className="flex-between mb-sm">
-                  <h4>{service.name}</h4>
+                  <h4>{service.channel.toUpperCase()}</h4>
                   <span className={`badge ${getStatusColor(service.status)}`}>{service.status}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.5rem' }}>
@@ -115,8 +107,11 @@ export default function IntegrationsPage() {
                   </div>
                   <div style={{ flex: 1 }}>
                     <div className="eyebrow">Last Check</div>
-                    <div className="text-muted" style={{ fontSize: '0.78rem' }}>{formatDate(service.lastCheck)}</div>
+                    <div className="text-muted" style={{ fontSize: '0.78rem' }}>{formatDate(service.recordedAt)}</div>
                   </div>
+                </div>
+                <div style={{ marginTop: '0.65rem', fontSize: '0.78rem', color: 'var(--warm-gray)' }}>
+                  {service.processedCount} processed / {service.failedCount} failed / {service.deadLetterCount} dead-letter
                 </div>
                 {/* Latency bar indicator */}
                 <div style={{ marginTop: '0.65rem', height: '3px', background: 'var(--line-soft)', borderRadius: '2px', overflow: 'hidden' }}>
@@ -138,19 +133,12 @@ export default function IntegrationsPage() {
           <h4 className="mb-md">Active Alerts</h4>
           <DataTable
             columns={[
-              { header: 'Service', accessor: (row: Alert) => row.service },
+              { header: 'Service', accessor: (row: Alert) => row.channel.toUpperCase() },
               { header: 'Message', accessor: (row: Alert) => row.message },
               { header: 'Severity', accessor: (row: Alert) => <StatusBadge status={row.severity} /> },
-              { header: 'Time', accessor: (row: Alert) => formatDate(row.createdAt) },
-              { header: 'Actions', accessor: (row: Alert) => (
-                !row.acknowledged ? (
-                  <button className="btn btn-secondary btn-xs" onClick={() => acknowledgeAlert(row.id)}>Acknowledge</button>
-                ) : (
-                  <span className="text-muted">Acknowledged</span>
-                )
-              )},
+              { header: 'Action', accessor: () => <span className="text-muted">Automatic</span> },
             ]}
-            data={alertsData?.data ?? []}
+            data={alertsData?.alerts ?? []}
           />
         </div>
 
@@ -160,10 +148,11 @@ export default function IntegrationsPage() {
           <DataTable
             columns={[
               { header: 'ID', accessor: (row: DeadLetter) => row.id.slice(0, 8) },
-              { header: 'Queue', accessor: (row: DeadLetter) => row.queue },
+              { header: 'Channel', accessor: (row: DeadLetter) => row.channel.toUpperCase() },
+              { header: 'Event', accessor: (row: DeadLetter) => row.eventType },
               { header: 'Error', accessor: (row: DeadLetter) => (
                 <span style={{ maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
-                  {row.error}
+                  {row.payload.reason ?? 'Unknown error'}
                 </span>
               )},
               { header: 'Time', accessor: (row: DeadLetter) => formatDate(row.createdAt) },

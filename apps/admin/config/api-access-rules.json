@@ -9,6 +9,9 @@
     "/api/admin/orders/[id]/status": {
       "PATCH": ["owner", "admin", "manager", "staff"]
     },
+    "/api/admin/orders/[id]/dispatch": {
+      "POST": ["owner", "admin", "manager", "staff"]
+    },
     "/api/admin/catering/bookings": {
       "GET": ["owner", "admin", "manager", "staff"]
     },

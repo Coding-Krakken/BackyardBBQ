@@ -125,6 +125,9 @@ model Location {
   menuItems      MenuItem[]
   orders         Order[]
   bookings       CateringBooking[]
+  channelCredentials DeliveryChannelCredential[]
+  channelStores    DeliveryChannelStore[]
+  settlementBatches DeliverySettlementBatch[]
 }
 
 model MenuItem {
@@ -153,12 +156,19 @@ model Order {
   locationId        String
   source            OrderSource
   status            OrderStatus          @default(pending)
+  fulfillmentMode   String               @default("delivery")
+  requestedFulfillmentAt DateTime?
   subtotalCents     Int
   taxCents          Int                  @default(0)
   tipCents          Int                  @default(0)
   totalCents        Int
   currency          String               @default("usd")
   stripeIntentId    String?
+  externalChannel   String?
+  externalOrderId   String?
+  deliveryStatus    String?
+  deliveryTrackingUrl String?
+  deliveryEtaAt     DateTime?
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
   customer          Customer?            @relation(fields: [customerId], references: [id])
@@ -166,6 +176,86 @@ model Order {
   items             OrderItem[]
   payment           PaymentTransaction?
   integrationEvents IntegrationEvent[]
+  settlementLines   DeliverySettlementLine[]
+
+  @@unique([externalChannel, externalOrderId])
+}
+
+model DeliveryChannelCredential {
+  id              String   @id @default(cuid())
+  locationId      String
+  channel         String
+  authType        String   @default("api_key")
+  apiKeyEncrypted String
+  apiSecretEncrypted String?
+  webhookSecretEncrypted String?
+  metadata        Json?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  location        Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@unique([locationId, channel])
+  @@index([channel, isActive])
+}
+
+model DeliveryChannelStore {
+  id              String   @id @default(cuid())
+  locationId      String
+  channel         String
+  externalStoreId String
+  externalName    String?
+  metadata        Json?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  location        Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@unique([channel, externalStoreId])
+  @@unique([locationId, channel])
+}
+
+model DeliverySettlementBatch {
+  id                String   @id @default(cuid())
+  locationId        String
+  channel           String
+  externalBatchId   String
+  periodStart       DateTime
+  periodEnd         DateTime
+  grossCents        Int      @default(0)
+  feesCents         Int      @default(0)
+  adjustmentsCents  Int      @default(0)
+  netPayoutCents    Int      @default(0)
+  payoutAt          DateTime?
+  status            String   @default("pending")
+  metadata          Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  location          Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  lines             DeliverySettlementLine[]
+
+  @@unique([channel, externalBatchId])
+  @@index([locationId, periodStart, periodEnd])
+}
+
+model DeliverySettlementLine {
+  id                String   @id @default(cuid())
+  settlementBatchId String
+  orderId           String?
+  externalOrderId   String
+  grossCents        Int      @default(0)
+  feesCents         Int      @default(0)
+  adjustmentsCents  Int      @default(0)
+  netCents          Int      @default(0)
+  metadata          Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  settlementBatch   DeliverySettlementBatch @relation(fields: [settlementBatchId], references: [id], onDelete: Cascade)
+  order             Order?   @relation(fields: [orderId], references: [id])
+
+  @@index([settlementBatchId])
+  @@index([orderId])
+  @@index([externalOrderId])
 }
 
 model OrderItem {
