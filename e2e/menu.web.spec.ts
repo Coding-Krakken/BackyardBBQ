@@ -13,7 +13,7 @@ test.describe("Web menu experience", () => {
     await page.goto("/menu", { waitUntil: "domcontentloaded" });
 
     await page.getByRole("button", { name: /Smoked Brisket/i }).first().click();
-    await expect(page.getByRole("heading", { name: "Smoked Brisket" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Smoked Brisket" }).nth(1)).toBeVisible();
     await expect(page.getByRole("button", { name: /Add to Cart/i })).toBeVisible();
   });
 });
