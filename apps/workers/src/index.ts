@@ -7,17 +7,34 @@ import {
   type DeliveryProviderCredentials,
   type ProviderStatusSyncInput
 } from "@bbq/delivery-channels";
+import { deliveryProviderCredentialSchema } from "@bbq/domain";
 
 const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
 function readChannelCredentials(channel: DeliveryChannel): DeliveryProviderCredentials {
   const upper = channel.toUpperCase();
 
-  return {
+  const candidate: DeliveryProviderCredentials = {
     apiKey: process.env[`${upper}_API_KEY`] ?? "",
     apiSecret: process.env[`${upper}_API_SECRET`],
     webhookSecret: process.env[`${upper}_WEBHOOK_SECRET`],
     merchantId: process.env[`${upper}_MERCHANT_ID`],
-    storeId: process.env[`${upper}_STORE_ID`]
+    storeId: process.env[`${upper}_STORE_ID`],
+    environment:
+      process.env[`${upper}_ENVIRONMENT`] === "production" ? "production" : "sandbox"
+  };
+
+  const parsed = deliveryProviderCredentialSchema.safeParse(candidate);
+  if (parsed.success) {
+    return parsed.data;
+  }
+
+  return {
+    apiKey: candidate.apiKey,
+    apiSecret: candidate.apiSecret,
+    webhookSecret: candidate.webhookSecret,
+    merchantId: candidate.merchantId,
+    storeId: candidate.storeId,
+    environment: candidate.environment
   };
 }
 
@@ -507,9 +524,15 @@ async function runDispatchQueueCycle() {
         : order.externalOrderId ?? `${channel}:${order.id}`;
 
     try {
-      const result = await adapters[channel].syncOrderStatus({
+      const result = await adapters[channel].dispatchOrder({
         externalOrderId,
-        status: "accepted",
+        correlationId,
+        priority:
+          typeof payload.priority === "string" && payload.priority === "high"
+            ? "high"
+            : "normal",
+        orderTotalCents:
+          typeof payload.amountCents === "number" ? payload.amountCents : undefined,
         occurredAt: new Date().toISOString()
       });
 
@@ -604,6 +627,18 @@ async function runOrderActionQueueCycle() {
       typeof payload.mappedStatus === "string"
         ? (payload.mappedStatus as ProviderStatusSyncInput["status"])
         : undefined;
+    const action =
+      typeof payload.action === "string" &&
+      ["accept", "reject", "cancel", "preparing", "ready", "out_for_delivery", "delivered"].includes(payload.action)
+        ? (payload.action as
+            | "accept"
+            | "reject"
+            | "cancel"
+            | "preparing"
+            | "ready"
+            | "out_for_delivery"
+            | "delivered")
+        : undefined;
     const orderExternalId =
       typeof payload.orderExternalId === "string"
         ? payload.orderExternalId
@@ -611,7 +646,7 @@ async function runOrderActionQueueCycle() {
     const attempts = typeof payload.attempts === "number" ? payload.attempts : 0;
     const maxAttempts = 5;
 
-    if (!mappedStatus || !orderExternalId) {
+    if (!mappedStatus || !orderExternalId || !action) {
       await prisma.integrationEvent.update({
         where: { id: actionEvent.id },
         data: {
@@ -628,10 +663,11 @@ async function runOrderActionQueueCycle() {
     }
 
     try {
-      const result = await adapters[channel].syncOrderStatus({
+      const result = await adapters[channel].sendOrderAction({
         externalOrderId: orderExternalId,
-        status: mappedStatus,
+        action,
         reason: typeof payload.reason === "string" ? payload.reason : undefined,
+        correlationId,
         occurredAt: new Date().toISOString()
       });
 

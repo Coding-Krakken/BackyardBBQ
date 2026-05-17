@@ -839,6 +839,84 @@ function hasDeliveryWebhookSignature(input: {
   });
 }
 
+function getWebhookRawBody(request: unknown, fallbackBody: unknown) {
+  const rawBody = (request as { rawBody?: unknown }).rawBody;
+  if (typeof rawBody === "string") {
+    return rawBody;
+  }
+
+  return typeof fallbackBody === "string" ? fallbackBody : JSON.stringify(fallbackBody ?? {});
+}
+
+async function queueDeliveryWebhookEvent(input: {
+  channel: (typeof integrationChannels)[number];
+  eventType: string;
+  eventId: string;
+  correlationId: string;
+  orderId?: string;
+  payload: Record<string, unknown>;
+}) {
+  if (!hasDatabaseUrl) {
+    return {
+      duplicate: false,
+      eventId: `demo-${input.channel}-${input.eventId}`,
+      createdAt: new Date().toISOString()
+    };
+  }
+
+  const duplicate = await prisma.integrationEvent.findFirst({
+    where: {
+      channel: input.channel,
+      eventType: input.eventType,
+      createdAt: {
+        gte: new Date(Date.now() - 24 * 60 * 60 * 1000)
+      },
+      payload: {
+        path: ["eventId"],
+        equals: input.eventId
+      }
+    },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      createdAt: true
+    }
+  });
+
+  if (duplicate) {
+    return {
+      duplicate: true,
+      eventId: duplicate.id,
+      createdAt: duplicate.createdAt.toISOString()
+    };
+  }
+
+  const created = await prisma.integrationEvent.create({
+    data: {
+      orderId: input.orderId,
+      channel: input.channel,
+      eventType: input.eventType,
+      status: "queued",
+      payload: {
+        ...input.payload,
+        eventId: input.eventId,
+        correlationId: input.correlationId,
+        queuedAt: new Date().toISOString()
+      } as Prisma.InputJsonValue
+    },
+    select: {
+      id: true,
+      createdAt: true
+    }
+  });
+
+  return {
+    duplicate: false,
+    eventId: created.id,
+    createdAt: created.createdAt.toISOString()
+  };
+}
+
 const allowedOrderTransitions: Record<z.infer<typeof orderStatusSchema>, z.infer<typeof orderStatusSchema>[]> = {
   pending: ["confirmed", "cancelled"],
   confirmed: ["preparing", "cancelled"],
@@ -1174,6 +1252,215 @@ app.post("/api/delivery/orders/:orderId/action", async (request, reply) => {
     createdAt: event.createdAt.toISOString()
   };
 });
+
+app.post(
+  "/api/webhooks/delivery/:channel/orders",
+  { config: { rawBody: true } },
+  async (request, reply) => {
+    const parsedParams = deliveryWebhookParamsSchema.safeParse(request.params);
+    const parsedBody = deliveryWebhookBodySchema.safeParse(request.body);
+
+    if (!parsedParams.success || !parsedBody.success) {
+      return reply.status(400).send({
+        message: "Invalid delivery order webhook payload"
+      });
+    }
+
+    const channel = parsedParams.data.channel;
+    const rawBody = getWebhookRawBody(request, request.body);
+    const requiresSignature = Boolean(deliveryWebhookSecretByChannel[channel]);
+    const signatureVerified = hasDeliveryWebhookSignature({
+      channel,
+      headers: request.headers,
+      rawBody
+    });
+
+    if (requiresSignature && !signatureVerified) {
+      return reply.status(401).send({ message: "Invalid delivery webhook signature" });
+    }
+
+    const parsedOrder = parseIncomingDeliveryOrder(parsedBody.data.payload, channel);
+    if (!parsedOrder.ok) {
+      return reply.status(400).send({
+        message: "Invalid delivery order payload",
+        errors: parsedOrder.errors
+      });
+    }
+
+    const correlationId =
+      extractCorrelationId(parsedBody.data.payload) ??
+      createDeliveryCorrelationId({
+        channel,
+        eventType: parsedBody.data.eventType,
+        referenceId: parsedBody.data.eventId
+      });
+
+    const queued = await queueDeliveryWebhookEvent({
+      channel,
+      eventType: "delivery.webhook.order.received",
+      eventId: parsedBody.data.eventId,
+      correlationId,
+      orderId: undefined,
+      payload: {
+        sourceEventType: parsedBody.data.eventType,
+        orderExternalId:
+          parsedBody.data.orderExternalId ?? parsedOrder.value.externalOrderId,
+        order: parsedOrder.value,
+        receivedAt: new Date().toISOString()
+      }
+    });
+
+    return {
+      queued: !queued.duplicate,
+      duplicate: queued.duplicate,
+      eventId: queued.eventId,
+      channel,
+      correlationId,
+      signatureVerified: requiresSignature ? signatureVerified : null,
+      createdAt: queued.createdAt
+    };
+  }
+);
+
+app.post(
+  "/api/webhooks/delivery/:channel/status",
+  { config: { rawBody: true } },
+  async (request, reply) => {
+    const parsedParams = deliveryWebhookParamsSchema.safeParse(request.params);
+    const parsedBody = deliveryWebhookBodySchema.safeParse(request.body);
+
+    if (!parsedParams.success || !parsedBody.success) {
+      return reply.status(400).send({
+        message: "Invalid delivery status webhook payload"
+      });
+    }
+
+    const channel = parsedParams.data.channel;
+    const rawBody = getWebhookRawBody(request, request.body);
+    const requiresSignature = Boolean(deliveryWebhookSecretByChannel[channel]);
+    const signatureVerified = hasDeliveryWebhookSignature({
+      channel,
+      headers: request.headers,
+      rawBody
+    });
+
+    if (requiresSignature && !signatureVerified) {
+      return reply.status(401).send({ message: "Invalid delivery webhook signature" });
+    }
+
+    const parsedStatus = parseIncomingDeliveryStatusUpdate(parsedBody.data.payload);
+    if (!parsedStatus.ok) {
+      return reply.status(400).send({
+        message: "Invalid delivery status payload",
+        errors: parsedStatus.errors
+      });
+    }
+
+    const correlationId =
+      extractCorrelationId(parsedBody.data.payload) ??
+      createDeliveryCorrelationId({
+        channel,
+        eventType: parsedBody.data.eventType,
+        referenceId: parsedBody.data.eventId
+      });
+
+    const queued = await queueDeliveryWebhookEvent({
+      channel,
+      eventType: "delivery.webhook.status.received",
+      eventId: parsedBody.data.eventId,
+      correlationId,
+      orderId:
+        typeof parsedStatus.value.internalOrderId === "string"
+          ? parsedStatus.value.internalOrderId
+          : undefined,
+      payload: {
+        sourceEventType: parsedBody.data.eventType,
+        orderExternalId: parsedBody.data.orderExternalId,
+        statusUpdate: parsedStatus.value,
+        receivedAt: new Date().toISOString()
+      }
+    });
+
+    return {
+      queued: !queued.duplicate,
+      duplicate: queued.duplicate,
+      eventId: queued.eventId,
+      channel,
+      correlationId,
+      signatureVerified: requiresSignature ? signatureVerified : null,
+      createdAt: queued.createdAt
+    };
+  }
+);
+
+app.post(
+  "/api/webhooks/delivery/:channel/settlements",
+  { config: { rawBody: true } },
+  async (request, reply) => {
+    const parsedParams = deliveryWebhookParamsSchema.safeParse(request.params);
+    const parsedBody = deliveryWebhookBodySchema.safeParse(request.body);
+
+    if (!parsedParams.success || !parsedBody.success) {
+      return reply.status(400).send({
+        message: "Invalid delivery settlement webhook payload"
+      });
+    }
+
+    const channel = parsedParams.data.channel;
+    const rawBody = getWebhookRawBody(request, request.body);
+    const requiresSignature = Boolean(deliveryWebhookSecretByChannel[channel]);
+    const signatureVerified = hasDeliveryWebhookSignature({
+      channel,
+      headers: request.headers,
+      rawBody
+    });
+
+    if (requiresSignature && !signatureVerified) {
+      return reply.status(401).send({ message: "Invalid delivery webhook signature" });
+    }
+
+    const parsedSettlement = parseIncomingDeliverySettlement(parsedBody.data.payload);
+    if (!parsedSettlement.ok) {
+      return reply.status(400).send({
+        message: "Invalid delivery settlement payload",
+        errors: parsedSettlement.errors
+      });
+    }
+
+    const correlationId =
+      extractCorrelationId(parsedBody.data.payload) ??
+      createDeliveryCorrelationId({
+        channel,
+        eventType: parsedBody.data.eventType,
+        referenceId: parsedBody.data.eventId
+      });
+
+    const queued = await queueDeliveryWebhookEvent({
+      channel,
+      eventType: "delivery.webhook.settlement.received",
+      eventId: parsedBody.data.eventId,
+      correlationId,
+      orderId: undefined,
+      payload: {
+        sourceEventType: parsedBody.data.eventType,
+        orderExternalId:
+          parsedBody.data.orderExternalId ?? parsedSettlement.value.externalOrderId,
+        settlement: parsedSettlement.value,
+        receivedAt: new Date().toISOString()
+      }
+    });
+
+    return {
+      queued: !queued.duplicate,
+      duplicate: queued.duplicate,
+      eventId: queued.eventId,
+      channel,
+      correlationId,
+      signatureVerified: requiresSignature ? signatureVerified : null,
+      createdAt: queued.createdAt
+    };
+  }
+);
 
 app.post("/api/catering/bookings", async (request, reply) => {
   const parsed = createBookingSchema.safeParse(request.body);

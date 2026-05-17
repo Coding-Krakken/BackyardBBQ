@@ -4,8 +4,10 @@ import {
   UberEatsClient,
   type DeliveryProviderClient,
   type DeliveryProviderCredentials,
+  type ProviderDispatchInput,
   type ProviderHealthSnapshot,
   type ProviderMenuSnapshot,
+  type ProviderOrderActionInput,
   type ProviderStatusSyncInput
 } from "./clients/index";
 
@@ -57,6 +59,8 @@ export interface DeliveryChannelAdapter {
   readonly channel: DeliveryChannel;
   ingestOrder(envelope: InboundOrderEnvelope): Promise<AdapterIngestResult>;
   verifyWebhookSignature(input: AdapterWebhookValidationInput): Promise<boolean>;
+  dispatchOrder(input: ProviderDispatchInput): Promise<{ latencyMs: number }>;
+  sendOrderAction(input: ProviderOrderActionInput): Promise<{ latencyMs: number }>;
   syncOrderStatus(input: ProviderStatusSyncInput): Promise<{ latencyMs: number }>;
   publishMenuSnapshot(snapshot: ProviderMenuSnapshot): Promise<{ latencyMs: number }>;
   checkHealth(): Promise<ProviderHealthSnapshot>;
@@ -209,6 +213,18 @@ class ProviderBackedDeliveryAdapter implements DeliveryChannelAdapter {
 
   async verifyWebhookSignature(input: AdapterWebhookValidationInput): Promise<boolean> {
     return this.providerClient.verifyWebhookSignature(input);
+  }
+
+  async dispatchOrder(input: ProviderDispatchInput): Promise<{ latencyMs: number }> {
+    const start = Date.now();
+    await this.providerClient.dispatchOrder(input);
+    return { latencyMs: Date.now() - start };
+  }
+
+  async sendOrderAction(input: ProviderOrderActionInput): Promise<{ latencyMs: number }> {
+    const start = Date.now();
+    await this.providerClient.sendOrderAction(input);
+    return { latencyMs: Date.now() - start };
   }
 
   async syncOrderStatus(input: ProviderStatusSyncInput): Promise<{ latencyMs: number }> {

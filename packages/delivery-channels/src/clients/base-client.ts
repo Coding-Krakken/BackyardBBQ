@@ -8,6 +8,7 @@ export type DeliveryProviderCredentials = {
   webhookSecret?: string;
   merchantId?: string;
   storeId?: string;
+  environment?: "sandbox" | "production";
 };
 
 export type InboundWebhookValidationInput = {
@@ -25,6 +26,29 @@ export type ProviderStatusSyncInput = {
   externalOrderId: string;
   status: "accepted" | "preparing" | "ready" | "out_for_delivery" | "delivered" | "cancelled";
   reason?: string;
+  occurredAt: string;
+};
+
+export type ProviderDispatchInput = {
+  externalOrderId: string;
+  correlationId: string;
+  priority: "normal" | "high";
+  orderTotalCents?: number;
+  occurredAt: string;
+};
+
+export type ProviderOrderActionInput = {
+  externalOrderId: string;
+  action:
+    | "accept"
+    | "reject"
+    | "cancel"
+    | "preparing"
+    | "ready"
+    | "out_for_delivery"
+    | "delivered";
+  reason?: string;
+  correlationId: string;
   occurredAt: string;
 };
 
@@ -53,6 +77,8 @@ export interface DeliveryProviderClient {
   readonly channel: DeliveryChannel;
   verifyWebhookSignature(input: InboundWebhookValidationInput): Promise<boolean>;
   parseInboundOrder(payload: Record<string, unknown>): Promise<ProviderInboundOrder>;
+  dispatchOrder(input: ProviderDispatchInput): Promise<void>;
+  sendOrderAction(input: ProviderOrderActionInput): Promise<void>;
   syncOrderStatus(input: ProviderStatusSyncInput): Promise<void>;
   publishMenuSnapshot(snapshot: ProviderMenuSnapshot): Promise<void>;
   checkHealth(): Promise<ProviderHealthSnapshot>;

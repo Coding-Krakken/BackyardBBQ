@@ -12,6 +12,23 @@ export const orderSourceSchema = z.enum([
 
 export const deliveryChannelSchema = z.enum(["doordash", "ubereats", "grubhub"]);
 
+export const deliveryCredentialEnvironmentSchema = z.enum(["sandbox", "production"]);
+
+export const deliveryProviderCredentialSchema = z.object({
+  apiKey: z.string().min(1),
+  apiSecret: z.string().optional(),
+  webhookSecret: z.string().optional(),
+  merchantId: z.string().optional(),
+  storeId: z.string().optional(),
+  environment: deliveryCredentialEnvironmentSchema.default("sandbox")
+});
+
+export const deliveryProviderCredentialSetSchema = z.object({
+  doordash: deliveryProviderCredentialSchema.optional(),
+  ubereats: deliveryProviderCredentialSchema.optional(),
+  grubhub: deliveryProviderCredentialSchema.optional()
+});
+
 export const fulfillmentModeSchema = z.enum(["delivery", "pickup"]);
 
 export const fulfillmentSpeedSchema = z.enum(["asap", "scheduled"]);
@@ -103,6 +120,9 @@ export const deliverySettlementBatchSchema = z.object({
 export type LocationType = z.infer<typeof locationTypeSchema>;
 export type OrderSource = z.infer<typeof orderSourceSchema>;
 export type DeliveryChannel = z.infer<typeof deliveryChannelSchema>;
+export type DeliveryCredentialEnvironment = z.infer<typeof deliveryCredentialEnvironmentSchema>;
+export type DeliveryProviderCredential = z.infer<typeof deliveryProviderCredentialSchema>;
+export type DeliveryProviderCredentialSet = z.infer<typeof deliveryProviderCredentialSetSchema>;
 export type FulfillmentMode = z.infer<typeof fulfillmentModeSchema>;
 export type FulfillmentSpeed = z.infer<typeof fulfillmentSpeedSchema>;
 export type DeliveryOrderStatus = z.infer<typeof deliveryOrderStatusSchema>;

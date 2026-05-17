@@ -4,9 +4,11 @@ import {
   type DeliveryProviderCredentials,
   type InboundWebhookValidationInput,
   performProviderRequest,
+  type ProviderDispatchInput,
   type ProviderHealthSnapshot,
   type ProviderInboundOrder,
   type ProviderMenuSnapshot,
+  type ProviderOrderActionInput,
   type ProviderStatusSyncInput,
   verifyWebhookHmac
 } from "./base-client";
@@ -42,6 +44,33 @@ export class UberEatsClient implements DeliveryProviderClient {
       placedAt: new Date().toISOString(),
       items: []
     };
+  }
+
+  async dispatchOrder(input: ProviderDispatchInput): Promise<void> {
+    await this.syncOrderStatus({
+      externalOrderId: input.externalOrderId,
+      status: "accepted",
+      occurredAt: input.occurredAt
+    });
+  }
+
+  async sendOrderAction(input: ProviderOrderActionInput): Promise<void> {
+    const mappedStatusByAction: Record<ProviderOrderActionInput["action"], ProviderStatusSyncInput["status"]> = {
+      accept: "accepted",
+      reject: "cancelled",
+      cancel: "cancelled",
+      preparing: "preparing",
+      ready: "ready",
+      out_for_delivery: "out_for_delivery",
+      delivered: "delivered"
+    };
+
+    await this.syncOrderStatus({
+      externalOrderId: input.externalOrderId,
+      status: mappedStatusByAction[input.action],
+      reason: input.reason,
+      occurredAt: input.occurredAt
+    });
   }
 
   async syncOrderStatus(_input: ProviderStatusSyncInput): Promise<void> {
