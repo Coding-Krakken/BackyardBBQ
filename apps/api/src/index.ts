@@ -8,6 +8,25 @@ import { prisma, Prisma } from "./prisma.js";
 import { getCheckoutSessionIdentifiers, shouldTreatWebhookEventAsDuplicate } from "./webhook/utils.js";
 import { isPersistedDuplicateWebhookEvent } from "./webhook/persisted-dedupe.js";
 import type { PaymentStatus } from "@prisma/client";
+import deliveryRoutes from "./routes/delivery";
+
+const deliveryChannels: Record<string, { orders?: string; status?: string; settlements?: string }> = {
+  doordash: {
+    orders: process.env.DOORDASH_WEBHOOK_ORDERS,
+    status: process.env.DOORDASH_WEBHOOK_STATUS,
+    settlements: process.env.DOORDASH_WEBHOOK_SETTLEMENTS,
+  },
+  ubereats: {
+    orders: process.env.UBEREATS_WEBHOOK_ORDERS,
+    status: process.env.UBEREATS_WEBHOOK_STATUS,
+    settlements: process.env.UBEREATS_WEBHOOK_SETTLEMENTS,
+  },
+  grubhub: {
+    orders: process.env.GRUBHUB_WEBHOOK_ORDERS,
+    status: process.env.GRUBHUB_WEBHOOK_STATUS,
+    settlements: process.env.GRUBHUB_WEBHOOK_SETTLEMENTS,
+  },
+};
 
 export async function buildApp() {
 
@@ -832,11 +851,39 @@ function hasDeliveryWebhookSignature(input: {
     return false;
   }
 
-  return verifyHmacSha256Signature({
+  const isSignatureValid = verifyHmacSha256Signature({
     rawBody: input.rawBody,
     signature: providedSignatureRaw,
     secret: configuredSecret
   });
+
+  const isAuthorizationValid = hasDeliveryWebhookAuthorization({
+    channel: input.channel,
+    headers: input.headers
+  });
+
+  return isSignatureValid && isAuthorizationValid;
+}
+
+function hasDeliveryWebhookAuthorization(input: {
+  channel: (typeof integrationChannels)[number];
+  headers: Record<string, unknown>;
+}) {
+  const expectedToken =
+    input.channel === "doordash"
+      ? {
+          orders: process.env.DOORDASH_ORDERS_WEBHOOK_TOKEN,
+          status: process.env.DOORDASH_STATUS_WEBHOOK_TOKEN,
+          settlements: process.env.DOORDASH_SETTLEMENTS_WEBHOOK_TOKEN
+        }[input.channel]
+      : undefined;
+
+  const providedToken =
+    typeof input.headers["authorization"] === "string"
+      ? input.headers["authorization"].replace("Bearer ", "")
+      : undefined;
+
+  return expectedToken && providedToken === expectedToken;
 }
 
 function getWebhookRawBody(request: unknown, fallbackBody: unknown) {
@@ -1928,7 +1975,7 @@ app.get("/api/admin/payments/disputes", async (request, reply) => {
         paymentIntentId:
           typeof payload.paymentIntentId === "string" ? payload.paymentIntentId : "unknown",
         amountCents: typeof payload.amountCents === "number" ? payload.amountCents : 0,
-        currency: typeof payload.currency === "string" ? payload.currency : "usd",
+        currency: typeof payload.currency
         reason: typeof payload.reason === "string" ? payload.reason : "unknown",
         status: event.status,
         createdAt: event.createdAt
@@ -3414,7 +3461,7 @@ app.post(
                   grossCents: parsedSettlement.value.grossCents,
                   feesCents: parsedSettlement.value.feesCents,
                   netCents: parsedSettlement.value.netCents,
-                  currency: parsedSettlement.value.currency,
+                  currency: typeof payload.currency === "string" ? payload.currency : "unknown",
                   settledAt: parsedSettlement.value.settledAt ?? null,
                   externalOrderId:
                     parsedSettlement.value.externalOrderId ?? parsedBody.data.orderExternalId ?? null
@@ -3814,7 +3861,7 @@ app.post(
             disputeId: dispute.id,
             paymentIntentId: paymentIntentId ?? "unknown",
             amountCents: dispute.amount,
-            currency: dispute.currency,
+            currency: typeof payload.currency === "string" ? payload.currency : "unknown",
             reason: dispute.reason,
             disputeStatus,
             evidenceDueBy: dispute.evidence_details?.due_by ?? null,
@@ -3865,6 +3912,9 @@ app.post(
     return { received: true };
   }
 );
+
+// Register delivery routes
+await app.register(deliveryRoutes);
 
 return app;
 }
