@@ -10,7 +10,7 @@
     "/dashboard/menu": ["owner", "admin", "manager"],
     "/dashboard/notifications": ["owner", "admin"],
     "/dashboard/referrals": ["owner", "admin"],
-    "/dashboard/integrations": ["owner", "admin"]
+    "/dashboard/integrations": ["owner", "admin", "accounting"]
   },
   "serverPages": {
     "/dashboard/orders/[id]": ["owner", "admin", "manager", "staff"],
