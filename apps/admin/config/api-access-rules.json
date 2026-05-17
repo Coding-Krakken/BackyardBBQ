@@ -99,6 +99,9 @@
     "/api/admin/integrations/correlation/[id]/package": {
       "GET": ["owner", "admin", "accounting"]
     },
+    "/api/admin/integrations/correlation/[id]/contract": {
+      "GET": ["owner", "admin", "accounting"]
+    },
     "/api/admin/integrations/settlements": {
       "GET": ["owner", "admin", "accounting"]
     },

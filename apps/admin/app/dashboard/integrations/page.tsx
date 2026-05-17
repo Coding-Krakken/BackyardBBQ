@@ -134,6 +134,33 @@ interface IncidentPackageResponse {
   };
 }
 
+interface CorrelationContractCheck {
+  key: string;
+  label: string;
+  passed: boolean;
+  details: string;
+  evidenceEventIds: string[];
+}
+
+interface CorrelationContractResponse {
+  correlationId: string;
+  summary: {
+    totalEvents: number;
+    firstSeenAt: string | null;
+    lastSeenAt: string | null;
+    channels: string[];
+    statuses: Record<string, number>;
+    eventTypes: Record<string, number>;
+  };
+  checks: CorrelationContractCheck[];
+  result: {
+    passed: boolean;
+    passedCount: number;
+    failedCount: number;
+    scorePercent: number;
+  };
+}
+
 async function sha256Hex(value: string) {
   if (typeof window === 'undefined' || !window.crypto?.subtle) {
     return null;
@@ -206,6 +233,13 @@ export default function IntegrationsPage() {
   const { data: incidentPackageData, error: incidentPackageError, isLoading: incidentPackageLoading } = useSWR<IncidentPackageResponse>(
     inspectorCorrelationId
       ? `/api/admin/integrations/correlation/${encodeURIComponent(inspectorCorrelationId)}/package`
+      : null,
+    fetcher
+  );
+
+  const { data: contractData, error: contractError, isLoading: contractLoading } = useSWR<CorrelationContractResponse>(
+    inspectorCorrelationId
+      ? `/api/admin/integrations/correlation/${encodeURIComponent(inspectorCorrelationId)}/contract`
       : null,
     fetcher
   );
@@ -395,6 +429,10 @@ export default function IntegrationsPage() {
                               export
                             </a>
                             {' / '}
+                            <a href={`/api/admin/integrations/correlation/${encodeURIComponent(id)}/contract`} style={{ textDecoration: 'underline' }}>
+                              contract
+                            </a>
+                            {' / '}
                             <a href={`/api/admin/integrations/correlation/${encodeURIComponent(id)}/package`} style={{ textDecoration: 'underline' }}>
                               package
                             </a>
@@ -438,6 +476,9 @@ export default function IntegrationsPage() {
                       </a>
                       <a href={`/api/admin/integrations/correlation/${encodeURIComponent(row.payload.correlationId)}/export?format=csv`} style={{ textDecoration: 'underline' }}>
                         export CSV
+                      </a>
+                      <a href={`/api/admin/integrations/correlation/${encodeURIComponent(row.payload.correlationId)}/contract`} style={{ textDecoration: 'underline' }}>
+                        contract
                       </a>
                       <a href={`/api/admin/integrations/correlation/${encodeURIComponent(row.payload.correlationId)}/package`} style={{ textDecoration: 'underline' }}>
                         incident package
@@ -549,6 +590,9 @@ export default function IntegrationsPage() {
                       <a href={`/api/admin/integrations/correlation/${encodeURIComponent(row.correlationId)}/export?format=csv`} style={{ textDecoration: 'underline' }}>
                         export CSV
                       </a>
+                      <a href={`/api/admin/integrations/correlation/${encodeURIComponent(row.correlationId)}/contract`} style={{ textDecoration: 'underline' }}>
+                        contract
+                      </a>
                       <a href={`/api/admin/integrations/correlation/${encodeURIComponent(row.correlationId)}/package`} style={{ textDecoration: 'underline' }}>
                         incident package
                       </a>
@@ -605,6 +649,8 @@ export default function IntegrationsPage() {
 
           {incidentPackageLoading ? <p className="text-muted">Loading package...</p> : null}
           {incidentPackageError ? <p className="text-muted">Package lookup failed</p> : null}
+          {contractLoading ? <p className="text-muted">Running contract validation...</p> : null}
+          {contractError ? <p className="text-muted">Contract validation lookup failed</p> : null}
 
           {incidentPackageData ? (
             <div style={{ display: 'grid', gap: '0.65rem' }}>
@@ -638,15 +684,51 @@ export default function IntegrationsPage() {
                     {incidentPackageData.manifest.integrity.signed ? `signed (${incidentPackageData.manifest.integrity.keyId})` : 'unsigned'}
                   </div>
                 </div>
+                <div className="card">
+                  <div className="eyebrow">Contract Validation</div>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                    {contractData ? (contractData.result.passed ? `pass (${contractData.result.scorePercent}%)` : `fail (${contractData.result.scorePercent}%)`) : 'pending'}
+                  </div>
+                </div>
               </div>
 
               <div className="text-muted" style={{ fontSize: '0.75rem' }}>
                 Signature algo: {incidentPackageData.manifest.integrity.algorithm} | Manifest SHA-256: {incidentPackageData.manifest.integrity.manifestSha256}
               </div>
 
+              {contractData ? (
+                <div className="panel" style={{ marginTop: '0.4rem' }}>
+                  <div className="flex-between" style={{ marginBottom: '0.45rem' }}>
+                    <h5 style={{ margin: 0 }}>Correlation Contract Checks</h5>
+                    <span className={`badge ${contractData.result.passed ? 'badge-green' : 'badge-red'}`}>
+                      {contractData.result.passed ? 'passed' : 'failed'}
+                    </span>
+                  </div>
+                  <div className="text-muted" style={{ fontSize: '0.78rem', marginBottom: '0.45rem' }}>
+                    {contractData.result.passedCount} passed / {contractData.result.failedCount} failed ({contractData.result.scorePercent}% score)
+                  </div>
+                  <DataTable
+                    columns={[
+                      { header: 'Check', accessor: (row: CorrelationContractCheck) => row.label },
+                      { header: 'Result', accessor: (row: CorrelationContractCheck) => <StatusBadge status={row.passed ? 'completed' : 'failed'} /> },
+                      { header: 'Details', accessor: (row: CorrelationContractCheck) => row.details },
+                      {
+                        header: 'Evidence',
+                        accessor: (row: CorrelationContractCheck) =>
+                          row.evidenceEventIds.length > 0 ? row.evidenceEventIds.join(', ') : '-'
+                      }
+                    ]}
+                    data={contractData.checks}
+                  />
+                </div>
+              ) : null}
+
               <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                 <a className="btn btn-ghost" href={`/api/admin/integrations/correlation/${encodeURIComponent(incidentPackageData.correlationId)}`}>
                   Open Trace JSON
+                </a>
+                <a className="btn btn-ghost" href={`/api/admin/integrations/correlation/${encodeURIComponent(incidentPackageData.correlationId)}/contract`}>
+                  Open Contract JSON
                 </a>
                 <a className="btn btn-ghost" href={`/api/admin/integrations/correlation/${encodeURIComponent(incidentPackageData.correlationId)}/export?format=csv`}>
                   Export Timeline CSV

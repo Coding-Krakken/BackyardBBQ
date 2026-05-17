@@ -236,6 +236,18 @@ GET /api/admin/integrations/correlation/:id/export?format=json
 GET /api/admin/integrations/correlation/:id/export?format=csv
 ```
 
+Correlation contract validation endpoint (flow completeness and failure checks):
+
+```bash
+GET /api/admin/integrations/correlation/:id/contract
+```
+
+Contract response includes:
+
+- `checks[]` with pass/fail, details, and evidence event IDs
+- `result.passed`, `result.scorePercent`, `result.failedCount`
+- rollups for `summary.channels`, `summary.statuses`, and `summary.eventTypes`
+
 Combined incident package endpoint (JSON + timeline CSV + settlements CSV in one response):
 
 ```bash
@@ -258,6 +270,7 @@ Optional package signing for audit authenticity:
 When signing is configured, package responses include `manifest.integrity.signatureHex` and `manifest.integrity.keyId` and emit corresponding response headers.
 
 Admin dashboard includes an Incident Package Inspector panel to fetch a correlation package by ID and verify CSV digests client-side.
+The inspector also runs contract validation and renders a pass/fail checklist for inbound webhooks, dispatch/action presence, settlement presence, and failed/dead-letter detection.
 
 JSON export includes rollups for handoff:
 
