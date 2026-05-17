@@ -4,6 +4,9 @@ import { createHmac } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
 
 function parseArgs(argv) {
   const args = {};
@@ -25,21 +28,27 @@ function parseArgs(argv) {
 }
 
 function printUsage() {
-  console.log(`Usage:\n  node apps/api/scripts/delivery-settlement-replay-check.mjs [--api-base-url http://localhost:4000] [--channel doordash] [--event-id evt_123] [--external-order-id order_123] [--correlation-id corr_123] [--webhook-secret secret] [--date 2026-05-16] [--output-json ./artifacts/delivery-settlement-replay.json]\n\nEnv fallbacks:\n  API_BASE_URL\n  DELIVERY_CHANNEL\n  <CHANNEL>_WEBHOOK_SECRET\n  DELIVERY_WEBHOOK_SECRET`);
+  console.log(`Usage:\n  node apps/api/scripts/delivery-settlement-replay-check.mjs [--api-base-url http://localhost:4000] [--admin-base-url http://localhost:3001] [--channel doordash] [--event-id evt_123] [--external-order-id order_123] [--correlation-id corr_123] [--webhook-secret secret] [--webhook-token token] [--date 2026-05-16] [--output-json ./artifacts/delivery-settlement-replay.json]\n\nEnv fallbacks:\n  API_BASE_URL\n  ADMIN_BASE_URL\n  DELIVERY_CHANNEL\n  <CHANNEL>_WEBHOOK_SECRET\n  DELIVERY_WEBHOOK_SECRET\n  <CHANNEL>_SETTLEMENTS_WEBHOOK_TOKEN\n  DELIVERY_WEBHOOK_TOKEN`);
 }
 
 function makeSignature(rawBody, secret) {
   return createHmac("sha256", secret).update(rawBody, "utf8").digest("hex");
 }
 
-async function postWebhook({ apiBaseUrl, channel, payload, signature }) {
+async function postWebhook({ apiBaseUrl, channel, payload, signature, webhookToken }) {
   const url = `${apiBaseUrl.replace(/\/$/, "")}/api/webhooks/delivery/${channel}/settlements`;
+  const headers = {
+    "content-type": "application/json",
+    "x-delivery-signature": `sha256=${signature}`
+  };
+
+  if (typeof webhookToken === "string" && webhookToken.length > 0) {
+    headers.authorization = `Bearer ${webhookToken}`;
+  }
+
   const response = await fetch(url, {
     method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-delivery-signature": `sha256=${signature}`
-    },
+    headers,
     body: payload
   });
 
@@ -81,39 +90,113 @@ async function getDailyClose({ apiBaseUrl, date }) {
   };
 }
 
-async function getSettlementEvents({ apiBaseUrl, channel, correlationId }) {
+async function getSettlementEvents({ adminBaseUrl, channel, correlationId }) {
   const query = new URLSearchParams({
     channel,
     correlationId,
     limit: "50"
   });
 
-  const response = await fetch(
-    `${apiBaseUrl.replace(/\/$/, "")}/api/admin/integrations/settlements?${query.toString()}`,
-    {
-      headers: {
-        "x-admin-role": "owner"
-      }
-    }
-  );
-
-  const text = await response.text();
-  let body = null;
   try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = { raw: text };
+    const response = await fetch(
+      `${adminBaseUrl.replace(/\/$/, "")}/api/admin/integrations/settlements?${query.toString()}`,
+      {
+        headers: {
+          "x-admin-role": "owner"
+        }
+      }
+    );
+
+    const text = await response.text();
+    let body = null;
+    try {
+      body = text ? JSON.parse(text) : null;
+    } catch {
+      body = { raw: text };
+    }
+
+    return {
+      status: response.status,
+      ok: response.ok,
+      body
+    };
+  } catch (error) {
+    return {
+      status: null,
+      ok: false,
+      body: {
+        error: error instanceof Error ? error.message : "Unknown fetch error"
+      }
+    };
+  }
+}
+
+async function findLedgerLinkFromIntegrationEvents({ channel, correlationId, settlementId }) {
+  const recentEvents = await prisma.integrationEvent.findMany({
+    where: {
+      channel,
+      eventType: "delivery.webhook.settlement.received"
+    },
+    orderBy: {
+      createdAt: "desc"
+    },
+    take: 200,
+    select: {
+      id: true,
+      status: true,
+      payload: true
+    }
+  });
+
+  for (const event of recentEvents) {
+    const payload = event.payload;
+    if (!payload || typeof payload !== "object") {
+      continue;
+    }
+
+    const record = payload;
+    const eventCorrelationId = typeof record.correlationId === "string" ? record.correlationId : null;
+    const eventSettlementId =
+      typeof record.settlementId === "string"
+        ? record.settlementId
+        : typeof record.settlement === "object" && record.settlement && typeof record.settlement.settlementId === "string"
+          ? record.settlement.settlementId
+          : null;
+    const settlementBatchId =
+      typeof record.settlementBatchId === "string" && record.settlementBatchId.length > 0
+        ? record.settlementBatchId
+        : null;
+    const settlementLineId =
+      typeof record.settlementLineId === "string" && record.settlementLineId.length > 0
+        ? record.settlementLineId
+        : null;
+
+    if (
+      event.status === "processed" &&
+      eventCorrelationId === correlationId &&
+      eventSettlementId === settlementId &&
+      settlementBatchId &&
+      settlementLineId
+    ) {
+      return {
+        observed: true,
+        eventId: event.id,
+        settlementBatchId,
+        settlementLineId
+      };
+    }
   }
 
   return {
-    status: response.status,
-    ok: response.ok,
-    body
+    observed: false,
+    eventId: null,
+    settlementBatchId: null,
+    settlementLineId: null
   };
 }
 
 async function waitForSettlementLedgerLink({
-  apiBaseUrl,
+  adminBaseUrl,
   channel,
   correlationId,
   settlementId,
@@ -121,7 +204,7 @@ async function waitForSettlementLedgerLink({
   delayMs = 1000
 }) {
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const snapshot = await getSettlementEvents({ apiBaseUrl, channel, correlationId });
+    const snapshot = await getSettlementEvents({ adminBaseUrl, channel, correlationId });
     const rows = Array.isArray(snapshot.body?.data) ? snapshot.body.data : [];
 
     const matching = rows.find(
@@ -144,6 +227,20 @@ async function waitForSettlementLedgerLink({
         eventId: typeof matching.id === "string" ? matching.id : null,
         settlementBatchId: matching.settlementBatchId,
         settlementLineId: matching.settlementLineId
+      };
+    }
+
+    // Local fallback: if admin endpoint is unavailable/auth-protected, verify ledger linkage directly via DB.
+    const dbFallback = await findLedgerLinkFromIntegrationEvents({ channel, correlationId, settlementId });
+    if (dbFallback.observed) {
+      return {
+        observed: true,
+        attempts: attempt,
+        settlementsApiStatus: snapshot.status,
+        settlementsApiOk: snapshot.ok,
+        eventId: dbFallback.eventId,
+        settlementBatchId: dbFallback.settlementBatchId,
+        settlementLineId: dbFallback.settlementLineId
       };
     }
 
@@ -172,6 +269,7 @@ async function main() {
   }
 
   const apiBaseUrl = args["api-base-url"] ?? process.env.API_BASE_URL ?? "http://localhost:4000";
+  const adminBaseUrl = args["admin-base-url"] ?? process.env.ADMIN_BASE_URL ?? apiBaseUrl;
   const channel = args.channel ?? process.env.DELIVERY_CHANNEL ?? "doordash";
   const externalOrderId = args["external-order-id"] ?? `settlement-${Date.now()}`;
   const eventId = args["event-id"] ?? `evt-settlement-${Date.now()}`;
@@ -182,6 +280,10 @@ async function main() {
     args["webhook-secret"] ??
     process.env[`${channel.toUpperCase()}_WEBHOOK_SECRET`] ??
     process.env.DELIVERY_WEBHOOK_SECRET;
+  const webhookToken =
+    args["webhook-token"] ??
+    process.env[`${channel.toUpperCase()}_SETTLEMENTS_WEBHOOK_TOKEN`] ??
+    process.env.DELIVERY_WEBHOOK_TOKEN;
 
   if (!webhookSecret) {
     console.error("Missing webhook secret. Use --webhook-secret or CHANNEL_WEBHOOK_SECRET env var.");
@@ -211,6 +313,7 @@ async function main() {
     ...requestBody,
     eventId: `${eventId}-bizkey-replay`,
     payload: {
+      correlationId,
       settlement: {
         ...requestBody.payload.settlement
       }
@@ -222,17 +325,18 @@ async function main() {
   const businessKeyPayload = JSON.stringify(businessKeyReplayBody);
   const businessKeySignature = makeSignature(businessKeyPayload, webhookSecret);
 
-  const first = await postWebhook({ apiBaseUrl, channel, payload, signature });
-  const second = await postWebhook({ apiBaseUrl, channel, payload, signature });
+  const first = await postWebhook({ apiBaseUrl, channel, payload, signature, webhookToken });
+  const second = await postWebhook({ apiBaseUrl, channel, payload, signature, webhookToken });
   const thirdBusinessKeyReplay = await postWebhook({
     apiBaseUrl,
     channel,
     payload: businessKeyPayload,
-    signature: businessKeySignature
+    signature: businessKeySignature,
+    webhookToken
   });
   const dailyClose = await getDailyClose({ apiBaseUrl, date });
   const ledgerSync = await waitForSettlementLedgerLink({
-    apiBaseUrl,
+    adminBaseUrl,
     channel,
     correlationId,
     settlementId: requestBody.payload.settlement.settlementId
@@ -297,4 +401,6 @@ async function main() {
 main().catch((error) => {
   console.error("delivery-settlement-replay-check failed", error);
   process.exit(99);
+}).finally(async () => {
+  await prisma.$disconnect();
 });

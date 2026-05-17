@@ -1,0 +1,68 @@
+{
+  "channel": "doordash",
+  "eventId": "evt-settlement-1778996238560",
+  "correlationId": "corr-delivery-settlement-doordash-1778996238560",
+  "externalOrderId": "settlement-1778996238560",
+  "settlementId": "stl-1778996238560",
+  "firstAttempt": {
+    "status": 200,
+    "ok": true,
+    "body": {
+      "queued": true,
+      "duplicate": false,
+      "eventId": "cmp9cff0s0002o8xkk45rkk3n",
+      "channel": "doordash",
+      "correlationId": "corr-delivery-settlement-doordash-1778996238560",
+      "signatureVerified": true,
+      "createdAt": "2026-05-17T05:37:18.796Z"
+    }
+  },
+  "secondAttempt": {
+    "status": 200,
+    "ok": true,
+    "body": {
+      "queued": false,
+      "duplicate": true,
+      "eventId": "cmp9cff0s0002o8xkk45rkk3n",
+      "channel": "doordash",
+      "correlationId": "corr-delivery-settlement-doordash-1778996238560",
+      "signatureVerified": true,
+      "createdAt": "2026-05-17T05:37:18.796Z"
+    }
+  },
+  "thirdBusinessKeyReplay": {
+    "status": 200,
+    "ok": true,
+    "body": {
+      "queued": true,
+      "duplicate": false,
+      "eventId": "cmp9cff4o0003o8xk3squdi18",
+      "channel": "doordash",
+      "correlationId": "corr-delivery-settlement-doordash-1778996238560",
+      "signatureVerified": true,
+      "createdAt": "2026-05-17T05:37:18.937Z"
+    }
+  },
+  "duplicateSuppressed": true,
+  "businessKeyDuplicateSuppressed": false,
+  "correlation": {
+    "first": "corr-delivery-settlement-doordash-1778996238560",
+    "second": "corr-delivery-settlement-doordash-1778996238560",
+    "third": "corr-delivery-settlement-doordash-1778996238560",
+    "consistent": true
+  },
+  "dailyClose": {
+    "ok": true,
+    "settlementNetCents": 0,
+    "channelSettlement": null
+  },
+  "ledgerSync": {
+    "observed": true,
+    "attempts": 6,
+    "settlementsApiStatus": null,
+    "settlementsApiOk": false,
+    "eventId": "cmp9cff0s0002o8xkk45rkk3n",
+    "settlementBatchId": "cmp9cfj92000113buujyire8n",
+    "settlementLineId": "cmp9cfjcc000313bub77wsrgg"
+  }
+}

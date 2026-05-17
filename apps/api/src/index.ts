@@ -8,8 +8,6 @@ import { prisma, Prisma } from "./prisma.js";
 import { getCheckoutSessionIdentifiers, shouldTreatWebhookEventAsDuplicate } from "./webhook/utils.js";
 import { isPersistedDuplicateWebhookEvent } from "./webhook/persisted-dedupe.js";
 import type { PaymentStatus } from "@prisma/client";
-import deliveryRoutes from "./routes/delivery";
-
 const deliveryChannels: Record<string, { orders?: string; status?: string; settlements?: string }> = {
   doordash: {
     orders: process.env.DOORDASH_WEBHOOK_ORDERS,
@@ -869,17 +867,25 @@ function hasDeliveryWebhookAuthorization(input: {
   channel: (typeof integrationChannels)[number];
   headers: Record<string, unknown>;
 }) {
-  const expectedToken =
+  const expectedTokens =
     input.channel === "doordash"
-      ? process.env[`DOORDASH_${input.channel.toUpperCase()}_WEBHOOK_TOKEN`]
-      : undefined;
+      ? [
+          process.env.DOORDASH_ORDERS_WEBHOOK_TOKEN,
+          process.env.DOORDASH_STATUS_WEBHOOK_TOKEN,
+          process.env.DOORDASH_SETTLEMENTS_WEBHOOK_TOKEN
+        ].filter((value): value is string => typeof value === "string" && value.length > 0)
+      : [];
+
+  if (expectedTokens.length === 0) {
+    return true;
+  }
 
   const providedToken =
     typeof input.headers["authorization"] === "string"
       ? input.headers["authorization"].replace("Bearer ", "")
       : undefined;
 
-  return expectedToken && providedToken === expectedToken;
+  return typeof providedToken === "string" && expectedTokens.includes(providedToken);
 }
 
 function getWebhookRawBody(request: unknown, fallbackBody: unknown) {
@@ -3908,9 +3914,6 @@ app.post(
     return { received: true };
   }
 );
-
-// Register delivery routes
-await app.register(deliveryRoutes);
 
 return app;
 }

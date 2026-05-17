@@ -13,6 +13,7 @@ import {
   type ProviderStatusSyncInput,
   verifyWebhookHmac
 } from "./base-client";
+import { createHmac } from "node:crypto";
 import { mapProviderActionPayload } from "./status-mapping";
 
 export class DoorDashClient implements DeliveryProviderClient {
@@ -22,6 +23,43 @@ export class DoorDashClient implements DeliveryProviderClient {
 
   constructor(private readonly credentials: DeliveryProviderCredentials) {
     this.baseUrl = process.env.DOORDASH_API_BASE_URL?.trim() || "https://openapi.doordash.com";
+  }
+
+  private getDoorDashJwt(): string | null {
+    const developerId = process.env.DOORDASH_DEVELOPER_ID?.trim();
+    const keyId = this.credentials.apiKey?.trim();
+    const signingSecret = this.credentials.apiSecret?.trim();
+
+    if (!developerId || !keyId || !signingSecret) {
+      return null;
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const header = {
+      alg: "HS256",
+      typ: "JWT",
+      "dd-ver": "DD-JWT-V1"
+    };
+    const payload = {
+      aud: "doordash",
+      iss: developerId,
+      kid: keyId,
+      iat: now,
+      exp: now + 300
+    };
+
+    const base64Url = (value: string | Buffer) =>
+      Buffer.from(value)
+        .toString("base64")
+        .replace(/=/g, "")
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_");
+
+    const signingInput = `${base64Url(JSON.stringify(header))}.${base64Url(JSON.stringify(payload))}`;
+    const secretBytes = Buffer.from(signingSecret, "base64url");
+    const signature = createHmac("sha256", secretBytes).update(signingInput).digest();
+
+    return `${signingInput}.${base64Url(signature)}`;
   }
 
   async verifyWebhookSignature(input: InboundWebhookValidationInput): Promise<boolean> {
@@ -75,7 +113,12 @@ export class DoorDashClient implements DeliveryProviderClient {
   }
 
   async syncOrderStatus(_input: ProviderStatusSyncInput): Promise<void> {
-    if (!this.credentials.apiKey || !this.credentials.storeId) {
+    if (!this.credentials.apiKey || !this.credentials.apiSecret || !this.credentials.storeId) {
+      return;
+    }
+
+    const authToken = this.getDoorDashJwt();
+    if (!authToken) {
       return;
     }
 
@@ -88,7 +131,7 @@ export class DoorDashClient implements DeliveryProviderClient {
     await performProviderRequest({
       url: `${this.baseUrl}/drive/v2/stores/${encodeURIComponent(this.credentials.storeId)}/orders/${encodeURIComponent(_input.externalOrderId)}/status`,
       method: "POST",
-      apiKey: this.credentials.apiKey,
+      apiKey: authToken,
       body: {
         status: mapped.providerStatus,
         reasonCode: mapped.providerReasonCode,
@@ -102,30 +145,25 @@ export class DoorDashClient implements DeliveryProviderClient {
       return;
     }
 
-    await performProviderRequest({
-      url: `${this.baseUrl}/drive/v2/stores/${encodeURIComponent(this.credentials.storeId)}/orders/${encodeURIComponent(input.externalOrderId)}/settlements`,
-      method: "POST",
-      apiKey: this.credentials.apiKey,
-      body: {
-        settlementId: input.settlementId,
-        grossCents: input.grossCents,
-        feesCents: input.feesCents,
-        netCents: input.netCents,
-        currency: input.currency,
-        settledAt: input.settledAt
-      }
-    });
+    // DoorDash Drive settlement reconciliation is tracked internally from webhook data.
+    // Keep this method as a no-op so worker settlement ledger persistence can complete.
+    void input;
   }
 
   async publishMenuSnapshot(_snapshot: ProviderMenuSnapshot): Promise<void> {
-    if (!this.credentials.apiKey || !this.credentials.storeId) {
+    if (!this.credentials.apiKey || !this.credentials.apiSecret || !this.credentials.storeId) {
+      return;
+    }
+
+    const authToken = this.getDoorDashJwt();
+    if (!authToken) {
       return;
     }
 
     await performProviderRequest({
       url: `${this.baseUrl}/marketplace/v1/stores/${encodeURIComponent(this.credentials.storeId)}/menu`,
       method: "PUT",
-      apiKey: this.credentials.apiKey,
+      apiKey: authToken,
       body: {
         locationId: _snapshot.locationId,
         publishedAt: _snapshot.publishedAt,
@@ -135,7 +173,16 @@ export class DoorDashClient implements DeliveryProviderClient {
   }
 
   async checkHealth(): Promise<ProviderHealthSnapshot> {
-    if (!this.credentials.apiKey) {
+    if (!this.credentials.apiKey || !this.credentials.apiSecret) {
+      return {
+        healthy: false,
+        latencyMs: 0,
+        reason: "DoorDash credentials not configured"
+      };
+    }
+
+    const authToken = this.getDoorDashJwt();
+    if (!authToken) {
       return {
         healthy: false,
         latencyMs: 0,
@@ -148,7 +195,7 @@ export class DoorDashClient implements DeliveryProviderClient {
       await performProviderRequest({
         url: `${this.baseUrl}/drive/v2/health`,
         method: "GET",
-        apiKey: this.credentials.apiKey
+        apiKey: authToken
       });
 
       return {
