@@ -2,10 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 
 const scriptPath = join(process.cwd(), "scripts", "delivery-integration-summary.mjs");
-const fixtureDir = join(process.cwd(), "artifacts", "delivery-replay-test-fixtures");
+const fixtureDir = join(tmpdir(), "bbq-delivery-replay-test-fixtures");
 
 function runSummary(args = []) {
   return spawnSync("node", [scriptPath, ...args], {
