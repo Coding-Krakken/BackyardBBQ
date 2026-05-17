@@ -220,6 +220,8 @@ Package response includes integrity metadata for audit workflows:
 - `manifest.digests.timelineCsvSha256`
 - `manifest.digests.settlementsCsvSha256`
 
+Admin dashboard includes an Incident Package Inspector panel to fetch a correlation package by ID and verify CSV digests client-side.
+
 JSON export includes rollups for handoff:
 
 - `summary.firstSeenAt`, `summary.lastSeenAt`, `summary.durationMs`

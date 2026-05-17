@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 import { PageHeader } from '@/components/PageHeader';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -92,6 +92,51 @@ interface SettlementTrendRow {
   feeRatePercent: number;
 }
 
+interface IncidentPackageResponse {
+  correlationId: string;
+  packagedAt: string;
+  summary: {
+    total: number;
+    channels: Record<string, number>;
+    statuses: Record<string, number>;
+    eventTypes: Record<string, number>;
+    firstSeenAt: string | null;
+    lastSeenAt: string | null;
+    durationMs: number;
+    settlementTotals: {
+      grossCents: number;
+      feesCents: number;
+      netCents: number;
+      count: number;
+    };
+  };
+  manifest: {
+    generatedAt: string;
+    eventCount: number;
+    channels: string[];
+    digests: {
+      timelineCsvSha256: string;
+      settlementsCsvSha256: string;
+    };
+  };
+  package: {
+    timelineCsvSha256: string;
+    settlementsCsvSha256: string;
+    timelineCsv: string;
+    settlementsCsv: string;
+  };
+}
+
+async function sha256Hex(value: string) {
+  if (typeof window === 'undefined' || !window.crypto?.subtle) {
+    return null;
+  }
+
+  const bytes = new TextEncoder().encode(value);
+  const digest = await window.crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
 export default function IntegrationsPage() {
   const { addToast } = useToast();
   const [settlementChannel, setSettlementChannel] = useState<'all' | 'doordash' | 'ubereats' | 'grubhub'>('all');
@@ -100,6 +145,12 @@ export default function IntegrationsPage() {
   const [settlementCorrelationId, setSettlementCorrelationId] = useState('');
   const [settlementFromDate, setSettlementFromDate] = useState('');
   const [settlementToDate, setSettlementToDate] = useState('');
+  const [inspectorCorrelationInput, setInspectorCorrelationInput] = useState('');
+  const [inspectorCorrelationId, setInspectorCorrelationId] = useState('');
+  const [digestVerification, setDigestVerification] = useState<{
+    timelineMatch: boolean | null;
+    settlementsMatch: boolean | null;
+  }>({ timelineMatch: null, settlementsMatch: null });
 
   const settlementQuery = new URLSearchParams();
   settlementQuery.set('limit', String(settlementLimit));
@@ -145,6 +196,52 @@ export default function IntegrationsPage() {
     fetcher
   );
 
+  const { data: incidentPackageData, error: incidentPackageError, isLoading: incidentPackageLoading } = useSWR<IncidentPackageResponse>(
+    inspectorCorrelationId
+      ? `/api/admin/integrations/correlation/${encodeURIComponent(inspectorCorrelationId)}/package`
+      : null,
+    fetcher
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const verifyDigests = async () => {
+      if (!incidentPackageData) {
+        setDigestVerification({ timelineMatch: null, settlementsMatch: null });
+        return;
+      }
+
+      const [timelineDigest, settlementsDigest] = await Promise.all([
+        sha256Hex(incidentPackageData.package.timelineCsv),
+        sha256Hex(incidentPackageData.package.settlementsCsv)
+      ]);
+
+      if (cancelled) {
+        return;
+      }
+
+      setDigestVerification({
+        timelineMatch:
+          typeof timelineDigest === 'string' &&
+          timelineDigest === incidentPackageData.manifest.digests.timelineCsvSha256,
+        settlementsMatch:
+          typeof settlementsDigest === 'string' &&
+          settlementsDigest === incidentPackageData.manifest.digests.settlementsCsvSha256
+      });
+    };
+
+    verifyDigests().catch(() => {
+      if (!cancelled) {
+        setDigestVerification({ timelineMatch: false, settlementsMatch: false });
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [incidentPackageData]);
+
   const retryDeadLetter = async (id: string) => {
     try {
       const response = await fetch(`/api/admin/integrations/dead-letter/${id}/retry`, { method: 'PATCH' });
@@ -164,6 +261,16 @@ export default function IntegrationsPage() {
       case 'down': return 'badge-red';
       default: return 'badge-gray';
     }
+  };
+
+  const inspectCorrelationPackage = () => {
+    const value = inspectorCorrelationInput.trim();
+    if (!value) {
+      addToast({ type: 'error', message: 'Enter a correlation ID to inspect' });
+      return;
+    }
+
+    setInspectorCorrelationId(value);
   };
 
   return (
@@ -457,6 +564,72 @@ export default function IntegrationsPage() {
             ]}
             data={settlementTrendData?.data ?? []}
           />
+        </div>
+
+        <div className="panel mt-lg">
+          <h4 className="mb-md">Incident Package Inspector</h4>
+          <div className="form-row" style={{ marginBottom: '0.75rem' }}>
+            <div className="form-group" style={{ flex: 2 }}>
+              <label className="form-label">Correlation ID</label>
+              <input
+                className="input"
+                type="text"
+                value={inspectorCorrelationInput}
+                placeholder="dlv-doordash-..."
+                onChange={(event) => setInspectorCorrelationInput(event.target.value)}
+              />
+            </div>
+            <div className="form-group" style={{ alignSelf: 'end' }}>
+              <button className="btn btn-ghost" onClick={inspectCorrelationPackage}>
+                Inspect Package
+              </button>
+            </div>
+          </div>
+
+          {incidentPackageLoading ? <p className="text-muted">Loading package...</p> : null}
+          {incidentPackageError ? <p className="text-muted">Package lookup failed</p> : null}
+
+          {incidentPackageData ? (
+            <div style={{ display: 'grid', gap: '0.65rem' }}>
+              <div className="text-muted" style={{ fontSize: '0.82rem' }}>
+                Package generated: {formatDate(incidentPackageData.manifest.generatedAt)}
+              </div>
+              <div className="grid-cards grid-cards-4">
+                <div className="card">
+                  <div className="eyebrow">Events</div>
+                  <div style={{ fontSize: '1.02rem', fontWeight: 600 }}>{incidentPackageData.manifest.eventCount}</div>
+                </div>
+                <div className="card">
+                  <div className="eyebrow">Duration</div>
+                  <div style={{ fontSize: '1.02rem', fontWeight: 600 }}>{Math.round((incidentPackageData.summary.durationMs ?? 0) / 1000)}s</div>
+                </div>
+                <div className="card">
+                  <div className="eyebrow">Timeline Digest</div>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                    {digestVerification.timelineMatch === true ? 'verified' : digestVerification.timelineMatch === false ? 'mismatch' : 'pending'}
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="eyebrow">Settlements Digest</div>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                    {digestVerification.settlementsMatch === true ? 'verified' : digestVerification.settlementsMatch === false ? 'mismatch' : 'pending'}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <a className="btn btn-ghost" href={`/api/admin/integrations/correlation/${encodeURIComponent(incidentPackageData.correlationId)}`}>
+                  Open Trace JSON
+                </a>
+                <a className="btn btn-ghost" href={`/api/admin/integrations/correlation/${encodeURIComponent(incidentPackageData.correlationId)}/export?format=csv`}>
+                  Export Timeline CSV
+                </a>
+                <a className="btn btn-ghost" href={`/api/admin/integrations/correlation/${encodeURIComponent(incidentPackageData.correlationId)}/package`}>
+                  Open Incident Package
+                </a>
+              </div>
+            </div>
+          ) : null}
         </div>
       </AnimatedPage>
     </RoleGate>
