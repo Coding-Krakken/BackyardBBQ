@@ -117,6 +117,7 @@ interface IncidentPackageResponse {
     digests: {
       timelineCsvSha256: string;
       settlementsCsvSha256: string;
+      contractJsonSha256: string;
     };
     integrity: {
       algorithm: string;
@@ -129,8 +130,26 @@ interface IncidentPackageResponse {
   package: {
     timelineCsvSha256: string;
     settlementsCsvSha256: string;
+    contractJsonSha256: string;
     timelineCsv: string;
     settlementsCsv: string;
+  };
+  contract: {
+    summary: {
+      totalEvents: number;
+      firstSeenAt: string | null;
+      lastSeenAt: string | null;
+      channels: string[];
+      statuses: Record<string, number>;
+      eventTypes: Record<string, number>;
+    };
+    checks: CorrelationContractCheck[];
+    result: {
+      passed: boolean;
+      passedCount: number;
+      failedCount: number;
+      scorePercent: number;
+    };
   };
 }
 
@@ -685,6 +704,12 @@ export default function IntegrationsPage() {
                   </div>
                 </div>
                 <div className="card">
+                  <div className="eyebrow">Packaged Contract</div>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                    {incidentPackageData.contract.result.passed ? `pass (${incidentPackageData.contract.result.scorePercent}%)` : `fail (${incidentPackageData.contract.result.scorePercent}%)`}
+                  </div>
+                </div>
+                <div className="card">
                   <div className="eyebrow">Contract Validation</div>
                   <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>
                     {contractData ? (contractData.result.passed ? `pass (${contractData.result.scorePercent}%)` : `fail (${contractData.result.scorePercent}%)`) : 'pending'}
@@ -694,6 +719,9 @@ export default function IntegrationsPage() {
 
               <div className="text-muted" style={{ fontSize: '0.75rem' }}>
                 Signature algo: {incidentPackageData.manifest.integrity.algorithm} | Manifest SHA-256: {incidentPackageData.manifest.integrity.manifestSha256}
+              </div>
+              <div className="text-muted" style={{ fontSize: '0.75rem' }}>
+                Contract digest: {incidentPackageData.manifest.digests.contractJsonSha256}
               </div>
 
               {contractData ? (

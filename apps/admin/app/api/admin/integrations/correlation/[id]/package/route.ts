@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { createHash, createHmac } from "node:crypto";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { prisma } from "@/lib/prisma";
+import { evaluateCorrelationContract } from "@/lib/integrations/correlation-contract";
 
 type TimelineRow = {
   id: string;
@@ -213,8 +214,11 @@ export async function GET(
 
   const timelineCsv = buildTimelineCsv(correlationId, timeline);
   const settlementsCsv = buildSettlementsCsv(correlationId, timeline);
+  const contract = evaluateCorrelationContract(events, correlationId);
+  const contractCanonical = JSON.stringify(contract);
   const timelineCsvSha256 = createHash("sha256").update(timelineCsv, "utf8").digest("hex");
   const settlementsCsvSha256 = createHash("sha256").update(settlementsCsv, "utf8").digest("hex");
+  const contractJsonSha256 = createHash("sha256").update(contractCanonical, "utf8").digest("hex");
   const manifestCore = {
     correlationId,
     eventCount: timeline.length,
@@ -222,7 +226,8 @@ export async function GET(
     generatedAt: new Date().toISOString(),
     digests: {
       timelineCsvSha256,
-      settlementsCsvSha256
+      settlementsCsvSha256,
+      contractJsonSha256
     }
   };
 
@@ -250,10 +255,12 @@ export async function GET(
     packagedAt: manifest.generatedAt,
     limit,
     summary,
+    contract,
     manifest,
     package: {
       timelineCsvSha256,
       settlementsCsvSha256,
+      contractJsonSha256,
       timelineCsv,
       settlementsCsv
     },

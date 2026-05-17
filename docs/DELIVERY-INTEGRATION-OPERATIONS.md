@@ -275,6 +275,13 @@ Package response includes integrity metadata for audit workflows:
 - `manifest.eventCount`
 - `manifest.digests.timelineCsvSha256`
 - `manifest.digests.settlementsCsvSha256`
+- `manifest.digests.contractJsonSha256`
+
+Package payload also includes embedded contract evaluation snapshot:
+
+- `contract.summary`
+- `contract.checks[]`
+- `contract.result`
 
 Optional package signing for audit authenticity:
 
