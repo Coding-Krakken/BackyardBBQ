@@ -1,12 +1,12 @@
 import { galleryImages, menuImages } from "./images";
 
 const orderOnlineUrl = process.env.NEXT_PUBLIC_ORDER_ONLINE_URL ?? "/checkout";
-const doordashUrl = process.env.NEXT_PUBLIC_DOORDASH_URL ?? "https://order.online/doordash-placeholder";
+const doordashUrl = process.env.NEXT_PUBLIC_DOORDASH_URL ?? "https://www.doordash.com";
 const uberEatsUrl =
   process.env.NEXT_PUBLIC_UBER_EATS_URL ??
   process.env.NEXT_PUBLIC_UBEREATS_URL ??
-  "https://order.online/ubereats-placeholder";
-const grubhubUrl = process.env.NEXT_PUBLIC_GRUBHUB_URL ?? "https://order.online/grubhub-placeholder";
+  "https://www.ubereats.com";
+const grubhubUrl = process.env.NEXT_PUBLIC_GRUBHUB_URL ?? "https://www.grubhub.com";
 const cateringInquiryUrl = process.env.NEXT_PUBLIC_CATERING_INQUIRY_URL ?? "/catering";
 
 export const businessInfo = {
