@@ -11,18 +11,33 @@ Set provider credentials in the runtime environment for workers and API:
 - `DOORDASH_WEBHOOK_SECRET`
 - `DOORDASH_MERCHANT_ID`
 - `DOORDASH_STORE_ID`
+- `DOORDASH_ENVIRONMENT` (`sandbox` or `production`)
 
 - `UBEREATS_API_KEY`
 - `UBEREATS_API_SECRET`
 - `UBEREATS_WEBHOOK_SECRET`
 - `UBEREATS_MERCHANT_ID`
 - `UBEREATS_STORE_ID`
+- `UBEREATS_ENVIRONMENT` (`sandbox` or `production`)
 
 - `GRUBHUB_API_KEY`
 - `GRUBHUB_API_SECRET`
 - `GRUBHUB_WEBHOOK_SECRET`
 - `GRUBHUB_MERCHANT_ID`
 - `GRUBHUB_STORE_ID`
+- `GRUBHUB_ENVIRONMENT` (`sandbox` or `production`)
+
+Delivery webhook endpoints:
+
+- `POST /api/webhooks/delivery/:channel/orders`
+- `POST /api/webhooks/delivery/:channel/status`
+- `POST /api/webhooks/delivery/:channel/settlements`
+
+Worker webhook processing behavior:
+
+1. `delivery.webhook.order.received` events are consumed and create channel-linked orders when the external order does not already exist.
+2. `delivery.webhook.status.received` events are consumed and update internal order status by internal ID or `(externalChannel, externalOrderId)` fallback.
+3. `delivery.webhook.settlement.received` events feed the existing settlement queue cycle and dedupe logic.
 
 Optional endpoint overrides:
 

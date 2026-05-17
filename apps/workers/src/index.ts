@@ -59,6 +59,26 @@ deliveryChannels.forEach((channel) => {
 let sequence = 0;
 let lastOutboundSyncAt = new Date(0);
 
+type IncomingWebhookOrder = {
+  externalOrderId: string;
+  source: DeliveryChannel;
+  subtotalCents: number;
+  taxCents: number;
+  tipCents: number;
+  totalCents: number;
+  items: Array<{
+    name: string;
+    quantity: number;
+    unitPriceCents: number;
+    notes?: string;
+  }>;
+};
+
+type IncomingWebhookStatusUpdate = {
+  internalOrderId?: string;
+  status: "pending" | "confirmed" | "preparing" | "ready" | "completed" | "cancelled";
+};
+
 function mapInternalToProviderStatus(status: string): ProviderStatusSyncInput["status"] | null {
   switch (status) {
     case "confirmed":
@@ -79,6 +99,369 @@ function mapInternalToProviderStatus(status: string): ProviderStatusSyncInput["s
 function getPayloadCorrelationId(payload: Prisma.JsonObject, fallback: string) {
   const correlationId = payload.correlationId;
   return typeof correlationId === "string" && correlationId.length > 0 ? correlationId : fallback;
+}
+
+function parseWebhookOrderPayload(payload: Prisma.JsonObject): IncomingWebhookOrder | null {
+  const orderValue = payload.order;
+  if (!orderValue || typeof orderValue !== "object" || Array.isArray(orderValue)) {
+    return null;
+  }
+
+  const order = orderValue as Prisma.JsonObject;
+  const externalOrderId = typeof order.externalOrderId === "string" ? order.externalOrderId : null;
+  const source = typeof order.source === "string" ? (order.source as DeliveryChannel) : null;
+  const subtotalCents = typeof order.subtotalCents === "number" ? order.subtotalCents : null;
+  const taxCents = typeof order.taxCents === "number" ? order.taxCents : 0;
+  const tipCents = typeof order.tipCents === "number" ? order.tipCents : 0;
+  const totalCents = typeof order.totalCents === "number" ? order.totalCents : null;
+  const itemsValue = order.items;
+
+  if (!externalOrderId || !source || !deliveryChannels.includes(source) || subtotalCents === null || totalCents === null) {
+    return null;
+  }
+
+  if (!Array.isArray(itemsValue) || itemsValue.length === 0) {
+    return null;
+  }
+
+  const items: IncomingWebhookOrder["items"] = [];
+  for (const item of itemsValue) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      continue;
+    }
+
+    const row = item as Prisma.JsonObject;
+    const name = typeof row.name === "string" ? row.name : null;
+    const quantity = typeof row.quantity === "number" ? row.quantity : null;
+    const unitPriceCents = typeof row.unitPriceCents === "number" ? row.unitPriceCents : null;
+    const notes = typeof row.notes === "string" ? row.notes : undefined;
+
+    if (!name || quantity === null || unitPriceCents === null) {
+      continue;
+    }
+
+    items.push({ name, quantity, unitPriceCents, notes });
+  }
+
+  if (items.length === 0) {
+    return null;
+  }
+
+  return {
+    externalOrderId,
+    source,
+    subtotalCents,
+    taxCents,
+    tipCents,
+    totalCents,
+    items
+  };
+}
+
+function parseWebhookStatusPayload(payload: Prisma.JsonObject): IncomingWebhookStatusUpdate | null {
+  const statusValue = payload.statusUpdate;
+  if (!statusValue || typeof statusValue !== "object" || Array.isArray(statusValue)) {
+    return null;
+  }
+
+  const statusUpdate = statusValue as Prisma.JsonObject;
+  const status = typeof statusUpdate.status === "string" ? statusUpdate.status : null;
+  const internalOrderId =
+    typeof statusUpdate.internalOrderId === "string" ? statusUpdate.internalOrderId : undefined;
+
+  if (
+    status !== "pending" &&
+    status !== "confirmed" &&
+    status !== "preparing" &&
+    status !== "ready" &&
+    status !== "completed" &&
+    status !== "cancelled"
+  ) {
+    return null;
+  }
+
+  return {
+    internalOrderId,
+    status
+  };
+}
+
+async function getDefaultLocationId() {
+  const location = await prisma.location.findFirst({
+    where: { isActive: true },
+    select: { id: true }
+  });
+
+  return location?.id ?? null;
+}
+
+async function runWebhookOrderQueueCycle() {
+  if (!hasDatabaseUrl) {
+    return;
+  }
+
+  const queuedEvents = await prisma.integrationEvent.findMany({
+    where: {
+      eventType: "delivery.webhook.order.received",
+      status: { in: ["queued", "pending"] }
+    },
+    orderBy: { createdAt: "asc" },
+    take: 100
+  });
+
+  for (const webhookEvent of queuedEvents) {
+    const channel = webhookEvent.channel as DeliveryChannel;
+    const payload = webhookEvent.payload as Prisma.JsonObject;
+    const correlationId = getPayloadCorrelationId(payload, `wh-order-${webhookEvent.id}`);
+    const parsedOrder = parseWebhookOrderPayload(payload);
+
+    if (!parsedOrder) {
+      await prisma.integrationEvent.update({
+        where: { id: webhookEvent.id },
+        data: {
+          status: "dead_letter",
+          payload: {
+            ...payload,
+            correlationId,
+            reason: "invalid_webhook_order_payload",
+            failedAt: new Date().toISOString()
+          }
+        }
+      });
+      continue;
+    }
+
+    if (parsedOrder.source !== channel) {
+      await prisma.integrationEvent.update({
+        where: { id: webhookEvent.id },
+        data: {
+          status: "dead_letter",
+          payload: {
+            ...payload,
+            correlationId,
+            reason: "channel_source_mismatch",
+            failedAt: new Date().toISOString()
+          }
+        }
+      });
+      continue;
+    }
+
+    const locationId = await getDefaultLocationId();
+    if (!locationId) {
+      await prisma.integrationEvent.update({
+        where: { id: webhookEvent.id },
+        data: {
+          status: "dead_letter",
+          payload: {
+            ...payload,
+            correlationId,
+            reason: "no_active_location",
+            failedAt: new Date().toISOString()
+          }
+        }
+      });
+      continue;
+    }
+
+    try {
+      const existing = await prisma.order.findFirst({
+        where: {
+          externalChannel: channel,
+          externalOrderId: parsedOrder.externalOrderId
+        },
+        select: {
+          id: true,
+          totalCents: true
+        }
+      });
+
+      if (!existing) {
+        await prisma.order.create({
+          data: {
+            locationId,
+            source: channel,
+            status: "pending",
+            externalChannel: channel,
+            externalOrderId: parsedOrder.externalOrderId,
+            subtotalCents: parsedOrder.subtotalCents,
+            taxCents: parsedOrder.taxCents,
+            tipCents: parsedOrder.tipCents,
+            totalCents: parsedOrder.totalCents,
+            items: {
+              create: parsedOrder.items.map((item) => ({
+                menuItemName: item.name,
+                quantity: item.quantity,
+                unitPriceCents: item.unitPriceCents,
+                notes: item.notes
+              }))
+            }
+          }
+        });
+      }
+
+      await prisma.integrationEvent.update({
+        where: { id: webhookEvent.id },
+        data: {
+          status: "processed",
+          payload: {
+            ...payload,
+            correlationId,
+            processedAt: new Date().toISOString(),
+            duplicateOrder: Boolean(existing)
+          }
+        }
+      });
+    } catch (error) {
+      await prisma.integrationEvent.update({
+        where: { id: webhookEvent.id },
+        data: {
+          status: "dead_letter",
+          payload: {
+            ...payload,
+            correlationId,
+            reason: error instanceof Error ? error.message : "webhook_order_processing_failed",
+            failedAt: new Date().toISOString()
+          }
+        }
+      });
+    }
+  }
+}
+
+async function runWebhookStatusQueueCycle() {
+  if (!hasDatabaseUrl) {
+    return;
+  }
+
+  const queuedEvents = await prisma.integrationEvent.findMany({
+    where: {
+      eventType: "delivery.webhook.status.received",
+      status: { in: ["queued", "pending"] }
+    },
+    orderBy: { createdAt: "asc" },
+    take: 100
+  });
+
+  for (const webhookEvent of queuedEvents) {
+    const channel = webhookEvent.channel as DeliveryChannel;
+    const payload = webhookEvent.payload as Prisma.JsonObject;
+    const correlationId = getPayloadCorrelationId(payload, `wh-status-${webhookEvent.id}`);
+    const parsedStatus = parseWebhookStatusPayload(payload);
+    const orderExternalId = typeof payload.orderExternalId === "string" ? payload.orderExternalId : undefined;
+
+    if (!parsedStatus) {
+      await prisma.integrationEvent.update({
+        where: { id: webhookEvent.id },
+        data: {
+          status: "dead_letter",
+          payload: {
+            ...payload,
+            correlationId,
+            reason: "invalid_webhook_status_payload",
+            failedAt: new Date().toISOString()
+          }
+        }
+      });
+      continue;
+    }
+
+    const order = parsedStatus.internalOrderId
+      ? await prisma.order.findUnique({
+          where: { id: parsedStatus.internalOrderId },
+          select: { id: true, status: true, source: true, externalOrderId: true }
+        })
+      : orderExternalId
+        ? await prisma.order.findFirst({
+            where: {
+              externalChannel: channel,
+              externalOrderId: orderExternalId
+            },
+            select: { id: true, status: true, source: true, externalOrderId: true }
+          })
+        : null;
+
+    if (!order) {
+      await prisma.integrationEvent.update({
+        where: { id: webhookEvent.id },
+        data: {
+          status: "dead_letter",
+          payload: {
+            ...payload,
+            correlationId,
+            reason: "order_not_found_for_status",
+            failedAt: new Date().toISOString()
+          }
+        }
+      });
+      continue;
+    }
+
+    if (order.source !== channel) {
+      await prisma.integrationEvent.update({
+        where: { id: webhookEvent.id },
+        data: {
+          status: "dead_letter",
+          payload: {
+            ...payload,
+            correlationId,
+            reason: "status_channel_source_mismatch",
+            failedAt: new Date().toISOString()
+          }
+        }
+      });
+      continue;
+    }
+
+    try {
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { status: parsedStatus.status }
+      });
+
+      await prisma.integrationEvent.update({
+        where: { id: webhookEvent.id },
+        data: {
+          orderId: order.id,
+          status: "processed",
+          payload: {
+            ...payload,
+            correlationId,
+            previousStatus: order.status,
+            appliedStatus: parsedStatus.status,
+            processedAt: new Date().toISOString()
+          }
+        }
+      });
+
+      await persistStatusSyncEvent({
+        channel,
+        status: "processed",
+        payload: {
+          orderId: order.id,
+          externalOrderId: order.externalOrderId,
+          mappedStatus: parsedStatus.status,
+          correlationId,
+          sourceEventId: webhookEvent.id,
+          direction: "inbound_webhook",
+          syncedAt: new Date().toISOString()
+        }
+      });
+    } catch (error) {
+      await prisma.integrationEvent.update({
+        where: { id: webhookEvent.id },
+        data: {
+          status: "dead_letter",
+          payload: {
+            ...payload,
+            correlationId,
+            reason: error instanceof Error ? error.message : "webhook_status_processing_failed",
+            failedAt: new Date().toISOString()
+          }
+        }
+      });
+    }
+  }
 }
 
 async function persistHealthEvent(input: {
@@ -942,6 +1325,18 @@ setInterval(() => {
     console.error("[workers] order action queue cycle failed", error);
   });
 }, 10000);
+
+setInterval(() => {
+  runWebhookOrderQueueCycle().catch((error) => {
+    console.error("[workers] webhook order queue cycle failed", error);
+  });
+}, 8000);
+
+setInterval(() => {
+  runWebhookStatusQueueCycle().catch((error) => {
+    console.error("[workers] webhook status queue cycle failed", error);
+  });
+}, 8000);
 
 setInterval(() => {
   runSettlementQueueCycle().catch((error) => {
