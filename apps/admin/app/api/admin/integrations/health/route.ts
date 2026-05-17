@@ -23,6 +23,9 @@ export async function GET() {
       queued: number;
       dispatchQueued: number;
       dispatchProcessed: number;
+      actionQueued: number;
+      actionProcessed: number;
+      actionDeadLetter: number;
       latencies: number[];
       lastCheck: string;
     }
@@ -37,6 +40,9 @@ export async function GET() {
         queued: 0,
         dispatchQueued: 0,
         dispatchProcessed: 0,
+        actionQueued: 0,
+        actionProcessed: 0,
+        actionDeadLetter: 0,
         latencies: [],
         lastCheck: e.createdAt.toISOString()
       };
@@ -51,6 +57,12 @@ export async function GET() {
     if (e.eventType === "delivery.dispatch.requested") {
       if (e.status === "queued" || e.status === "pending") c.dispatchQueued += 1;
       if (e.status === "processed") c.dispatchProcessed += 1;
+    }
+
+    if (e.eventType === "delivery.order.action.requested") {
+      if (e.status === "queued" || e.status === "pending") c.actionQueued += 1;
+      if (e.status === "processed") c.actionProcessed += 1;
+      if (e.status === "dead_letter" || e.status === "failed") c.actionDeadLetter += 1;
     }
 
     const payload = e.payload as Record<string, unknown>;
@@ -68,6 +80,9 @@ export async function GET() {
     queuedCount: v.queued,
     dispatchQueuedCount: v.dispatchQueued,
     dispatchProcessedCount: v.dispatchProcessed,
+    actionQueuedCount: v.actionQueued,
+    actionProcessedCount: v.actionProcessed,
+    actionDeadLetterCount: v.actionDeadLetter,
     latencyMs: v.latencies.length > 0 ? Math.round(v.latencies.reduce((a, b) => a + b, 0) / v.latencies.length) : 0,
     recordedAt: v.lastCheck
   }));
