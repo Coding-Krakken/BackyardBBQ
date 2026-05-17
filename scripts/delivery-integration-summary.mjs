@@ -2,6 +2,8 @@
 
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 
+const DELIVERY_CHANNELS = ["doordash", "ubereats", "grubhub"];
+
 function parseArgs(argv) {
   const args = {};
   for (let index = 2; index < argv.length; index += 1) {
@@ -37,9 +39,9 @@ function readJsonIfPresent(path) {
   }
 }
 
-function buildSummaryMarkdown(summary) {
+function buildSummaryMarkdown(summary, title = "Delivery Replay Summary") {
   return [
-    "## Delivery Replay Summary",
+    `## ${title}`,
     "",
     "| Check | Result |",
     "| --- | --- |",
@@ -55,6 +57,33 @@ function buildSummaryMarkdown(summary) {
     `| Daily close settlementNetCents | ${summary.settlementNetCents} |`,
     ""
   ].join("\n");
+}
+
+function buildSummaryFromArtifacts(inputDir) {
+  const webhook = readJsonIfPresent(`${inputDir}/delivery-webhook-replay.json`);
+  const dispatch = readJsonIfPresent(`${inputDir}/delivery-dispatch-replay.json`);
+  const action = readJsonIfPresent(`${inputDir}/delivery-action-replay.json`);
+  const settlement = readJsonIfPresent(`${inputDir}/delivery-settlement-replay.json`);
+
+  return {
+    webhook,
+    dispatch,
+    action,
+    settlement,
+    summary: {
+      webhookFirstOk: webhook?.firstAttempt?.ok ?? "n/a",
+      webhookDuplicateSuppressed: webhook?.duplicateSuppressed ?? "n/a",
+      dispatchFirstOk: dispatch?.first?.ok ?? "n/a",
+      dispatchDuplicateSuppressed: dispatch?.duplicateSuppressed ?? "n/a",
+      actionFirstOk: action?.firstAction?.ok ?? "n/a",
+      actionDuplicateSuppressed: action?.duplicateSuppressed ?? "n/a",
+      settlementFirstOk: settlement?.firstAttempt?.ok ?? "n/a",
+      settlementDuplicateSuppressed: settlement?.duplicateSuppressed ?? "n/a",
+      settlementBusinessKeyDuplicateSuppressed:
+        settlement?.businessKeyDuplicateSuppressed ?? "n/a",
+      settlementNetCents: settlement?.dailyClose?.settlementNetCents ?? "n/a"
+    }
+  };
 }
 
 function validate(summary) {
@@ -83,6 +112,30 @@ function validate(summary) {
   return failures;
 }
 
+function buildAllChannelsMarkdown(channelSummaries) {
+  const lines = [
+    "## Delivery Replay Summary (All Channels)",
+    "",
+    "| Channel | Webhook | Dispatch | Action | Settlement | Business Key |",
+    "| --- | --- | --- | --- | --- | --- |"
+  ];
+
+  for (const [channel, summary] of channelSummaries) {
+    lines.push(
+      `| ${channel} | ${summary.webhookFirstOk === true && summary.webhookDuplicateSuppressed === true ? "pass" : "fail"} | ${summary.dispatchFirstOk === true && summary.dispatchDuplicateSuppressed === true ? "pass" : "fail"} | ${summary.actionFirstOk === true && summary.actionDuplicateSuppressed === true ? "pass" : "fail"} | ${summary.settlementFirstOk === true && summary.settlementDuplicateSuppressed === true ? "pass" : "fail"} | ${summary.settlementBusinessKeyDuplicateSuppressed === true ? "pass" : "fail"} |`
+    );
+  }
+
+  lines.push("");
+
+  for (const [channel, summary] of channelSummaries) {
+    lines.push(buildSummaryMarkdown(summary, `Delivery Replay Summary (${channel})`));
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}
+
 function main() {
   const args = parseArgs(process.argv);
   const inputDir = args["input-dir"] ?? "artifacts/delivery-replay";
@@ -90,35 +143,60 @@ function main() {
   const requireFiles = args["require-files"] === "true";
   const requirePass = args["require-pass"] === "true";
 
-  const webhook = readJsonIfPresent(`${inputDir}/delivery-webhook-replay.json`);
-  const dispatch = readJsonIfPresent(`${inputDir}/delivery-dispatch-replay.json`);
-  const action = readJsonIfPresent(`${inputDir}/delivery-action-replay.json`);
-  const settlement = readJsonIfPresent(`${inputDir}/delivery-settlement-replay.json`);
+  const allChannels = args["all-channels"] === "true";
 
-  if (requireFiles && (!webhook || !dispatch || !action || !settlement)) {
+  if (allChannels) {
+    const channelSummaries = new Map();
+
+    for (const channel of DELIVERY_CHANNELS) {
+      const artifacts = buildSummaryFromArtifacts(`${inputDir}/${channel}`);
+      if (
+        requireFiles &&
+        (!artifacts.webhook || !artifacts.dispatch || !artifacts.action || !artifacts.settlement)
+      ) {
+        console.error(`Missing delivery replay artifacts for ${channel} under ${inputDir}/${channel}.`);
+        process.exit(1);
+      }
+
+      channelSummaries.set(channel, artifacts.summary);
+    }
+
+    const markdown = buildAllChannelsMarkdown(channelSummaries);
+    console.log(markdown);
+
+    if (requirePass) {
+      const failures = [];
+      for (const [channel, summary] of channelSummaries) {
+        const channelFailures = validate(summary);
+        for (const failure of channelFailures) {
+          failures.push(`${channel}:${failure}`);
+        }
+      }
+      if (failures.length > 0) {
+        console.error(`Delivery replay validation failed: ${failures.join(", ")}`);
+        process.exit(1);
+      }
+    }
+
+    if (typeof summaryPath === "string" && summaryPath.length > 0) {
+      appendFileSync(summaryPath, `${markdown}\n`, "utf8");
+    }
+
+    return;
+  }
+
+  const artifacts = buildSummaryFromArtifacts(inputDir);
+
+  if (requireFiles && (!artifacts.webhook || !artifacts.dispatch || !artifacts.action || !artifacts.settlement)) {
     console.error(`Missing delivery replay artifacts under ${inputDir}.`);
     process.exit(1);
   }
 
-  const summary = {
-    webhookFirstOk: webhook?.firstAttempt?.ok ?? "n/a",
-    webhookDuplicateSuppressed: webhook?.duplicateSuppressed ?? "n/a",
-    dispatchFirstOk: dispatch?.first?.ok ?? "n/a",
-    dispatchDuplicateSuppressed: dispatch?.duplicateSuppressed ?? "n/a",
-    actionFirstOk: action?.firstAction?.ok ?? "n/a",
-    actionDuplicateSuppressed: action?.duplicateSuppressed ?? "n/a",
-    settlementFirstOk: settlement?.firstAttempt?.ok ?? "n/a",
-    settlementDuplicateSuppressed: settlement?.duplicateSuppressed ?? "n/a",
-    settlementBusinessKeyDuplicateSuppressed:
-      settlement?.businessKeyDuplicateSuppressed ?? "n/a",
-    settlementNetCents: settlement?.dailyClose?.settlementNetCents ?? "n/a"
-  };
-
-  const markdown = buildSummaryMarkdown(summary);
+  const markdown = buildSummaryMarkdown(artifacts.summary);
   console.log(markdown);
 
   if (requirePass) {
-    const failures = validate(summary);
+    const failures = validate(artifacts.summary);
     if (failures.length > 0) {
       console.error(`Delivery replay validation failed: ${failures.join(", ")}`);
       process.exit(1);

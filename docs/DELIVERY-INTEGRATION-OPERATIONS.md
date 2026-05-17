@@ -79,11 +79,18 @@ Notes:
 - Live mode enforces summary validation by default (`--validate-summary true`).
 - Disable strict summary gating only for exploratory runs with `--validate-summary false`.
 - In `--channel all` mode, channel-specific webhook secrets must be configured for each provider.
+- In `--channel all` live mode, a consolidated strict summary is also generated and validated after per-channel runs.
 
 Summary report from replay artifacts:
 
 ```bash
 npm run report:delivery:integration -- --input-dir artifacts/delivery-replay
+```
+
+Consolidated all-channel summary report (expects per-channel subdirectories under `artifacts/delivery-replay`):
+
+```bash
+npm run report:delivery:integration -- --input-dir artifacts/delivery-replay --all-channels true --require-files true --require-pass true
 ```
 
 ### Delivery webhook replay

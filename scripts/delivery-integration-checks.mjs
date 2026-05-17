@@ -224,6 +224,25 @@ function main() {
     }
   }
 
+  if (channel === "all" && validateSummary) {
+    const consolidatedSummaryExit = runCommand("npm", [
+      "run",
+      "report:delivery:integration",
+      "--",
+      "--input-dir",
+      outputDir,
+      "--all-channels",
+      "true",
+      "--require-files",
+      "true",
+      "--require-pass",
+      "true"
+    ]);
+    if (consolidatedSummaryExit !== 0) {
+      process.exit(consolidatedSummaryExit);
+    }
+  }
+
   process.exit(0);
 }
 
