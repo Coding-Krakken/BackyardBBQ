@@ -1,1 +1,6 @@
+if git diff --cached --quiet; then
+	echo "No staged files. Skipping lint-staged."
+	exit 0
+fi
+
 npx lint-staged
