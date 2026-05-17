@@ -54,3 +54,25 @@ test("accepts explicit validate-summary flag in non-live mode", () => {
   const result = runChecks(["--run-live", "false", "--validate-summary", "false"]);
   assert.equal(result.status, 0);
 });
+
+test("accepts all channel mode in non-live runs", () => {
+  const result = runChecks(["--channel", "all", "--run-live", "false"]);
+  assert.equal(result.status, 0);
+});
+
+test("fails in live all-channel mode when one channel secret is missing", () => {
+  const result = runChecks([
+    "--run-live",
+    "true",
+    "--channel",
+    "all"
+  ], {
+    DOORDASH_WEBHOOK_SECRET: "dd-secret",
+    UBEREATS_WEBHOOK_SECRET: "",
+    GRUBHUB_WEBHOOK_SECRET: "gh-secret",
+    DELIVERY_WEBHOOK_SECRET: ""
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Missing webhook secret for live mode on channel ubereats/);
+});

@@ -68,10 +68,17 @@ Command (live replay validation):
 npm run test:delivery:integration -- --run-live true --channel doordash --api-base-url http://localhost:4000 --webhook-secret <secret>
 ```
 
+Command (live replay validation across all channels):
+
+```bash
+npm run test:delivery:integration -- --run-live true --channel all --api-base-url http://localhost:4000
+```
+
 Notes:
 
 - Live mode enforces summary validation by default (`--validate-summary true`).
 - Disable strict summary gating only for exploratory runs with `--validate-summary false`.
+- In `--channel all` mode, channel-specific webhook secrets must be configured for each provider.
 
 Summary report from replay artifacts:
 

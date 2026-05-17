@@ -27,7 +27,7 @@ function parseArgs(argv) {
 }
 
 function printUsage() {
-  console.log(`Usage:\n  node scripts/delivery-integration-checks.mjs [--channel doordash] [--api-base-url http://localhost:4000] [--run-live true] [--webhook-secret secret] [--output-dir artifacts/delivery-replay] [--validate-summary true]\n\nRun modes:\n  --run-live true  Executes replay scripts against a running API service.\n  --run-live false Validates replay command wiring via --help (default).\n\nValidation options:\n  --validate-summary true|false  In live mode, enforce summary file checks (default: true).\n\nEnvironment options:\n  API_BASE_URL\n  DELIVERY_CHANNEL\n  <CHANNEL>_WEBHOOK_SECRET\n  DELIVERY_WEBHOOK_SECRET`);
+  console.log(`Usage:\n  node scripts/delivery-integration-checks.mjs [--channel doordash|ubereats|grubhub|all] [--api-base-url http://localhost:4000] [--run-live true] [--webhook-secret secret] [--output-dir artifacts/delivery-replay] [--validate-summary true]\n\nRun modes:\n  --run-live true  Executes replay scripts against a running API service.\n  --run-live false Validates replay command wiring via --help (default).\n\nValidation options:\n  --validate-summary true|false  In live mode, enforce summary file checks (default: true).\n\nEnvironment options:\n  API_BASE_URL\n  DELIVERY_CHANNEL\n  <CHANNEL>_WEBHOOK_SECRET\n  DELIVERY_WEBHOOK_SECRET`);
 }
 
 function ensureAbsoluteHttpUrl(value, flagName) {
@@ -42,10 +42,18 @@ function ensureAbsoluteHttpUrl(value, flagName) {
 }
 
 function ensureChannel(value) {
-  const allowed = new Set(["doordash", "ubereats", "grubhub"]);
+  const allowed = new Set(["doordash", "ubereats", "grubhub", "all"]);
   if (!allowed.has(value)) {
-    throw new Error("Invalid --channel. Expected one of: doordash, ubereats, grubhub.");
+    throw new Error("Invalid --channel. Expected one of: doordash, ubereats, grubhub, all.");
   }
+}
+
+function getWebhookSecretForChannel(args, channel) {
+  return (
+    args["webhook-secret"] ??
+    process.env[`${channel.toUpperCase()}_WEBHOOK_SECRET`] ??
+    process.env.DELIVERY_WEBHOOK_SECRET
+  );
 }
 
 function ensureOutputDir(value) {
@@ -80,20 +88,22 @@ function main() {
   const channel = args.channel ?? process.env.DELIVERY_CHANNEL ?? "doordash";
   const apiBaseUrl = args["api-base-url"] ?? process.env.API_BASE_URL ?? "http://localhost:4000";
   const outputDir = args["output-dir"] ?? "artifacts/delivery-replay";
-  const webhookSecret =
-    args["webhook-secret"] ??
-    process.env[`${channel.toUpperCase()}_WEBHOOK_SECRET`] ??
-    process.env.DELIVERY_WEBHOOK_SECRET;
 
   try {
     ensureChannel(channel);
     ensureAbsoluteHttpUrl(apiBaseUrl, "--api-base-url");
     ensureOutputDir(outputDir);
 
-    if (runLive && !webhookSecret) {
-      throw new Error(
-        "Missing webhook secret for live mode. Use --webhook-secret or CHANNEL_WEBHOOK_SECRET env var."
-      );
+    if (runLive) {
+      const channelsToRun = channel === "all" ? ["doordash", "ubereats", "grubhub"] : [channel];
+      for (const channelToRun of channelsToRun) {
+        const webhookSecret = getWebhookSecretForChannel(args, channelToRun);
+        if (!webhookSecret) {
+          throw new Error(
+            `Missing webhook secret for live mode on channel ${channelToRun}. Use --webhook-secret or CHANNEL_WEBHOOK_SECRET env var.`
+          );
+        }
+      }
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Invalid delivery integration input.";
@@ -120,90 +130,98 @@ function main() {
     process.exit(0);
   }
 
-  const webhookOutput = `${outputDir}/delivery-webhook-replay.json`;
-  const dispatchOutput = `${outputDir}/delivery-dispatch-replay.json`;
-  const actionOutput = `${outputDir}/delivery-action-replay.json`;
-  const settlementOutput = `${outputDir}/delivery-settlement-replay.json`;
+  const channelsToRun = channel === "all" ? ["doordash", "ubereats", "grubhub"] : [channel];
 
-  const webhookExit = runCommand("npm", [
-    "run",
-    "test:delivery:webhook-replay",
-    "--",
-    "--channel",
-    channel,
-    "--api-base-url",
-    apiBaseUrl,
-    "--webhook-secret",
-    webhookSecret,
-    "--output-json",
-    webhookOutput
-  ]);
-  if (webhookExit !== 0) {
-    process.exit(webhookExit);
-  }
+  for (const channelToRun of channelsToRun) {
+    const webhookSecret = getWebhookSecretForChannel(args, channelToRun);
+    const channelOutputDir = channel === "all" ? `${outputDir}/${channelToRun}` : outputDir;
+    const webhookOutput = `${channelOutputDir}/delivery-webhook-replay.json`;
+    const dispatchOutput = `${channelOutputDir}/delivery-dispatch-replay.json`;
+    const actionOutput = `${channelOutputDir}/delivery-action-replay.json`;
+    const settlementOutput = `${channelOutputDir}/delivery-settlement-replay.json`;
 
-  const dispatchExit = runCommand("npm", [
-    "run",
-    "test:delivery:dispatch-replay",
-    "--",
-    "--channel",
-    channel,
-    "--api-base-url",
-    apiBaseUrl,
-    "--output-json",
-    dispatchOutput
-  ]);
-  if (dispatchExit !== 0) {
-    process.exit(dispatchExit);
-  }
-
-  const actionExit = runCommand("npm", [
-    "run",
-    "test:delivery:action-replay",
-    "--",
-    "--channel",
-    channel,
-    "--action",
-    "accept",
-    "--api-base-url",
-    apiBaseUrl,
-    "--output-json",
-    actionOutput
-  ]);
-  if (actionExit !== 0) {
-    process.exit(actionExit);
-  }
-
-  const settlementExit = runCommand("npm", [
-    "run",
-    "test:delivery:settlement-replay",
-    "--",
-    "--channel",
-    channel,
-    "--api-base-url",
-    apiBaseUrl,
-    "--webhook-secret",
-    webhookSecret,
-    "--output-json",
-    settlementOutput
-  ]);
-  if (settlementExit !== 0) {
-    process.exit(settlementExit);
-  }
-
-  if (validateSummary) {
-    const summaryExit = runCommand("npm", [
+    const webhookExit = runCommand("npm", [
       "run",
-      "report:delivery:integration",
+      "test:delivery:webhook-replay",
       "--",
-      "--input-dir",
-      outputDir,
-      "--require-files",
-      "true",
-      "--require-pass",
-      "true"
+      "--channel",
+      channelToRun,
+      "--api-base-url",
+      apiBaseUrl,
+      "--webhook-secret",
+      webhookSecret,
+      "--output-json",
+      webhookOutput
     ]);
-    process.exit(summaryExit);
+    if (webhookExit !== 0) {
+      process.exit(webhookExit);
+    }
+
+    const dispatchExit = runCommand("npm", [
+      "run",
+      "test:delivery:dispatch-replay",
+      "--",
+      "--channel",
+      channelToRun,
+      "--api-base-url",
+      apiBaseUrl,
+      "--output-json",
+      dispatchOutput
+    ]);
+    if (dispatchExit !== 0) {
+      process.exit(dispatchExit);
+    }
+
+    const actionExit = runCommand("npm", [
+      "run",
+      "test:delivery:action-replay",
+      "--",
+      "--channel",
+      channelToRun,
+      "--action",
+      "accept",
+      "--api-base-url",
+      apiBaseUrl,
+      "--output-json",
+      actionOutput
+    ]);
+    if (actionExit !== 0) {
+      process.exit(actionExit);
+    }
+
+    const settlementExit = runCommand("npm", [
+      "run",
+      "test:delivery:settlement-replay",
+      "--",
+      "--channel",
+      channelToRun,
+      "--api-base-url",
+      apiBaseUrl,
+      "--webhook-secret",
+      webhookSecret,
+      "--output-json",
+      settlementOutput
+    ]);
+    if (settlementExit !== 0) {
+      process.exit(settlementExit);
+    }
+
+    if (validateSummary) {
+      const summaryExit = runCommand("npm", [
+        "run",
+        "report:delivery:integration",
+        "--",
+        "--input-dir",
+        channelOutputDir,
+        "--require-files",
+        "true",
+        "--require-pass",
+        "true"
+      ]);
+      if (summaryExit !== 0) {
+        process.exit(summaryExit);
+      }
+    }
   }
 
   process.exit(0);
