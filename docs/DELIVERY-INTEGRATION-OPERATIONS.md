@@ -180,6 +180,7 @@ Alerting behavior details:
 
 - Integrations alerts include settlement-specific dead-letter/failure signals.
 - Integrations alerts include queued/pending settlement backlog thresholds.
+- Integrations alerts include settlement fee-rate spike detection versus the previous 7-day baseline window.
 
 ## Suggested Operational Checks
 

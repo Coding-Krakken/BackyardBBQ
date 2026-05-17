@@ -6,8 +6,11 @@ export async function GET() {
   const auth = await requireAdmin(['owner', 'admin']);
   if (auth instanceof NextResponse) return auth;
 
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const [failedEvents, settlementBacklog, settlementProcessed] = await Promise.all([
+  const now = Date.now();
+  const since = new Date(now - 24 * 60 * 60 * 1000);
+  const baselineSince = new Date(now - 8 * 24 * 60 * 60 * 1000);
+
+  const [failedEvents, settlementBacklog, settlementProcessed, settlementProcessedTrend] = await Promise.all([
     prisma.integrationEvent.findMany({
       where: { createdAt: { gte: since }, status: { in: ["failed", "dead_letter"] } },
       select: { channel: true, status: true, eventType: true, payload: true }
@@ -31,6 +34,18 @@ export async function GET() {
         channel: true,
         payload: true
       }
+    }),
+    prisma.integrationEvent.findMany({
+      where: {
+        createdAt: { gte: baselineSince },
+        eventType: { contains: "settlement" },
+        status: "processed"
+      },
+      select: {
+        channel: true,
+        createdAt: true,
+        payload: true
+      }
     })
   ]);
 
@@ -39,6 +54,15 @@ export async function GET() {
   const actionDeadLettersByChannel: Record<string, number> = {};
   const settlementDeadLettersByChannel: Record<string, number> = {};
   const settlementTotalsByChannel: Record<string, { grossCents: number; feesCents: number }> = {};
+  const settlementTrendByChannel: Record<
+    string,
+    {
+      recentGrossCents: number;
+      recentFeesCents: number;
+      baselineGrossCents: number;
+      baselineFeesCents: number;
+    }
+  > = {};
 
   for (const e of failedEvents) {
     channelFailures[e.channel] = (channelFailures[e.channel] ?? 0) + 1;
@@ -68,6 +92,35 @@ export async function GET() {
     const totals = settlementTotalsByChannel[settlementEvent.channel]!;
     totals.grossCents += grossCents;
     totals.feesCents += feesCents;
+  }
+
+  for (const settlementEvent of settlementProcessedTrend) {
+    const payload = settlementEvent.payload as Record<string, unknown>;
+    const settlementPayload =
+      payload.settlement && typeof payload.settlement === "object"
+        ? (payload.settlement as Record<string, unknown>)
+        : payload;
+
+    const grossCents = typeof settlementPayload.grossCents === "number" ? settlementPayload.grossCents : 0;
+    const feesCents = typeof settlementPayload.feesCents === "number" ? settlementPayload.feesCents : 0;
+
+    if (!settlementTrendByChannel[settlementEvent.channel]) {
+      settlementTrendByChannel[settlementEvent.channel] = {
+        recentGrossCents: 0,
+        recentFeesCents: 0,
+        baselineGrossCents: 0,
+        baselineFeesCents: 0
+      };
+    }
+
+    const trend = settlementTrendByChannel[settlementEvent.channel]!;
+    if (settlementEvent.createdAt >= since) {
+      trend.recentGrossCents += grossCents;
+      trend.recentFeesCents += feesCents;
+    } else {
+      trend.baselineGrossCents += grossCents;
+      trend.baselineFeesCents += feesCents;
+    }
   }
 
   for (const [channel, count] of Object.entries(channelFailures)) {
@@ -118,6 +171,27 @@ export async function GET() {
       severity,
       channel,
       message: `Settlement fee ratio is ${(feeRatio * 100).toFixed(1)}% in the last 24 h`
+    });
+  }
+
+  for (const [channel, trend] of Object.entries(settlementTrendByChannel)) {
+    if (trend.recentGrossCents <= 0 || trend.baselineGrossCents <= 0) {
+      continue;
+    }
+
+    const recentFeeRate = trend.recentFeesCents / trend.recentGrossCents;
+    const baselineFeeRate = trend.baselineFeesCents / trend.baselineGrossCents;
+    const feeRateDelta = recentFeeRate - baselineFeeRate;
+
+    if (feeRateDelta < 0.08) {
+      continue;
+    }
+
+    const severity: "critical" | "warning" | "info" = feeRateDelta >= 0.15 ? "critical" : "warning";
+    alerts.push({
+      severity,
+      channel,
+      message: `Settlement fee ratio increased ${(feeRateDelta * 100).toFixed(1)} pts vs 7-day baseline (${(recentFeeRate * 100).toFixed(1)}% vs ${(baselineFeeRate * 100).toFixed(1)}%)`
     });
   }
 
