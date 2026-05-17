@@ -63,11 +63,23 @@ interface SettlementEvent {
   createdAt: string;
 }
 
+interface SettlementSummary {
+  totalCount: number;
+  processedCount: number;
+  queuedCount: number;
+  failedCount: number;
+  grossCents: number;
+  feesCents: number;
+  netCents: number;
+}
+
 export default function IntegrationsPage() {
   const { addToast } = useToast();
   const [settlementChannel, setSettlementChannel] = useState<'all' | 'doordash' | 'ubereats' | 'grubhub'>('all');
   const [settlementStatus, setSettlementStatus] = useState<'all' | 'processed' | 'queued' | 'pending' | 'ignored' | 'dead_letter' | 'failed'>('all');
   const [settlementLimit, setSettlementLimit] = useState(25);
+  const [settlementFromDate, setSettlementFromDate] = useState('');
+  const [settlementToDate, setSettlementToDate] = useState('');
 
   const settlementQuery = new URLSearchParams();
   settlementQuery.set('limit', String(settlementLimit));
@@ -76,6 +88,12 @@ export default function IntegrationsPage() {
   }
   if (settlementStatus !== 'all') {
     settlementQuery.set('status', settlementStatus);
+  }
+  if (settlementFromDate) {
+    settlementQuery.set('from', settlementFromDate);
+  }
+  if (settlementToDate) {
+    settlementQuery.set('to', settlementToDate);
   }
 
   const { data: healthData } = useSWR<{ data: ServiceHealth[] }>(
@@ -94,7 +112,7 @@ export default function IntegrationsPage() {
     fetcher
   );
 
-  const { data: settlementsData } = useSWR<{ data: SettlementEvent[] }>(
+  const { data: settlementsData } = useSWR<{ summary: SettlementSummary; data: SettlementEvent[] }>(
     `/api/admin/integrations/settlements?${settlementQuery.toString()}`,
     fetcher
   );
@@ -121,7 +139,7 @@ export default function IntegrationsPage() {
   };
 
   return (
-    <RoleGate allowedRoles={['owner', 'admin']}>
+    <RoleGate allowedRoles={['owner', 'admin', 'accounting']}>
       <AnimatedPage>
         <PageHeader
           title="Integrations"
@@ -226,6 +244,26 @@ export default function IntegrationsPage() {
 
         <div className="panel mt-lg">
           <h4 className="mb-md">Recent Settlement Events</h4>
+          <div className="grid-cards grid-cards-4 mb-md">
+            <div className="card">
+              <div className="eyebrow">Processed / Total</div>
+              <div style={{ fontSize: '1.05rem', fontWeight: 600 }}>
+                {settlementsData?.summary?.processedCount ?? 0} / {settlementsData?.summary?.totalCount ?? 0}
+              </div>
+            </div>
+            <div className="card">
+              <div className="eyebrow">Gross</div>
+              <div style={{ fontSize: '1.05rem', fontWeight: 600 }}>${((settlementsData?.summary?.grossCents ?? 0) / 100).toFixed(2)}</div>
+            </div>
+            <div className="card">
+              <div className="eyebrow">Fees</div>
+              <div style={{ fontSize: '1.05rem', fontWeight: 600 }}>${((settlementsData?.summary?.feesCents ?? 0) / 100).toFixed(2)}</div>
+            </div>
+            <div className="card">
+              <div className="eyebrow">Net</div>
+              <div style={{ fontSize: '1.05rem', fontWeight: 600 }}>${((settlementsData?.summary?.netCents ?? 0) / 100).toFixed(2)}</div>
+            </div>
+          </div>
           <div className="form-row" style={{ marginBottom: '0.75rem' }}>
             <div className="form-group">
               <label className="form-label">Channel</label>
@@ -255,6 +293,14 @@ export default function IntegrationsPage() {
                 <option value={50}>50</option>
                 <option value={100}>100</option>
               </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">From</label>
+              <input className="input" type="date" value={settlementFromDate} onChange={(event) => setSettlementFromDate(event.target.value)} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">To</label>
+              <input className="input" type="date" value={settlementToDate} onChange={(event) => setSettlementToDate(event.target.value)} />
             </div>
           </div>
           <DataTable

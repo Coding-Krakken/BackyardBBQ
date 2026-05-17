@@ -13,6 +13,8 @@ export async function GET(request: NextRequest) {
   const limitParam = Number(searchParams.get("limit") ?? "50");
   const channelParam = searchParams.get("channel");
   const statusParam = searchParams.get("status");
+  const dateFromParam = searchParams.get("from");
+  const dateToParam = searchParams.get("to");
   const limit = Number.isFinite(limitParam) ? Math.min(Math.max(Math.trunc(limitParam), 1), 200) : 50;
 
   const where: Prisma.IntegrationEventWhereInput = {
@@ -26,6 +28,17 @@ export async function GET(request: NextRequest) {
 
   if (statusParam && statusParam.trim().length > 0) {
     where.status = statusParam;
+  }
+
+  if (dateFromParam || dateToParam) {
+    const createdAt: Prisma.DateTimeFilter = {};
+    if (dateFromParam) {
+      createdAt.gte = new Date(`${dateFromParam}T00:00:00.000Z`);
+    }
+    if (dateToParam) {
+      createdAt.lte = new Date(`${dateToParam}T23:59:59.999Z`);
+    }
+    where.createdAt = createdAt;
   }
 
   const rows = await prisma.integrationEvent.findMany({
@@ -42,8 +55,7 @@ export async function GET(request: NextRequest) {
     }
   });
 
-  return NextResponse.json({
-    data: rows.map((row) => {
+  const normalizedRows = rows.map((row) => {
       const payload = row.payload as Record<string, unknown>;
       const settlementPayload =
         payload.settlement && typeof payload.settlement === "object"
@@ -74,6 +86,38 @@ export async function GET(request: NextRequest) {
             ? settlementPayload.externalOrderId
             : null
       };
-    })
+    });
+
+  const summary = normalizedRows.reduce(
+    (acc, row) => {
+      acc.totalCount += 1;
+      acc.grossCents += row.grossCents;
+      acc.feesCents += row.feesCents;
+      acc.netCents += row.netCents;
+      if (row.status === "processed") {
+        acc.processedCount += 1;
+      }
+      if (row.status === "queued" || row.status === "pending") {
+        acc.queuedCount += 1;
+      }
+      if (row.status === "dead_letter" || row.status === "failed") {
+        acc.failedCount += 1;
+      }
+      return acc;
+    },
+    {
+      totalCount: 0,
+      processedCount: 0,
+      queuedCount: 0,
+      failedCount: 0,
+      grossCents: 0,
+      feesCents: 0,
+      netCents: 0
+    }
+  );
+
+  return NextResponse.json({
+    summary,
+    data: normalizedRows
   });
 }
