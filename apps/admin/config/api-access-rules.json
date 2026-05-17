@@ -90,6 +90,9 @@
     "/api/admin/integrations/alerts": {
       "GET": ["owner", "admin"]
     },
+    "/api/admin/integrations/settlements": {
+      "GET": ["owner", "admin", "accounting"]
+    },
     "/api/admin/customers": {
       "GET": ["owner", "admin", "manager"]
     },

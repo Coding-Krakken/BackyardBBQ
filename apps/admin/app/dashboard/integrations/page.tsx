@@ -46,6 +46,22 @@ interface DeadLetter {
   createdAt: string;
 }
 
+interface SettlementEvent {
+  id: string;
+  channel: string;
+  eventType: string;
+  status: string;
+  settlementId: string | null;
+  payoutId: string | null;
+  grossCents: number;
+  feesCents: number;
+  netCents: number;
+  currency: string;
+  settledAt: string;
+  orderExternalId: string | null;
+  createdAt: string;
+}
+
 export default function IntegrationsPage() {
   const { addToast } = useToast();
 
@@ -62,6 +78,11 @@ export default function IntegrationsPage() {
 
   const { data: dlqData, mutate: mutateDLQ } = useSWR<{ data: DeadLetter[] }>(
     '/api/admin/integrations/dead-letter',
+    fetcher
+  );
+
+  const { data: settlementsData } = useSWR<{ data: SettlementEvent[] }>(
+    '/api/admin/integrations/settlements?limit=25',
     fetcher
   );
 
@@ -179,6 +200,23 @@ export default function IntegrationsPage() {
               )},
             ]}
             data={dlqData?.data ?? []}
+          />
+        </div>
+
+        <div className="panel mt-lg">
+          <h4 className="mb-md">Recent Settlement Events</h4>
+          <DataTable
+            columns={[
+              { header: 'Channel', accessor: (row: SettlementEvent) => row.channel.toUpperCase() },
+              { header: 'Settlement ID', accessor: (row: SettlementEvent) => row.settlementId ?? '-' },
+              { header: 'Payout ID', accessor: (row: SettlementEvent) => row.payoutId ?? '-' },
+              { header: 'Gross', accessor: (row: SettlementEvent) => `$${(row.grossCents / 100).toFixed(2)}` },
+              { header: 'Fees', accessor: (row: SettlementEvent) => `$${(row.feesCents / 100).toFixed(2)}` },
+              { header: 'Net', accessor: (row: SettlementEvent) => `$${(row.netCents / 100).toFixed(2)}` },
+              { header: 'Status', accessor: (row: SettlementEvent) => <StatusBadge status={row.status} /> },
+              { header: 'Settled', accessor: (row: SettlementEvent) => formatDate(row.settledAt) },
+            ]}
+            data={settlementsData?.data ?? []}
           />
         </div>
       </AnimatedPage>
