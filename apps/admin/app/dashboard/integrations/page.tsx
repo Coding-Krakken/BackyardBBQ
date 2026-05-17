@@ -92,6 +92,19 @@ interface SettlementTrendRow {
   feeRatePercent: number;
 }
 
+interface ContractHealthRow {
+  correlationId: string;
+  scorePercent: number;
+  passed: boolean;
+  passedCount: number;
+  failedCount: number;
+  failedChecks: string[];
+  totalEvents: number;
+  channels: string[];
+  firstSeenAt: string | null;
+  lastSeenAt: string | null;
+}
+
 interface IncidentPackageResponse {
   correlationId: string;
   packagedAt: string;
@@ -200,6 +213,8 @@ export default function IntegrationsPage() {
   const [settlementToDate, setSettlementToDate] = useState('');
   const [inspectorCorrelationInput, setInspectorCorrelationInput] = useState('');
   const [inspectorCorrelationId, setInspectorCorrelationId] = useState('');
+  const [contractWindowDays, setContractWindowDays] = useState(3);
+  const [contractOnlyFailing, setContractOnlyFailing] = useState(true);
   const [digestVerification, setDigestVerification] = useState<{
     timelineMatch: boolean | null;
     settlementsMatch: boolean | null;
@@ -247,6 +262,12 @@ export default function IntegrationsPage() {
   const { data: settlementTrendData } = useSWR<{ windowDays: number; data: SettlementTrendRow[] }>(
     `/api/admin/integrations/settlements/trend?days=14${settlementChannel !== 'all' ? `&channel=${settlementChannel}` : ''}`,
     fetcher
+  );
+
+  const { data: contractFeedData } = useSWR<{ data: ContractHealthRow[] }>(
+    `/api/admin/integrations/contracts?days=${contractWindowDays}&limit=25&onlyFailing=${contractOnlyFailing ? 'true' : 'false'}`,
+    fetcher,
+    { refreshInterval: 30000 }
   );
 
   const { data: incidentPackageData, error: incidentPackageError, isLoading: incidentPackageLoading } = useSWR<IncidentPackageResponse>(
@@ -474,6 +495,75 @@ export default function IntegrationsPage() {
               },
             ]}
             data={alertsData?.alerts ?? []}
+          />
+        </div>
+
+        <div className="panel mb-lg">
+          <div className="flex-between mb-md">
+            <h4 style={{ margin: 0 }}>Contract Health Feed</h4>
+            <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+              <label className="text-muted" style={{ fontSize: '0.8rem' }}>Window</label>
+              <select className="select" value={contractWindowDays} onChange={(event) => setContractWindowDays(Number(event.target.value))}>
+                <option value={1}>1d</option>
+                <option value={3}>3d</option>
+                <option value={7}>7d</option>
+                <option value={14}>14d</option>
+              </select>
+              <label className="text-muted" style={{ fontSize: '0.8rem' }}>Only failing</label>
+              <input
+                type="checkbox"
+                checked={contractOnlyFailing}
+                onChange={(event) => setContractOnlyFailing(event.target.checked)}
+              />
+            </div>
+          </div>
+
+          <DataTable
+            columns={[
+              {
+                header: 'Correlation',
+                accessor: (row: ContractHealthRow) => (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                    <a href={`/api/admin/integrations/correlation/${encodeURIComponent(row.correlationId)}`} style={{ textDecoration: 'underline' }}>
+                      trace:{row.correlationId}
+                    </a>
+                    <a href={`/api/admin/integrations/correlation/${encodeURIComponent(row.correlationId)}/contract`} style={{ textDecoration: 'underline' }}>
+                      contract
+                    </a>
+                    <a href={`/api/admin/integrations/correlation/${encodeURIComponent(row.correlationId)}/package`} style={{ textDecoration: 'underline' }}>
+                      package
+                    </a>
+                  </div>
+                )
+              },
+              {
+                header: 'Score',
+                accessor: (row: ContractHealthRow) => (
+                  <span style={{ fontWeight: 600 }}>{row.scorePercent}%</span>
+                )
+              },
+              {
+                header: 'Result',
+                accessor: (row: ContractHealthRow) => <StatusBadge status={row.passed ? 'completed' : 'failed'} />
+              },
+              {
+                header: 'Failed Checks',
+                accessor: (row: ContractHealthRow) => row.failedChecks.length > 0 ? row.failedChecks.join(', ') : '-'
+              },
+              {
+                header: 'Events',
+                accessor: (row: ContractHealthRow) => row.totalEvents
+              },
+              {
+                header: 'Channels',
+                accessor: (row: ContractHealthRow) => row.channels.join(', ')
+              },
+              {
+                header: 'Last Seen',
+                accessor: (row: ContractHealthRow) => row.lastSeenAt ? formatDate(row.lastSeenAt) : '-'
+              }
+            ]}
+            data={contractFeedData?.data ?? []}
           />
         </div>
 

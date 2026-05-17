@@ -262,6 +262,14 @@ Contract response includes:
 - `result.passed`, `result.scorePercent`, `result.failedCount`
 - rollups for `summary.channels`, `summary.statuses`, and `summary.eventTypes`
 
+Contract health feed endpoint (recent correlation scorecards):
+
+```bash
+GET /api/admin/integrations/contracts?days=3&limit=25&onlyFailing=true
+```
+
+Feed response includes correlation-level scorecards with failed check labels and latest timestamps for proactive triage.
+
 Combined incident package endpoint (JSON + timeline CSV + settlements CSV in one response):
 
 ```bash
@@ -292,6 +300,7 @@ When signing is configured, package responses include `manifest.integrity.signat
 
 Admin dashboard includes an Incident Package Inspector panel to fetch a correlation package by ID and verify CSV digests client-side.
 The inspector also runs contract validation and renders a pass/fail checklist for inbound webhooks, dispatch/action presence, settlement presence, and failed/dead-letter detection.
+The Integrations dashboard now includes a Contract Health Feed panel to surface failing correlations proactively with direct links to trace, contract, and package endpoints.
 
 JSON export includes rollups for handoff:
 
