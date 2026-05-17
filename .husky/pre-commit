@@ -3,4 +3,10 @@ if git diff --cached --quiet; then
 	exit 0
 fi
 
+# Only run lint-staged when staged files match current lint-staged config.
+if ! git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(ts|tsx|js|jsx)$' > /dev/null 2>&1; then
+	echo "No staged files match lint-staged patterns. Skipping lint-staged."
+	exit 0
+fi
+
 npx lint-staged
