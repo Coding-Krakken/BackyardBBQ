@@ -1,21 +1,3 @@
-import type { ProviderSettlementInput } from "./base-client";
-  async syncSettlement(input: ProviderSettlementInput): Promise<void> {
-    // Simulate settlement sync for UberEats (real implementation would call provider API)
-    if (!this.credentials.apiKey || !this.credentials.storeId) return;
-    await performProviderRequest({
-      url: `${this.baseUrl}/v1/eats/stores/${encodeURIComponent(this.credentials.storeId)}/orders/${encodeURIComponent(input.externalOrderId)}/settlements`,
-      method: "POST",
-      apiKey: this.credentials.apiKey,
-      body: {
-        settlementId: input.settlementId,
-        grossCents: input.grossCents,
-        feesCents: input.feesCents,
-        netCents: input.netCents,
-        currency: input.currency,
-        settledAt: input.settledAt
-      }
-    });
-  }
 import {
   buildSimulatedHealth,
   type DeliveryProviderClient,
@@ -27,6 +9,7 @@ import {
   type ProviderInboundOrder,
   type ProviderMenuSnapshot,
   type ProviderOrderActionInput,
+  type ProviderSettlementInput,
   type ProviderStatusSyncInput,
   verifyWebhookHmac
 } from "./base-client";
@@ -110,6 +93,26 @@ export class UberEatsClient implements DeliveryProviderClient {
         status: mapped.providerStatus,
         reasonCode: mapped.providerReasonCode,
         occurredAt: _input.occurredAt
+      }
+    });
+  }
+
+  async syncSettlement(input: ProviderSettlementInput): Promise<void> {
+    if (!this.credentials.apiKey || !this.credentials.storeId) {
+      return;
+    }
+
+    await performProviderRequest({
+      url: `${this.baseUrl}/v1/eats/stores/${encodeURIComponent(this.credentials.storeId)}/orders/${encodeURIComponent(input.externalOrderId)}/settlements`,
+      method: "POST",
+      apiKey: this.credentials.apiKey,
+      body: {
+        settlementId: input.settlementId,
+        grossCents: input.grossCents,
+        feesCents: input.feesCents,
+        netCents: input.netCents,
+        currency: input.currency,
+        settledAt: input.settledAt
       }
     });
   }

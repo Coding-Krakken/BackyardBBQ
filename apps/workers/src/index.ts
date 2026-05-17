@@ -554,6 +554,25 @@ async function persistStatusSyncEvent(input: {
   });
 }
 
+async function persistSettlementSyncEvent(input: {
+  channel: DeliveryChannel;
+  status: string;
+  payload: Record<string, unknown>;
+}) {
+  if (!hasDatabaseUrl) {
+    return;
+  }
+
+  await prisma.integrationEvent.create({
+    data: {
+      channel: input.channel,
+      eventType: "delivery.settlement.sync",
+      status: input.status,
+      payload: input.payload as Prisma.InputJsonValue
+    }
+  });
+}
+
 function buildInboundBatch(channel: DeliveryChannel) {
   sequence += 1;
   const currentStamp = new Date().toISOString();
@@ -1217,6 +1236,36 @@ async function runSettlementQueueCycle() {
       continue;
     }
 
+    if (!normalized.externalOrderId) {
+      const nextAttempts = attempts + 1;
+      const deadLetter = nextAttempts >= maxAttempts;
+
+      await prisma.integrationEvent.update({
+        where: { id: settlementEvent.id },
+        data: {
+          status: deadLetter ? "dead_letter" : "queued",
+          payload: {
+            ...payload,
+            correlationId,
+            attempts: nextAttempts,
+            reason: "missing_settlement_order_external_id",
+            failedAt: new Date().toISOString(),
+            settlement: {
+              settlementId: normalized.settlementId,
+              payoutId: normalized.payoutId ?? null,
+              externalOrderId: null,
+              grossCents: normalized.grossCents,
+              feesCents: normalized.feesCents,
+              netCents: normalized.netCents,
+              currency: normalized.currency,
+              settledAt: normalized.settledAt
+            }
+          }
+        }
+      });
+      continue;
+    }
+
     const duplicateSettlement = await prisma.integrationEvent.findFirst({
       where: {
         id: { not: settlementEvent.id },
@@ -1271,28 +1320,107 @@ async function runSettlementQueueCycle() {
       continue;
     }
 
-    await prisma.integrationEvent.update({
-      where: { id: settlementEvent.id },
-      data: {
-        status: "processed",
-        payload: {
-          ...payload,
-          correlationId,
-          attempts: attempts + 1,
-          processedAt: new Date().toISOString(),
-          settlement: {
-            settlementId: normalized.settlementId,
-            payoutId: normalized.payoutId ?? null,
-            externalOrderId: normalized.externalOrderId ?? null,
-            grossCents: normalized.grossCents,
-            feesCents: normalized.feesCents,
-            netCents: normalized.netCents,
-            currency: normalized.currency,
-            settledAt: normalized.settledAt
+    try {
+      const syncResult = await adapters[channel].syncSettlement({
+        externalOrderId: normalized.externalOrderId,
+        settlementId: normalized.settlementId,
+        grossCents: normalized.grossCents,
+        feesCents: normalized.feesCents,
+        netCents: normalized.netCents,
+        currency: normalized.currency,
+        settledAt: normalized.settledAt
+      });
+
+      await prisma.integrationEvent.update({
+        where: { id: settlementEvent.id },
+        data: {
+          status: "processed",
+          payload: {
+            ...payload,
+            correlationId,
+            attempts: attempts + 1,
+            processedAt: new Date().toISOString(),
+            latencyMs: syncResult.latencyMs,
+            settlement: {
+              settlementId: normalized.settlementId,
+              payoutId: normalized.payoutId ?? null,
+              externalOrderId: normalized.externalOrderId,
+              grossCents: normalized.grossCents,
+              feesCents: normalized.feesCents,
+              netCents: normalized.netCents,
+              currency: normalized.currency,
+              settledAt: normalized.settledAt
+            }
           }
         }
-      }
-    });
+      });
+
+      await persistSettlementSyncEvent({
+        channel,
+        status: "processed",
+        payload: {
+          sourceEventId: settlementEvent.id,
+          correlationId,
+          settlementId: normalized.settlementId,
+          payoutId: normalized.payoutId ?? null,
+          orderExternalId: normalized.externalOrderId,
+          grossCents: normalized.grossCents,
+          feesCents: normalized.feesCents,
+          netCents: normalized.netCents,
+          currency: normalized.currency,
+          settledAt: normalized.settledAt,
+          latencyMs: syncResult.latencyMs,
+          syncedAt: new Date().toISOString()
+        }
+      });
+    } catch (error) {
+      const nextAttempts = attempts + 1;
+      const deadLetter = nextAttempts >= maxAttempts;
+
+      await prisma.integrationEvent.update({
+        where: { id: settlementEvent.id },
+        data: {
+          status: deadLetter ? "dead_letter" : "queued",
+          payload: {
+            ...payload,
+            correlationId,
+            attempts: nextAttempts,
+            lastError: error instanceof Error ? error.message : "settlement_sync_failed",
+            failedAt: new Date().toISOString(),
+            settlement: {
+              settlementId: normalized.settlementId,
+              payoutId: normalized.payoutId ?? null,
+              externalOrderId: normalized.externalOrderId,
+              grossCents: normalized.grossCents,
+              feesCents: normalized.feesCents,
+              netCents: normalized.netCents,
+              currency: normalized.currency,
+              settledAt: normalized.settledAt
+            }
+          }
+        }
+      });
+
+      await persistSettlementSyncEvent({
+        channel,
+        status: deadLetter ? "dead_letter" : "queued",
+        payload: {
+          sourceEventId: settlementEvent.id,
+          correlationId,
+          settlementId: normalized.settlementId,
+          payoutId: normalized.payoutId ?? null,
+          orderExternalId: normalized.externalOrderId,
+          grossCents: normalized.grossCents,
+          feesCents: normalized.feesCents,
+          netCents: normalized.netCents,
+          currency: normalized.currency,
+          settledAt: normalized.settledAt,
+          attempts: nextAttempts,
+          error: error instanceof Error ? error.message : "settlement_sync_failed",
+          syncedAt: new Date().toISOString()
+        }
+      });
+    }
   }
 }
 
