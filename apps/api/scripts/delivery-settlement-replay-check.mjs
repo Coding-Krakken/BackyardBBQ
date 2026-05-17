@@ -1,0 +1,161 @@
+#!/usr/bin/env node
+
+import { createHmac } from "node:crypto";
+
+function parseArgs(argv) {
+  const args = {};
+  for (let i = 2; i < argv.length; i += 1) {
+    const raw = argv[i];
+    if (!raw.startsWith("--")) continue;
+
+    const key = raw.slice(2);
+    const next = argv[i + 1];
+    if (!next || next.startsWith("--")) {
+      args[key] = "true";
+      continue;
+    }
+
+    args[key] = next;
+    i += 1;
+  }
+  return args;
+}
+
+function printUsage() {
+  console.log(`Usage:\n  node apps/api/scripts/delivery-settlement-replay-check.mjs [--api-base-url http://localhost:4000] [--channel doordash] [--event-id evt_123] [--external-order-id order_123] [--webhook-secret secret] [--date 2026-05-16]\n\nEnv fallbacks:\n  API_BASE_URL\n  DELIVERY_CHANNEL\n  <CHANNEL>_WEBHOOK_SECRET\n  DELIVERY_WEBHOOK_SECRET`);
+}
+
+function makeSignature(rawBody, secret) {
+  return createHmac("sha256", secret).update(rawBody, "utf8").digest("hex");
+}
+
+async function postWebhook({ apiBaseUrl, channel, payload, signature }) {
+  const url = `${apiBaseUrl.replace(/\/$/, "")}/api/webhooks/${channel}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-delivery-signature": `sha256=${signature}`
+    },
+    body: payload
+  });
+
+  const text = await response.text();
+  let body = null;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    body = { raw: text };
+  }
+
+  return {
+    status: response.status,
+    ok: response.ok,
+    body
+  };
+}
+
+async function getDailyClose({ apiBaseUrl, date }) {
+  const query = date ? `?date=${encodeURIComponent(date)}` : "";
+  const response = await fetch(`${apiBaseUrl.replace(/\/$/, "")}/api/admin/accounting/daily-close${query}`, {
+    headers: {
+      "x-admin-role": "owner"
+    }
+  });
+
+  const text = await response.text();
+  let body = null;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    body = { raw: text };
+  }
+
+  return {
+    status: response.status,
+    ok: response.ok,
+    body
+  };
+}
+
+async function main() {
+  const args = parseArgs(process.argv);
+
+  if (args.help === "true" || args.h === "true") {
+    printUsage();
+    process.exit(0);
+  }
+
+  const apiBaseUrl = args["api-base-url"] ?? process.env.API_BASE_URL ?? "http://localhost:4000";
+  const channel = args.channel ?? process.env.DELIVERY_CHANNEL ?? "doordash";
+  const externalOrderId = args["external-order-id"] ?? `settlement-${Date.now()}`;
+  const eventId = args["event-id"] ?? `evt-settlement-${Date.now()}`;
+  const date = args.date;
+  const webhookSecret =
+    args["webhook-secret"] ??
+    process.env[`${channel.toUpperCase()}_WEBHOOK_SECRET`] ??
+    process.env.DELIVERY_WEBHOOK_SECRET;
+
+  if (!webhookSecret) {
+    console.error("Missing webhook secret. Use --webhook-secret or CHANNEL_WEBHOOK_SECRET env var.");
+    process.exit(1);
+  }
+
+  const requestBody = {
+    eventId,
+    eventType: "settlement.created",
+    orderExternalId: externalOrderId,
+    payload: {
+      settlement: {
+        settlementId: `stl-${Date.now()}`,
+        payoutId: `po-${Date.now()}`,
+        externalOrderId,
+        grossCents: 4600,
+        feesCents: 690,
+        netCents: 3910,
+        currency: "usd",
+        settledAt: new Date().toISOString()
+      }
+    }
+  };
+
+  const payload = JSON.stringify(requestBody);
+  const signature = makeSignature(payload, webhookSecret);
+
+  const first = await postWebhook({ apiBaseUrl, channel, payload, signature });
+  const second = await postWebhook({ apiBaseUrl, channel, payload, signature });
+  const dailyClose = await getDailyClose({ apiBaseUrl, date });
+
+  const settlementByChannel = Array.isArray(dailyClose.body?.settlementByChannel)
+    ? dailyClose.body.settlementByChannel
+    : [];
+  const channelSettlement = settlementByChannel.find((row) => row?.channel === channel) ?? null;
+
+  const result = {
+    channel,
+    eventId,
+    externalOrderId,
+    firstAttempt: first,
+    secondAttempt: second,
+    duplicateSuppressed: Boolean(second.body?.duplicate === true),
+    dailyClose: {
+      ok: dailyClose.ok,
+      settlementNetCents:
+        typeof dailyClose.body?.summary?.settlementNetCents === "number"
+          ? dailyClose.body.summary.settlementNetCents
+          : null,
+      channelSettlement
+    }
+  };
+
+  console.log(JSON.stringify(result, null, 2));
+
+  if (!first.ok) process.exit(2);
+  if (!second.ok) process.exit(3);
+  if (!dailyClose.ok) process.exit(4);
+}
+
+main().catch((error) => {
+  console.error("delivery-settlement-replay-check failed", error);
+  process.exit(99);
+});

@@ -88,6 +88,20 @@ Expected:
 - Second action request for same order/channel/action returns duplicate metadata.
 - Worker consumes queued action and transitions it to processed or dead-letter after retry exhaustion.
 
+### Delivery settlement replay
+
+Command:
+
+```bash
+npm run test:delivery:settlement-replay -- --channel doordash --api-base-url http://localhost:4000 --webhook-secret <secret>
+```
+
+Expected:
+
+- First settlement webhook event is accepted and persisted.
+- Second settlement webhook event with the same `eventId` returns duplicate metadata.
+- Daily close summary includes `settlementNetCents` and `settlementByChannel` values.
+
 ## Admin Operations
 
 Admin dashboard supports:
@@ -109,3 +123,4 @@ Dead-letter retry endpoint re-queues event and records retry metadata.
 2. Confirm worker logs show dispatch queue cycle execution.
 3. Confirm dead-letter queue trends in admin integrations dashboard.
 4. Run replay scripts in staging before production cutover.
+5. Reconcile settlement totals from delivery channels against accounting daily-close exports.

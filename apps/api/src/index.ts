@@ -678,6 +678,17 @@ const inboundDeliveryStatusUpdateSchema = z.object({
   status: z.enum(["pending", "confirmed", "preparing", "ready", "completed", "cancelled"])
 });
 
+const inboundDeliverySettlementSchema = z.object({
+  settlementId: z.string().min(1),
+  payoutId: z.string().min(1).optional(),
+  externalOrderId: z.string().min(1).optional(),
+  grossCents: z.number().int(),
+  feesCents: z.number().int().min(0).default(0),
+  netCents: z.number().int(),
+  currency: z.string().min(3).max(3).default("usd"),
+  settledAt: z.string().datetime().optional()
+});
+
 const deliveryWebhookSecretByChannel: Record<(typeof integrationChannels)[number], string | undefined> = {
   doordash: process.env.DOORDASH_WEBHOOK_SECRET,
   ubereats: process.env.UBEREATS_WEBHOOK_SECRET,
@@ -748,6 +759,21 @@ function parseIncomingDeliveryStatusUpdate(payload: Record<string, unknown>) {
   return {
     ok: true as const,
     value: parsedStatus.data
+  };
+}
+
+function parseIncomingDeliverySettlement(payload: Record<string, unknown>) {
+  const parsedSettlement = inboundDeliverySettlementSchema.safeParse(payload.settlement ?? payload);
+  if (!parsedSettlement.success) {
+    return {
+      ok: false as const,
+      errors: parsedSettlement.error.flatten()
+    };
+  }
+
+  return {
+    ok: true as const,
+    value: parsedSettlement.data
   };
 }
 
@@ -1956,7 +1982,9 @@ app.get("/api/admin/accounting/daily-close", async (request, reply) => {
       summary: {
         grossSalesCents: 196500,
         refundedCents: 12000,
+        settlementNetCents: 109200,
         netSalesCents: 184500,
+        netAfterSettlementCents: 97200,
         outstandingDisputes: 1
       },
       bySource: [
@@ -1964,11 +1992,16 @@ app.get("/api/admin/accounting/daily-close", async (request, reply) => {
         { source: "doordash", orders: 10, totalCents: 60500 },
         { source: "ubereats", orders: 7, totalCents: 24000 },
         { source: "grubhub", orders: 4, totalCents: 10000 }
+      ],
+      settlementByChannel: [
+        { channel: "doordash", grossCents: 60500, feesCents: 9075, netCents: 51425 },
+        { channel: "ubereats", grossCents: 24000, feesCents: 3600, netCents: 20400 },
+        { channel: "grubhub", grossCents: 10000, feesCents: 2225, netCents: 7775 }
       ]
     };
   }
 
-  const [grossSales, sourceGroup, refundEvents, outstandingDisputes] = await Promise.all([
+  const [grossSales, sourceGroup, refundEvents, outstandingDisputes, settlementEvents] = await Promise.all([
     prisma.order.aggregate({
       where: {
         createdAt: { gte: start, lt: end },
@@ -1999,6 +2032,18 @@ app.get("/api/admin/accounting/daily-close", async (request, reply) => {
         eventType: { contains: "charge.dispute" },
         status: "needs_response"
       }
+    }),
+    prisma.integrationEvent.findMany({
+      where: {
+        channel: { in: [...integrationChannels] },
+        eventType: { contains: "settlement" },
+        status: "processed",
+        createdAt: { gte: start, lt: end }
+      },
+      select: {
+        channel: true,
+        payload: true
+      }
     })
   ]);
 
@@ -2010,18 +2055,54 @@ app.get("/api/admin/accounting/daily-close", async (request, reply) => {
 
   const grossSalesCents = grossSales._sum.totalCents ?? 0;
 
+  const settlementByChannelMap = new Map<string, { grossCents: number; feesCents: number; netCents: number }>();
+  let settlementNetCents = 0;
+
+  for (const settlementEvent of settlementEvents) {
+    const payload = settlementEvent.payload as Record<string, unknown>;
+    const settlementPayload =
+      payload.settlement && typeof payload.settlement === "object"
+        ? (payload.settlement as Record<string, unknown>)
+        : payload;
+
+    const grossCents =
+      typeof settlementPayload.grossCents === "number" ? settlementPayload.grossCents : 0;
+    const feesCents = typeof settlementPayload.feesCents === "number" ? settlementPayload.feesCents : 0;
+    const netCents = typeof settlementPayload.netCents === "number" ? settlementPayload.netCents : 0;
+
+    settlementNetCents += netCents;
+
+    const existing = settlementByChannelMap.get(settlementEvent.channel) ?? {
+      grossCents: 0,
+      feesCents: 0,
+      netCents: 0
+    };
+    existing.grossCents += grossCents;
+    existing.feesCents += feesCents;
+    existing.netCents += netCents;
+    settlementByChannelMap.set(settlementEvent.channel, existing);
+  }
+
   return {
     date: start.toISOString().slice(0, 10),
     summary: {
       grossSalesCents,
       refundedCents,
       netSalesCents: Math.max(0, grossSalesCents - refundedCents),
+      settlementNetCents,
+      netAfterSettlementCents: Math.max(0, grossSalesCents - refundedCents - settlementNetCents),
       outstandingDisputes
     },
     bySource: sourceGroup.map((row: { source: string; _count: { _all: number }; _sum: { totalCents: number | null } }) => ({
       source: row.source,
       orders: row._count._all,
       totalCents: row._sum.totalCents ?? 0
+    })),
+    settlementByChannel: Array.from(settlementByChannelMap.entries()).map(([channel, totals]) => ({
+      channel,
+      grossCents: totals.grossCents,
+      feesCents: totals.feesCents,
+      netCents: totals.netCents
     }))
   };
 });
@@ -2074,6 +2155,8 @@ app.get("/api/admin/accounting/daily-close/export", async (request, reply) => {
   let grossSalesCents = 196500;
   let refundedCents = 12000;
   let netSalesCents = 184500;
+  let settlementNetCents = 109200;
+  let netAfterSettlementCents = 97200;
   let outstandingDisputes = 1;
   let bySource: Array<{ source: string; orders: number; totalCents: number }> = [
     { source: "direct", orders: 22, totalCents: 102000 },
@@ -2081,7 +2164,7 @@ app.get("/api/admin/accounting/daily-close/export", async (request, reply) => {
   ];
 
   if (hasDatabaseUrl) {
-    const [grossSales, sourceGroup, refundEvents, disputes] = await Promise.all([
+    const [grossSales, sourceGroup, refundEvents, disputes, settlementEvents] = await Promise.all([
       prisma.order.aggregate({
         where: {
           createdAt: { gte: start, lt: end },
@@ -2112,6 +2195,15 @@ app.get("/api/admin/accounting/daily-close/export", async (request, reply) => {
           eventType: { contains: "charge.dispute" },
           status: "needs_response"
         }
+      }),
+      prisma.integrationEvent.findMany({
+        where: {
+          channel: { in: [...integrationChannels] },
+          eventType: { contains: "settlement" },
+          status: "processed",
+          createdAt: { gte: start, lt: end }
+        },
+        select: { payload: true }
       })
     ]);
 
@@ -2123,6 +2215,18 @@ app.get("/api/admin/accounting/daily-close/export", async (request, reply) => {
     grossSalesCents = grossSales._sum.totalCents ?? 0;
     netSalesCents = Math.max(0, grossSalesCents - refundedCents);
     outstandingDisputes = disputes;
+
+    settlementNetCents = settlementEvents.reduce((sum: number, item: { payload: unknown }) => {
+      const payload = item.payload as Record<string, unknown>;
+      const settlementPayload =
+        payload.settlement && typeof payload.settlement === "object"
+          ? (payload.settlement as Record<string, unknown>)
+          : payload;
+      const net = typeof settlementPayload.netCents === "number" ? settlementPayload.netCents : 0;
+      return sum + net;
+    }, 0);
+    netAfterSettlementCents = Math.max(0, netSalesCents - settlementNetCents);
+
     bySource = sourceGroup.map((row: { source: string; _count: { _all: number }; _sum: { totalCents: number | null } }) => ({
       source: row.source,
       orders: row._count._all,
@@ -2130,10 +2234,10 @@ app.get("/api/admin/accounting/daily-close/export", async (request, reply) => {
     }));
   }
 
-  const header = "date,source,orders,total_cents,gross_sales_cents,refunded_cents,net_sales_cents,outstanding_disputes";
+  const header = "date,source,orders,total_cents,gross_sales_cents,refunded_cents,net_sales_cents,settlement_net_cents,net_after_settlement_cents,outstanding_disputes";
   const rows = bySource.map(
     (row) =>
-      `${reportDate},${row.source},${row.orders},${row.totalCents},${grossSalesCents},${refundedCents},${netSalesCents},${outstandingDisputes}`
+      `${reportDate},${row.source},${row.orders},${row.totalCents},${grossSalesCents},${refundedCents},${netSalesCents},${settlementNetCents},${netAfterSettlementCents},${outstandingDisputes}`
   );
   const csv = [header, ...rows].join("\n");
 
@@ -2726,13 +2830,15 @@ app.post(
 
     const parsedDeliveryOrder = parseIncomingDeliveryOrder(parsedBody.data.payload, channel);
     const parsedStatusUpdate = parseIncomingDeliveryStatusUpdate(parsedBody.data.payload);
+    const parsedSettlement = parseIncomingDeliverySettlement(parsedBody.data.payload);
 
     if (!hasDatabaseUrl) {
       return {
         received: true,
         channel,
         eventId: parsedBody.data.eventId,
-        ingestedOrder: parsedDeliveryOrder.ok ? parsedDeliveryOrder.value.externalOrderId : null
+        ingestedOrder: parsedDeliveryOrder.ok ? parsedDeliveryOrder.value.externalOrderId : null,
+        ingestedSettlement: parsedSettlement.ok ? parsedSettlement.value.settlementId : null
       };
     }
 
@@ -2760,7 +2866,28 @@ app.post(
       let ingestStatus: "processed" | "ignored" | "failed" = "ignored";
       let ingestReason: string | undefined;
 
-      if (parsedBody.data.eventType.includes("order") && !parsedBody.data.eventType.includes("status")) {
+      if (parsedBody.data.eventType.includes("settlement")) {
+        if (!parsedSettlement.ok) {
+          ingestStatus = "failed";
+          ingestReason = "invalid_settlement_payload";
+        } else {
+          const settlementOrderExternalId =
+            parsedSettlement.value.externalOrderId ?? parsedBody.data.orderExternalId;
+
+          if (settlementOrderExternalId) {
+            const matchedOrder = await prisma.order.findFirst({
+              where: {
+                externalChannel: channel,
+                externalOrderId: settlementOrderExternalId
+              },
+              select: { id: true }
+            });
+            orderId = matchedOrder?.id;
+          }
+
+          ingestStatus = "processed";
+        }
+      } else if (parsedBody.data.eventType.includes("order") && !parsedBody.data.eventType.includes("status")) {
         if (!parsedDeliveryOrder.ok) {
           ingestStatus = "failed";
           ingestReason = "invalid_order_payload";
@@ -2886,6 +3013,20 @@ app.post(
             ingestReason: ingestReason ?? null,
             orderParseErrors: parsedDeliveryOrder.ok ? null : parsedDeliveryOrder.errors,
             statusParseErrors: parsedStatusUpdate.ok ? null : parsedStatusUpdate.errors,
+            settlementParseErrors: parsedSettlement.ok ? null : parsedSettlement.errors,
+            settlement: parsedSettlement.ok
+              ? {
+                  settlementId: parsedSettlement.value.settlementId,
+                  payoutId: parsedSettlement.value.payoutId ?? null,
+                  grossCents: parsedSettlement.value.grossCents,
+                  feesCents: parsedSettlement.value.feesCents,
+                  netCents: parsedSettlement.value.netCents,
+                  currency: parsedSettlement.value.currency,
+                  settledAt: parsedSettlement.value.settledAt ?? null,
+                  externalOrderId:
+                    parsedSettlement.value.externalOrderId ?? parsedBody.data.orderExternalId ?? null
+                }
+              : null,
             payload: parsedBody.data.payload
           } as Prisma.InputJsonValue
         }
