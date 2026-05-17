@@ -49,3 +49,8 @@ test("fails in live mode without webhook secret", () => {
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Missing webhook secret for live mode/);
 });
+
+test("accepts explicit validate-summary flag in non-live mode", () => {
+  const result = runChecks(["--run-live", "false", "--validate-summary", "false"]);
+  assert.equal(result.status, 0);
+});

@@ -27,7 +27,7 @@ function parseArgs(argv) {
 }
 
 function printUsage() {
-  console.log(`Usage:\n  node scripts/delivery-integration-checks.mjs [--channel doordash] [--api-base-url http://localhost:4000] [--run-live true] [--webhook-secret secret] [--output-dir artifacts/delivery-replay]\n\nRun modes:\n  --run-live true  Executes replay scripts against a running API service.\n  --run-live false Validates replay command wiring via --help (default).\n\nEnvironment options:\n  API_BASE_URL\n  DELIVERY_CHANNEL\n  <CHANNEL>_WEBHOOK_SECRET\n  DELIVERY_WEBHOOK_SECRET`);
+  console.log(`Usage:\n  node scripts/delivery-integration-checks.mjs [--channel doordash] [--api-base-url http://localhost:4000] [--run-live true] [--webhook-secret secret] [--output-dir artifacts/delivery-replay] [--validate-summary true]\n\nRun modes:\n  --run-live true  Executes replay scripts against a running API service.\n  --run-live false Validates replay command wiring via --help (default).\n\nValidation options:\n  --validate-summary true|false  In live mode, enforce summary file checks (default: true).\n\nEnvironment options:\n  API_BASE_URL\n  DELIVERY_CHANNEL\n  <CHANNEL>_WEBHOOK_SECRET\n  DELIVERY_WEBHOOK_SECRET`);
 }
 
 function ensureAbsoluteHttpUrl(value, flagName) {
@@ -76,6 +76,7 @@ function main() {
   }
 
   const runLive = args["run-live"] === "true";
+  const validateSummary = args["validate-summary"] !== "false";
   const channel = args.channel ?? process.env.DELIVERY_CHANNEL ?? "doordash";
   const apiBaseUrl = args["api-base-url"] ?? process.env.API_BASE_URL ?? "http://localhost:4000";
   const outputDir = args["output-dir"] ?? "artifacts/delivery-replay";
@@ -186,7 +187,26 @@ function main() {
     "--output-json",
     settlementOutput
   ]);
-  process.exit(settlementExit);
+  if (settlementExit !== 0) {
+    process.exit(settlementExit);
+  }
+
+  if (validateSummary) {
+    const summaryExit = runCommand("npm", [
+      "run",
+      "report:delivery:integration",
+      "--",
+      "--input-dir",
+      outputDir,
+      "--require-files",
+      "true",
+      "--require-pass",
+      "true"
+    ]);
+    process.exit(summaryExit);
+  }
+
+  process.exit(0);
 }
 
 main();
