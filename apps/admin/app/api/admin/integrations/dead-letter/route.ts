@@ -66,6 +66,7 @@ export async function GET(request: NextRequest) {
       payload: {
         reason: (p.reason as string | undefined),
         orderExternalId: (p.orderExternalId as string | undefined),
+        correlationId: (p.correlationId as string | undefined),
         retriedAt: (p.retriedAt as string | undefined)
       },
       createdAt: e.createdAt.toISOString()

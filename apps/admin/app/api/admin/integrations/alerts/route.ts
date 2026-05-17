@@ -7,6 +7,7 @@ type AlertSeverity = "critical" | "warning" | "info";
 interface AlertEvidence {
   eventIds?: string[];
   settlementIds?: string[];
+  correlationIds?: string[];
   apiPath?: string;
   artifactPath?: string;
   baselineApiPath?: string;
@@ -36,6 +37,15 @@ function extractSettlementId(payload: unknown): string | null {
   const settlementPayload = extractSettlementPayload(payload);
   const settlementId = settlementPayload.settlementId;
   return typeof settlementId === "string" && settlementId.length > 0 ? settlementId : null;
+}
+
+function extractCorrelationId(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const value = (payload as Record<string, unknown>).correlationId;
+  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 function pushSample(values: string[], value: string, limit = 3) {
@@ -124,11 +134,11 @@ export async function GET() {
   const actionDeadLettersByChannel: Record<string, number> = {};
   const settlementDeadLettersByChannel: Record<string, number> = {};
   const settlementTotalsByChannel: Record<string, { grossCents: number; feesCents: number }> = {};
-  const failureEvidenceByChannel: Record<string, { eventIds: string[] }> = {};
-  const actionEvidenceByChannel: Record<string, { eventIds: string[] }> = {};
-  const settlementFailureEvidenceByChannel: Record<string, { eventIds: string[]; settlementIds: string[] }> = {};
-  const settlementBacklogEvidenceByChannel: Record<string, { eventIds: string[]; settlementIds: string[] }> = {};
-  const settlementTotalsEvidenceByChannel: Record<string, { eventIds: string[]; settlementIds: string[] }> = {};
+  const failureEvidenceByChannel: Record<string, { eventIds: string[]; correlationIds: string[] }> = {};
+  const actionEvidenceByChannel: Record<string, { eventIds: string[]; correlationIds: string[] }> = {};
+  const settlementFailureEvidenceByChannel: Record<string, { eventIds: string[]; settlementIds: string[]; correlationIds: string[] }> = {};
+  const settlementBacklogEvidenceByChannel: Record<string, { eventIds: string[]; settlementIds: string[]; correlationIds: string[] }> = {};
+  const settlementTotalsEvidenceByChannel: Record<string, { eventIds: string[]; settlementIds: string[]; correlationIds: string[] }> = {};
   const settlementTrendByChannel: Record<
     string,
     {
@@ -140,30 +150,43 @@ export async function GET() {
       baselineEventIds: string[];
       recentSettlementIds: string[];
       baselineSettlementIds: string[];
+      recentCorrelationIds: string[];
+      baselineCorrelationIds: string[];
     }
   > = {};
 
   for (const e of failedEvents) {
     channelFailures[e.channel] = (channelFailures[e.channel] ?? 0) + 1;
-    const failureEvidence = ensureEvidenceBucket(failureEvidenceByChannel, e.channel, () => ({ eventIds: [] }));
+    const failureEvidence = ensureEvidenceBucket(failureEvidenceByChannel, e.channel, () => ({ eventIds: [], correlationIds: [] }));
     pushSample(failureEvidence.eventIds, e.id);
+    const correlationId = extractCorrelationId(e.payload);
+    if (correlationId) {
+      pushSample(failureEvidence.correlationIds, correlationId);
+    }
 
     if (e.eventType === "delivery.order.action.requested" && (e.status === "dead_letter" || e.status === "failed")) {
       actionDeadLettersByChannel[e.channel] = (actionDeadLettersByChannel[e.channel] ?? 0) + 1;
-      const actionEvidence = ensureEvidenceBucket(actionEvidenceByChannel, e.channel, () => ({ eventIds: [] }));
+      const actionEvidence = ensureEvidenceBucket(actionEvidenceByChannel, e.channel, () => ({ eventIds: [], correlationIds: [] }));
       pushSample(actionEvidence.eventIds, e.id);
+      if (correlationId) {
+        pushSample(actionEvidence.correlationIds, correlationId);
+      }
     }
 
     if (e.eventType.includes("settlement") && (e.status === "dead_letter" || e.status === "failed")) {
       settlementDeadLettersByChannel[e.channel] = (settlementDeadLettersByChannel[e.channel] ?? 0) + 1;
       const settlementEvidence = ensureEvidenceBucket(settlementFailureEvidenceByChannel, e.channel, () => ({
         eventIds: [],
-        settlementIds: []
+        settlementIds: [],
+        correlationIds: []
       }));
       pushSample(settlementEvidence.eventIds, e.id);
       const settlementId = extractSettlementId(e.payload);
       if (settlementId) {
         pushSample(settlementEvidence.settlementIds, settlementId);
+      }
+      if (correlationId) {
+        pushSample(settlementEvidence.correlationIds, correlationId);
       }
     }
   }
@@ -171,12 +194,17 @@ export async function GET() {
   for (const event of settlementBacklogEvents) {
     const backlogEvidence = ensureEvidenceBucket(settlementBacklogEvidenceByChannel, event.channel, () => ({
       eventIds: [],
-      settlementIds: []
+      settlementIds: [],
+      correlationIds: []
     }));
     pushSample(backlogEvidence.eventIds, event.id);
     const settlementId = extractSettlementId(event.payload);
     if (settlementId) {
       pushSample(backlogEvidence.settlementIds, settlementId);
+    }
+    const correlationId = extractCorrelationId(event.payload);
+    if (correlationId) {
+      pushSample(backlogEvidence.correlationIds, correlationId);
     }
   }
 
@@ -196,12 +224,17 @@ export async function GET() {
 
     const totalsEvidence = ensureEvidenceBucket(settlementTotalsEvidenceByChannel, settlementEvent.channel, () => ({
       eventIds: [],
-      settlementIds: []
+      settlementIds: [],
+      correlationIds: []
     }));
     pushSample(totalsEvidence.eventIds, settlementEvent.id);
     const settlementId = extractSettlementId(settlementEvent.payload);
     if (settlementId) {
       pushSample(totalsEvidence.settlementIds, settlementId);
+    }
+    const correlationId = extractCorrelationId(settlementEvent.payload);
+    if (correlationId) {
+      pushSample(totalsEvidence.correlationIds, correlationId);
     }
   }
 
@@ -220,12 +253,15 @@ export async function GET() {
         recentEventIds: [],
         baselineEventIds: [],
         recentSettlementIds: [],
-        baselineSettlementIds: []
+        baselineSettlementIds: [],
+        recentCorrelationIds: [],
+        baselineCorrelationIds: []
       };
     }
 
     const trend = settlementTrendByChannel[settlementEvent.channel]!;
     const settlementId = extractSettlementId(settlementEvent.payload);
+    const correlationId = extractCorrelationId(settlementEvent.payload);
     if (settlementEvent.createdAt >= since) {
       trend.recentGrossCents += grossCents;
       trend.recentFeesCents += feesCents;
@@ -233,12 +269,18 @@ export async function GET() {
       if (settlementId) {
         pushSample(trend.recentSettlementIds, settlementId);
       }
+      if (correlationId) {
+        pushSample(trend.recentCorrelationIds, correlationId);
+      }
     } else {
       trend.baselineGrossCents += grossCents;
       trend.baselineFeesCents += feesCents;
       pushSample(trend.baselineEventIds, settlementEvent.id);
       if (settlementId) {
         pushSample(trend.baselineSettlementIds, settlementId);
+      }
+      if (correlationId) {
+        pushSample(trend.baselineCorrelationIds, correlationId);
       }
     }
   }
@@ -251,6 +293,7 @@ export async function GET() {
       message: `${count} failed event(s) in the last 24 h`,
       evidence: {
         eventIds: failureEvidenceByChannel[channel]?.eventIds ?? [],
+        correlationIds: failureEvidenceByChannel[channel]?.correlationIds ?? [],
         apiPath: `/api/admin/integrations/dead-letter?channel=${channel}&limit=50`,
         artifactPath: `artifacts/delivery-replay/${channel}`
       }
@@ -265,6 +308,7 @@ export async function GET() {
       message: `${count} delivery action event(s) reached dead-letter in the last 24 h`,
       evidence: {
         eventIds: actionEvidenceByChannel[channel]?.eventIds ?? [],
+        correlationIds: actionEvidenceByChannel[channel]?.correlationIds ?? [],
         apiPath: `/api/admin/integrations/dead-letter?channel=${channel}&eventType=delivery.order.action.requested&limit=50`,
         artifactPath: `artifacts/delivery-replay/${channel}/delivery-action-replay.json`
       }
@@ -280,6 +324,7 @@ export async function GET() {
       evidence: {
         eventIds: settlementFailureEvidenceByChannel[channel]?.eventIds ?? [],
         settlementIds: settlementFailureEvidenceByChannel[channel]?.settlementIds ?? [],
+        correlationIds: settlementFailureEvidenceByChannel[channel]?.correlationIds ?? [],
         apiPath: `/api/admin/integrations/dead-letter?channel=${channel}&eventType=settlement&limit=50`,
         artifactPath: `artifacts/delivery-replay/${channel}/delivery-settlement-replay.json`
       }
@@ -297,6 +342,7 @@ export async function GET() {
       evidence: {
         eventIds: settlementBacklogEvidenceByChannel[row.channel]?.eventIds ?? [],
         settlementIds: settlementBacklogEvidenceByChannel[row.channel]?.settlementIds ?? [],
+        correlationIds: settlementBacklogEvidenceByChannel[row.channel]?.correlationIds ?? [],
         apiPath: `/api/admin/integrations/settlements?channel=${row.channel}&status=queued&from=${backlogFrom}`,
         artifactPath: `artifacts/delivery-replay/${row.channel}/delivery-settlement-replay.json`
       }
@@ -322,6 +368,7 @@ export async function GET() {
       evidence: {
         eventIds: settlementTotalsEvidenceByChannel[channel]?.eventIds ?? [],
         settlementIds: settlementTotalsEvidenceByChannel[channel]?.settlementIds ?? [],
+        correlationIds: settlementTotalsEvidenceByChannel[channel]?.correlationIds ?? [],
         apiPath: `/api/admin/integrations/settlements?channel=${channel}&status=processed&from=${from}`,
         artifactPath: `artifacts/delivery-replay/${channel}/delivery-settlement-replay.json`
       }
@@ -351,6 +398,7 @@ export async function GET() {
       evidence: {
         eventIds: trend.recentEventIds,
         settlementIds: trend.recentSettlementIds,
+        correlationIds: trend.recentCorrelationIds,
         apiPath: `/api/admin/integrations/settlements?channel=${channel}&status=processed&from=${recentFrom}`,
         baselineApiPath: `/api/admin/integrations/settlements?channel=${channel}&status=processed&from=${baselineFrom}&to=${recentFrom}`,
         artifactPath: `artifacts/delivery-replay/${channel}`

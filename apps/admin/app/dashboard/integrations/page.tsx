@@ -36,6 +36,7 @@ interface Alert {
   evidence?: {
     eventIds?: string[];
     settlementIds?: string[];
+    correlationIds?: string[];
     apiPath?: string;
     artifactPath?: string;
     baselineApiPath?: string;
@@ -49,6 +50,7 @@ interface DeadLetter {
   payload: {
     reason?: string;
     orderExternalId?: string;
+    correlationId?: string;
     retriedAt?: string;
   };
   createdAt: string;
@@ -67,6 +69,7 @@ interface SettlementEvent {
   currency: string;
   settledAt: string;
   orderExternalId: string | null;
+  correlationId: string | null;
   createdAt: string;
 }
 
@@ -261,6 +264,11 @@ export default function IntegrationsPage() {
                         Settlements: {row.evidence.settlementIds.join(', ')}
                       </span>
                     ) : null}
+                    {row.evidence?.correlationIds && row.evidence.correlationIds.length > 0 ? (
+                      <span className="text-muted" style={{ fontSize: '0.75rem' }}>
+                        Correlations: {row.evidence.correlationIds.join(', ')}
+                      </span>
+                    ) : null}
                     {row.evidence?.artifactPath ? (
                       <span className="text-muted" style={{ fontSize: '0.75rem' }}>
                         Artifact: {row.evidence.artifactPath}
@@ -282,6 +290,7 @@ export default function IntegrationsPage() {
               { header: 'ID', accessor: (row: DeadLetter) => row.id.slice(0, 8) },
               { header: 'Channel', accessor: (row: DeadLetter) => row.channel.toUpperCase() },
               { header: 'Event', accessor: (row: DeadLetter) => row.eventType },
+              { header: 'Correlation', accessor: (row: DeadLetter) => row.payload.correlationId ?? '-' },
               { header: 'Error', accessor: (row: DeadLetter) => (
                 <span style={{ maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
                   {row.payload.reason ?? 'Unknown error'}
@@ -362,6 +371,7 @@ export default function IntegrationsPage() {
               { header: 'Channel', accessor: (row: SettlementEvent) => row.channel.toUpperCase() },
               { header: 'Settlement ID', accessor: (row: SettlementEvent) => row.settlementId ?? '-' },
               { header: 'Payout ID', accessor: (row: SettlementEvent) => row.payoutId ?? '-' },
+              { header: 'Correlation', accessor: (row: SettlementEvent) => row.correlationId ?? '-' },
               { header: 'Gross', accessor: (row: SettlementEvent) => `$${(row.grossCents / 100).toFixed(2)}` },
               { header: 'Fees', accessor: (row: SettlementEvent) => `$${(row.feesCents / 100).toFixed(2)}` },
               { header: 'Net', accessor: (row: SettlementEvent) => `$${(row.netCents / 100).toFixed(2)}` },

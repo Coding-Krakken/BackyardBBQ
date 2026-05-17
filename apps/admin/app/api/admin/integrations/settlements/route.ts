@@ -84,7 +84,8 @@ export async function GET(request: NextRequest) {
         orderExternalId:
           typeof settlementPayload.externalOrderId === "string"
             ? settlementPayload.externalOrderId
-            : null
+            : null,
+        correlationId: typeof payload.correlationId === "string" ? payload.correlationId : null
       };
     });
 

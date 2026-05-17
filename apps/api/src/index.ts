@@ -1,7 +1,7 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import rawBody from "fastify-raw-body";
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import Stripe from "stripe";
 import { prisma, Prisma } from "./prisma.js";
@@ -780,6 +780,38 @@ function parseIncomingDeliverySettlement(payload: Record<string, unknown>) {
   };
 }
 
+function extractCorrelationId(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const payload = value as Record<string, unknown>;
+  if (typeof payload.correlationId === "string" && payload.correlationId.length > 0) {
+    return payload.correlationId;
+  }
+
+  const meta = payload.meta;
+  if (meta && typeof meta === "object") {
+    const metaRecord = meta as Record<string, unknown>;
+    if (typeof metaRecord.correlationId === "string" && metaRecord.correlationId.length > 0) {
+      return metaRecord.correlationId;
+    }
+  }
+
+  return undefined;
+}
+
+function createDeliveryCorrelationId(input: {
+  channel: (typeof integrationChannels)[number];
+  eventType: string;
+  referenceId?: string;
+}) {
+  const normalizedEventType = input.eventType.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 24) || "event";
+  const normalizedReference = (input.referenceId ?? randomUUID()).replace(/[^a-zA-Z0-9]+/g, "-").slice(0, 32);
+  const suffix = randomUUID().slice(0, 8);
+  return `dlv-${input.channel}-${normalizedEventType}-${normalizedReference}-${suffix}`;
+}
+
 function hasDeliveryWebhookSignature(input: {
   channel: (typeof integrationChannels)[number];
   headers: Record<string, unknown>;
@@ -942,6 +974,11 @@ app.post("/api/delivery/dispatch", async (request, reply) => {
   }
 
   const dispatchId = `${parsed.data.channel}-${order.id}-${Date.now()}`;
+  const correlationId = createDeliveryCorrelationId({
+    channel: parsed.data.channel,
+    eventType: "delivery.dispatch.requested",
+    referenceId: dispatchId
+  });
 
   const duplicateDispatch = await prisma.integrationEvent.findFirst({
     where: {
@@ -975,6 +1012,7 @@ app.post("/api/delivery/dispatch", async (request, reply) => {
           : `${parsed.data.channel}-${order.id}`,
       channel: parsed.data.channel,
       orderId: order.id,
+      correlationId: typeof payload.correlationId === "string" ? payload.correlationId : null,
       status: duplicateDispatch.status,
       createdAt: duplicateDispatch.createdAt.toISOString()
     };
@@ -991,6 +1029,7 @@ app.post("/api/delivery/dispatch", async (request, reply) => {
         orderId: order.id,
         priority: parsed.data.priority,
         amountCents: order.totalCents,
+        correlationId,
         queuedAt: new Date().toISOString()
       } as Prisma.InputJsonValue
     }
@@ -1000,7 +1039,8 @@ app.post("/api/delivery/dispatch", async (request, reply) => {
     queued: true,
     dispatchId,
     channel: parsed.data.channel,
-    orderId: order.id
+    orderId: order.id,
+    correlationId
   };
 });
 
@@ -1086,11 +1126,17 @@ app.post("/api/delivery/orders/:orderId/action", async (request, reply) => {
       eventId: duplicateAction.id,
       action: parsed.data.action,
       mappedStatus: payload.mappedStatus,
+      correlationId: typeof payload.correlationId === "string" ? payload.correlationId : null,
       createdAt: duplicateAction.createdAt.toISOString()
     };
   }
 
   const mappedStatus = mapActionToProviderStatus[parsed.data.action];
+  const correlationId = createDeliveryCorrelationId({
+    channel: parsed.data.channel,
+    eventType: "delivery.order.action.requested",
+    referenceId: `${order.id}-${parsed.data.action}`
+  });
   const event = await prisma.integrationEvent.create({
     data: {
       orderId: order.id,
@@ -1102,6 +1148,7 @@ app.post("/api/delivery/orders/:orderId/action", async (request, reply) => {
         orderExternalId: order.externalOrderId ?? `${parsed.data.channel}:${order.id}`,
         action: parsed.data.action,
         mappedStatus,
+        correlationId,
         reason: parsed.data.reason ?? null,
         attempts: 0,
         queuedAt: new Date().toISOString()
@@ -1117,6 +1164,7 @@ app.post("/api/delivery/orders/:orderId/action", async (request, reply) => {
     channel: parsed.data.channel,
     action: parsed.data.action,
     mappedStatus,
+    correlationId,
     createdAt: event.createdAt.toISOString()
   };
 });
@@ -2829,9 +2877,18 @@ app.post(
       });
     }
 
+    const payloadCorrelationId = extractCorrelationId(parsedBody.data.payload);
+    const correlationId =
+      payloadCorrelationId ??
+      createDeliveryCorrelationId({
+        channel,
+        eventType: parsedBody.data.eventType,
+        referenceId: parsedBody.data.eventId
+      });
+
     const dedupeKey = `${channel}:${parsedBody.data.eventId}`;
     if (isDuplicateWebhookEvent(dedupeKey)) {
-      return { received: true, duplicate: true };
+      return { received: true, duplicate: true, correlationId };
     }
 
     const parsedDeliveryOrder = parseIncomingDeliveryOrder(parsedBody.data.payload, channel);
@@ -2843,6 +2900,7 @@ app.post(
         received: true,
         channel,
         eventId: parsedBody.data.eventId,
+        correlationId,
         ingestedOrder: parsedDeliveryOrder.ok ? parsedDeliveryOrder.value.externalOrderId : null,
         ingestedSettlement: parsedSettlement.ok ? parsedSettlement.value.settlementId : null
       };
@@ -2865,7 +2923,7 @@ app.post(
       });
 
       if (duplicateEvent) {
-        return { received: true, duplicate: true };
+        return { received: true, duplicate: true, correlationId };
       }
 
       let orderId: string | undefined;
@@ -2907,7 +2965,8 @@ app.post(
               received: true,
               duplicate: true,
               duplicateType: "settlement",
-              settlementId: parsedSettlement.value.settlementId
+              settlementId: parsedSettlement.value.settlementId,
+              correlationId
             };
           }
 
@@ -3047,6 +3106,7 @@ app.post(
           status: ingestStatus,
           payload: {
             eventId: parsedBody.data.eventId,
+            correlationId,
             orderExternalId: parsedBody.data.orderExternalId ?? null,
             requestIp: request.ip,
             receivedAt: new Date().toISOString(),
@@ -3073,7 +3133,7 @@ app.post(
       });
     }
 
-    return { received: true };
+    return { received: true, correlationId };
   }
 );
 

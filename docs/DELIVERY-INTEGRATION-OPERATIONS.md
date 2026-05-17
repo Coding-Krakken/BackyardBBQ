@@ -195,6 +195,7 @@ Alerting behavior details:
 - Integrations alerts include queued/pending settlement backlog thresholds.
 - Integrations alerts include settlement fee-rate spike detection versus the previous 7-day baseline window.
 - Integrations alerts now include triage evidence pointers (sample event IDs, settlement IDs, and API/artifact paths) in dashboard responses.
+- Delivery webhook, dispatch, action, and settlement queue flows now carry `correlationId` metadata for end-to-end incident tracing.
 
 ## Suggested Operational Checks
 

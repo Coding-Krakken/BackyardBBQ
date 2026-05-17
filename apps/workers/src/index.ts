@@ -59,6 +59,11 @@ function mapInternalToProviderStatus(status: string): ProviderStatusSyncInput["s
   }
 }
 
+function getPayloadCorrelationId(payload: Prisma.JsonObject, fallback: string) {
+  const correlationId = payload.correlationId;
+  return typeof correlationId === "string" && correlationId.length > 0 ? correlationId : fallback;
+}
+
 async function persistHealthEvent(input: {
   channel: DeliveryChannel;
   status: "healthy" | "degraded" | "down";
@@ -447,6 +452,7 @@ async function runDispatchQueueCycle() {
     }
 
     const payload = dispatchEvent.payload as Prisma.JsonObject;
+    const correlationId = getPayloadCorrelationId(payload, `dispatch-${dispatchEvent.id}`);
     const orderId = typeof payload.orderId === "string" ? payload.orderId : undefined;
     const attempts = typeof payload.attempts === "number" ? payload.attempts : 0;
     const maxAttempts = 5;
@@ -458,6 +464,7 @@ async function runDispatchQueueCycle() {
           status: "dead_letter",
           payload: {
             ...payload,
+            correlationId,
             reason: "missing_order_id",
             failedAt: new Date().toISOString()
           }
@@ -484,6 +491,7 @@ async function runDispatchQueueCycle() {
           status: "dead_letter",
           payload: {
             ...payload,
+            correlationId,
             attempts: attempts + 1,
             reason: "order_not_found",
             failedAt: new Date().toISOString()
@@ -511,6 +519,7 @@ async function runDispatchQueueCycle() {
           status: "processed",
           payload: {
             ...payload,
+            correlationId,
             attempts: attempts + 1,
             orderExternalId: externalOrderId,
             acceptedAt: new Date().toISOString(),
@@ -526,6 +535,7 @@ async function runDispatchQueueCycle() {
           orderId: order.id,
           externalOrderId,
           mappedStatus: "accepted",
+          correlationId,
           latencyMs: result.latencyMs,
           sourceEventId: dispatchEvent.id,
           syncedAt: new Date().toISOString()
@@ -541,6 +551,7 @@ async function runDispatchQueueCycle() {
           status: shouldDeadLetter ? "dead_letter" : "queued",
           payload: {
             ...payload,
+            correlationId,
             attempts: nextAttempts,
             orderExternalId: externalOrderId,
             lastError: error instanceof Error ? error.message : "dispatch_sync_failed",
@@ -588,6 +599,7 @@ async function runOrderActionQueueCycle() {
     }
 
     const payload = actionEvent.payload as Prisma.JsonObject;
+    const correlationId = getPayloadCorrelationId(payload, `action-${actionEvent.id}`);
     const mappedStatus =
       typeof payload.mappedStatus === "string"
         ? (payload.mappedStatus as ProviderStatusSyncInput["status"])
@@ -606,6 +618,7 @@ async function runOrderActionQueueCycle() {
           status: "dead_letter",
           payload: {
             ...payload,
+            correlationId,
             reason: "invalid_action_payload",
             failedAt: new Date().toISOString()
           }
@@ -628,6 +641,7 @@ async function runOrderActionQueueCycle() {
           status: "processed",
           payload: {
             ...payload,
+            correlationId,
             attempts: attempts + 1,
             completedAt: new Date().toISOString(),
             latencyMs: result.latencyMs
@@ -642,6 +656,7 @@ async function runOrderActionQueueCycle() {
           sourceEventId: actionEvent.id,
           orderExternalId,
           mappedStatus,
+          correlationId,
           latencyMs: result.latencyMs,
           syncedAt: new Date().toISOString()
         }
@@ -656,6 +671,7 @@ async function runOrderActionQueueCycle() {
           status: deadLetter ? "dead_letter" : "queued",
           payload: {
             ...payload,
+            correlationId,
             attempts: nextAttempts,
             lastError: error instanceof Error ? error.message : "delivery_action_sync_failed",
             failedAt: new Date().toISOString()
@@ -759,6 +775,7 @@ async function runSettlementQueueCycle() {
     }
 
     const payload = settlementEvent.payload as Prisma.JsonObject;
+    const correlationId = getPayloadCorrelationId(payload, `settlement-${settlementEvent.id}`);
     const attempts = typeof payload.attempts === "number" ? payload.attempts : 0;
     const maxAttempts = 5;
     const normalized = extractSettlementPayload(payload);
@@ -771,6 +788,7 @@ async function runSettlementQueueCycle() {
           status: nextAttempts >= maxAttempts ? "dead_letter" : "queued",
           payload: {
             ...payload,
+            correlationId,
             attempts: nextAttempts,
             reason: "invalid_settlement_payload",
             failedAt: new Date().toISOString()
@@ -813,6 +831,7 @@ async function runSettlementQueueCycle() {
           status: "ignored",
           payload: {
             ...payload,
+            correlationId,
             attempts: attempts + 1,
             reason: "duplicate_settlement_ignored",
             duplicateOfEventId: duplicateSettlement.id,
@@ -839,6 +858,7 @@ async function runSettlementQueueCycle() {
         status: "processed",
         payload: {
           ...payload,
+          correlationId,
           attempts: attempts + 1,
           processedAt: new Date().toISOString(),
           settlement: {
