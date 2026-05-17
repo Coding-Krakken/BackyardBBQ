@@ -47,6 +47,26 @@ Worker processing loop:
 
 ## Replay and Idempotency Validation
 
+### Automated integration checks
+
+Command (non-live wiring validation):
+
+```bash
+npm run test:delivery:integration -- --run-live false
+```
+
+Command (live replay validation):
+
+```bash
+npm run test:delivery:integration -- --run-live true --channel doordash --api-base-url http://localhost:4000 --webhook-secret <secret>
+```
+
+Summary report from replay artifacts:
+
+```bash
+npm run report:delivery:integration -- --input-dir artifacts/delivery-replay
+```
+
 ### Delivery webhook replay
 
 Command:

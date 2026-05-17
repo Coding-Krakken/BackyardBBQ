@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 import { createHmac } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 
 function parseArgs(argv) {
   const args = {};
@@ -22,7 +24,7 @@ function parseArgs(argv) {
 }
 
 function printUsage() {
-  console.log(`Usage:\n  node apps/api/scripts/delivery-settlement-replay-check.mjs [--api-base-url http://localhost:4000] [--channel doordash] [--event-id evt_123] [--external-order-id order_123] [--webhook-secret secret] [--date 2026-05-16]\n\nEnv fallbacks:\n  API_BASE_URL\n  DELIVERY_CHANNEL\n  <CHANNEL>_WEBHOOK_SECRET\n  DELIVERY_WEBHOOK_SECRET`);
+  console.log(`Usage:\n  node apps/api/scripts/delivery-settlement-replay-check.mjs [--api-base-url http://localhost:4000] [--channel doordash] [--event-id evt_123] [--external-order-id order_123] [--webhook-secret secret] [--date 2026-05-16] [--output-json ./artifacts/delivery-settlement-replay.json]\n\nEnv fallbacks:\n  API_BASE_URL\n  DELIVERY_CHANNEL\n  <CHANNEL>_WEBHOOK_SECRET\n  DELIVERY_WEBHOOK_SECRET`);
 }
 
 function makeSignature(rawBody, secret) {
@@ -91,6 +93,7 @@ async function main() {
   const externalOrderId = args["external-order-id"] ?? `settlement-${Date.now()}`;
   const eventId = args["event-id"] ?? `evt-settlement-${Date.now()}`;
   const date = args.date;
+  const outputJson = args["output-json"];
   const webhookSecret =
     args["webhook-secret"] ??
     process.env[`${channel.toUpperCase()}_WEBHOOK_SECRET`] ??
@@ -147,6 +150,12 @@ async function main() {
       channelSettlement
     }
   };
+
+  if (typeof outputJson === "string" && outputJson.trim().length > 0) {
+    const normalizedPath = outputJson.trim();
+    await mkdir(dirname(normalizedPath), { recursive: true });
+    await writeFile(normalizedPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+  }
 
   console.log(JSON.stringify(result, null, 2));
 
