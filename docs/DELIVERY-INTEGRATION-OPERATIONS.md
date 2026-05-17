@@ -45,6 +45,13 @@ Worker processing loop:
 4. Increments attempts and re-queues on transient failure.
 5. Marks `dead_letter` when max attempts is reached.
 
+Settlement retry processing:
+
+1. Re-queued settlement events (`status=queued|pending` and `eventType` containing `settlement`) are consumed by workers.
+2. Worker normalizes settlement payload fields (`settlementId`, gross, fees, net, currency, settledAt).
+3. Duplicate settlement IDs are marked `ignored` to prevent double counting.
+4. Invalid settlement payload retries increment attempts and eventually return to `dead_letter` after max attempts.
+
 ## Replay and Idempotency Validation
 
 ### Automated integration checks

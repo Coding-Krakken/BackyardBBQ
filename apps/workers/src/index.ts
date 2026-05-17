@@ -666,6 +666,197 @@ async function runOrderActionQueueCycle() {
   }
 }
 
+function extractSettlementPayload(payload: Prisma.JsonObject) {
+  const direct = payload.settlement;
+  const nestedPayload = payload.payload;
+  const nestedRecord =
+    nestedPayload && typeof nestedPayload === "object" && !Array.isArray(nestedPayload)
+      ? (nestedPayload as Prisma.JsonObject)
+      : undefined;
+
+  const nested = nestedRecord?.settlement ?? nestedRecord;
+  const candidate =
+    direct && typeof direct === "object" && !Array.isArray(direct)
+      ? (direct as Prisma.JsonObject)
+      : nested && typeof nested === "object" && !Array.isArray(nested)
+        ? (nested as Prisma.JsonObject)
+        : undefined;
+
+  if (!candidate) {
+    return null;
+  }
+
+  const settlementId = typeof candidate.settlementId === "string" ? candidate.settlementId : undefined;
+  const grossCents = typeof candidate.grossCents === "number" ? candidate.grossCents : undefined;
+  const feesCents = typeof candidate.feesCents === "number" ? candidate.feesCents : 0;
+  const netCents = typeof candidate.netCents === "number" ? candidate.netCents : undefined;
+  const currency = typeof candidate.currency === "string" ? candidate.currency : "usd";
+  const payoutId = typeof candidate.payoutId === "string" ? candidate.payoutId : undefined;
+  const externalOrderId =
+    typeof candidate.externalOrderId === "string"
+      ? candidate.externalOrderId
+      : typeof payload.orderExternalId === "string"
+        ? payload.orderExternalId
+        : undefined;
+  const settledAt =
+    typeof candidate.settledAt === "string"
+      ? candidate.settledAt
+      : typeof payload.receivedAt === "string"
+        ? payload.receivedAt
+        : new Date().toISOString();
+
+  if (!settlementId || typeof grossCents !== "number" || typeof netCents !== "number") {
+    return null;
+  }
+
+  return {
+    settlementId,
+    payoutId,
+    externalOrderId,
+    grossCents,
+    feesCents,
+    netCents,
+    currency,
+    settledAt
+  };
+}
+
+async function runSettlementQueueCycle() {
+  if (!hasDatabaseUrl) {
+    return;
+  }
+
+  const queuedSettlementEvents = await prisma.integrationEvent.findMany({
+    where: {
+      eventType: {
+        contains: "settlement"
+      },
+      status: {
+        in: ["queued", "pending"]
+      }
+    },
+    orderBy: {
+      createdAt: "asc"
+    },
+    take: 100
+  });
+
+  for (const settlementEvent of queuedSettlementEvents) {
+    const channel = settlementEvent.channel as DeliveryChannel;
+    if (!deliveryChannels.includes(channel)) {
+      await prisma.integrationEvent.update({
+        where: { id: settlementEvent.id },
+        data: {
+          status: "dead_letter",
+          payload: {
+            ...(settlementEvent.payload as Prisma.JsonObject),
+            reason: "unsupported_channel",
+            failedAt: new Date().toISOString()
+          }
+        }
+      });
+      continue;
+    }
+
+    const payload = settlementEvent.payload as Prisma.JsonObject;
+    const attempts = typeof payload.attempts === "number" ? payload.attempts : 0;
+    const maxAttempts = 5;
+    const normalized = extractSettlementPayload(payload);
+
+    if (!normalized) {
+      const nextAttempts = attempts + 1;
+      await prisma.integrationEvent.update({
+        where: { id: settlementEvent.id },
+        data: {
+          status: nextAttempts >= maxAttempts ? "dead_letter" : "queued",
+          payload: {
+            ...payload,
+            attempts: nextAttempts,
+            reason: "invalid_settlement_payload",
+            failedAt: new Date().toISOString()
+          }
+        }
+      });
+      continue;
+    }
+
+    const duplicateSettlement = await prisma.integrationEvent.findFirst({
+      where: {
+        id: { not: settlementEvent.id },
+        channel,
+        eventType: {
+          contains: "settlement"
+        },
+        status: "processed",
+        OR: [
+          {
+            payload: {
+              path: ["settlement", "settlementId"],
+              equals: normalized.settlementId
+            }
+          },
+          {
+            payload: {
+              path: ["settlementId"],
+              equals: normalized.settlementId
+            }
+          }
+        ]
+      },
+      select: { id: true }
+    });
+
+    if (duplicateSettlement) {
+      await prisma.integrationEvent.update({
+        where: { id: settlementEvent.id },
+        data: {
+          status: "ignored",
+          payload: {
+            ...payload,
+            attempts: attempts + 1,
+            reason: "duplicate_settlement_ignored",
+            duplicateOfEventId: duplicateSettlement.id,
+            processedAt: new Date().toISOString(),
+            settlement: {
+              settlementId: normalized.settlementId,
+              payoutId: normalized.payoutId ?? null,
+              externalOrderId: normalized.externalOrderId ?? null,
+              grossCents: normalized.grossCents,
+              feesCents: normalized.feesCents,
+              netCents: normalized.netCents,
+              currency: normalized.currency,
+              settledAt: normalized.settledAt
+            }
+          }
+        }
+      });
+      continue;
+    }
+
+    await prisma.integrationEvent.update({
+      where: { id: settlementEvent.id },
+      data: {
+        status: "processed",
+        payload: {
+          ...payload,
+          attempts: attempts + 1,
+          processedAt: new Date().toISOString(),
+          settlement: {
+            settlementId: normalized.settlementId,
+            payoutId: normalized.payoutId ?? null,
+            externalOrderId: normalized.externalOrderId ?? null,
+            grossCents: normalized.grossCents,
+            feesCents: normalized.feesCents,
+            netCents: normalized.netCents,
+            currency: normalized.currency,
+            settledAt: normalized.settledAt
+          }
+        }
+      }
+    });
+  }
+}
+
 setInterval(() => {
   runSyncCycle().catch((error) => {
     console.error("[workers] sync cycle failed", error);
@@ -693,6 +884,12 @@ setInterval(() => {
 setInterval(() => {
   runOrderActionQueueCycle().catch((error) => {
     console.error("[workers] order action queue cycle failed", error);
+  });
+}, 10000);
+
+setInterval(() => {
+  runSettlementQueueCycle().catch((error) => {
+    console.error("[workers] settlement queue cycle failed", error);
   });
 }, 10000);
 
