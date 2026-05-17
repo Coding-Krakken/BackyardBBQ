@@ -36,6 +36,7 @@ function setupFixtureFiles() {
   writeFileSync(join(fixtureDir, "delivery-settlement-replay.json"), JSON.stringify({
     firstAttempt: { ok: true },
     duplicateSuppressed: true,
+    businessKeyDuplicateSuppressed: true,
     dailyClose: { settlementNetCents: 12345 }
   }));
 }

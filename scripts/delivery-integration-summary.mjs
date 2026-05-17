@@ -51,6 +51,7 @@ function buildSummaryMarkdown(summary) {
     `| Action duplicateSuppressed | ${summary.actionDuplicateSuppressed} |`,
     `| Settlement first.ok | ${summary.settlementFirstOk} |`,
     `| Settlement duplicateSuppressed | ${summary.settlementDuplicateSuppressed} |`,
+    `| Settlement businessKeyDuplicateSuppressed | ${summary.settlementBusinessKeyDuplicateSuppressed} |`,
     `| Daily close settlementNetCents | ${summary.settlementNetCents} |`,
     ""
   ].join("\n");
@@ -66,7 +67,11 @@ function validate(summary) {
     ["action.first.ok", summary.actionFirstOk === true],
     ["action.duplicateSuppressed", summary.actionDuplicateSuppressed === true],
     ["settlement.first.ok", summary.settlementFirstOk === true],
-    ["settlement.duplicateSuppressed", summary.settlementDuplicateSuppressed === true]
+    ["settlement.duplicateSuppressed", summary.settlementDuplicateSuppressed === true],
+    [
+      "settlement.businessKeyDuplicateSuppressed",
+      summary.settlementBusinessKeyDuplicateSuppressed === true
+    ]
   ];
 
   for (const [name, passed] of checks) {
@@ -104,6 +109,8 @@ function main() {
     actionDuplicateSuppressed: action?.duplicateSuppressed ?? "n/a",
     settlementFirstOk: settlement?.firstAttempt?.ok ?? "n/a",
     settlementDuplicateSuppressed: settlement?.duplicateSuppressed ?? "n/a",
+    settlementBusinessKeyDuplicateSuppressed:
+      settlement?.businessKeyDuplicateSuppressed ?? "n/a",
     settlementNetCents: settlement?.dailyClose?.settlementNetCents ?? "n/a"
   };
 

@@ -122,11 +122,29 @@ async function main() {
     }
   };
 
+  const businessKeyReplayBody = {
+    ...requestBody,
+    eventId: `${eventId}-bizkey-replay`,
+    payload: {
+      settlement: {
+        ...requestBody.payload.settlement
+      }
+    }
+  };
+
   const payload = JSON.stringify(requestBody);
   const signature = makeSignature(payload, webhookSecret);
+  const businessKeyPayload = JSON.stringify(businessKeyReplayBody);
+  const businessKeySignature = makeSignature(businessKeyPayload, webhookSecret);
 
   const first = await postWebhook({ apiBaseUrl, channel, payload, signature });
   const second = await postWebhook({ apiBaseUrl, channel, payload, signature });
+  const thirdBusinessKeyReplay = await postWebhook({
+    apiBaseUrl,
+    channel,
+    payload: businessKeyPayload,
+    signature: businessKeySignature
+  });
   const dailyClose = await getDailyClose({ apiBaseUrl, date });
 
   const settlementByChannel = Array.isArray(dailyClose.body?.settlementByChannel)
@@ -138,9 +156,15 @@ async function main() {
     channel,
     eventId,
     externalOrderId,
+    settlementId: requestBody.payload.settlement.settlementId,
     firstAttempt: first,
     secondAttempt: second,
+    thirdBusinessKeyReplay,
     duplicateSuppressed: Boolean(second.body?.duplicate === true),
+    businessKeyDuplicateSuppressed:
+      Boolean(thirdBusinessKeyReplay.body?.duplicate === true) &&
+      (thirdBusinessKeyReplay.body?.duplicateType === "settlement" ||
+        thirdBusinessKeyReplay.body?.settlementId === requestBody.payload.settlement.settlementId),
     dailyClose: {
       ok: dailyClose.ok,
       settlementNetCents:
@@ -161,7 +185,8 @@ async function main() {
 
   if (!first.ok) process.exit(2);
   if (!second.ok) process.exit(3);
-  if (!dailyClose.ok) process.exit(4);
+  if (!thirdBusinessKeyReplay.ok) process.exit(4);
+  if (!dailyClose.ok) process.exit(5);
 }
 
 main().catch((error) => {
