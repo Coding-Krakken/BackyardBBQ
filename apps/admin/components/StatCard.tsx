@@ -25,7 +25,7 @@ export function StatCard({
 }: StatCardProps) {
   return (
     <motion.div
-      className="card stat-card"
+      className="panel stat-card"
       whileHover={{ y: -2 }}
       transition={{ type: 'spring', stiffness: 400, damping: 17 }}
     >

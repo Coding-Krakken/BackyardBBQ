@@ -102,152 +102,160 @@ export default function DashboardOverviewPage() {
   return (
     <RoleGate allowedRoles={['owner', 'admin', 'manager']}>
       <AnimatedPage>
-        <PageHeader
-          title="Mission Control"
-          subtitle="Real-time overview of your restaurant operations"
-        />
+        <div className="dashboard-stack">
+          <PageHeader
+            title="Mission Control"
+            subtitle="Real-time overview of your restaurant operations"
+          />
 
-        {/* KPI Cards — Primary Metrics */}
-        <div className="grid-cards grid-cards-4 mb-xl">
-          {overviewLoading ? (
-            <><CardSkeleton /><CardSkeleton /><CardSkeleton /><CardSkeleton /></>
-          ) : (
-            <>
-              <StatCard
-                label="Pending Orders"
-                value={overview?.totals.pendingOrders ?? 0}
-                icon={<span>⊞</span>}
-              />
-              <StatCard
-                label="Active Bookings"
-                value={overview?.totals.activeBookings ?? 0}
-                icon={<span>◈</span>}
-              />
-              <StatCard
-                label="Today&rsquo;s Revenue"
-                value={(overview?.totals.grossSalesCentsToday ?? 0) / 100}
-                prefix="$"
-                decimals={2}
-                icon={<span>◆</span>}
-              />
-              <StatCard
-                label="Avg Order Value"
-                value={(overview?.totals.avgOrderCents ?? 0) / 100}
-                prefix="$"
-                decimals={2}
-                icon={<span>◇</span>}
-              />
-            </>
-          )}
-        </div>
-
-        {/* Charts Row */}
-        <div className="grid-cards grid-cards-2 mb-xl">
-          {overviewLoading ? (
-            <><ChartSkeleton /><ChartSkeleton /></>
-          ) : (
-            <>
-              <ChartCard title="Revenue Trend">
-                <BBQAreaChart
-                  data={revenueChartData}
-                  index="date"
-                  categories={['revenue']}
-                  valueFormatter={(v) => `$${v.toLocaleString()}`}
-                  height={260}
-                />
-              </ChartCard>
-              <ChartCard title="Orders by Source">
-                <BBQDonutChart
-                  data={sourceChartData}
-                  index="name"
-                  category="value"
-                  height={260}
-                />
-              </ChartCard>
-            </>
-          )}
-        </div>
-
-        {/* Secondary chart + quick stats */}
-        <div className="grid-cards grid-cards-3 mb-xl">
-          {overviewLoading ? (
-            <><CardSkeleton /><CardSkeleton /><CardSkeleton /></>
-          ) : (
-            <>
-              <div className="panel" style={{ gridColumn: 'span 2' }}>
-                <div className="chart-header">
-                  <h3 className="chart-title">Order Status Breakdown</h3>
-                </div>
-                <div className="chart-body">
-                  <BBQBarChart
-                    data={statusChartData}
-                    index="name"
-                    categories={['value']}
-                    height={200}
+          {/* KPI Cards — Primary Metrics */}
+          <section className="dashboard-section">
+            <div className="grid-cards grid-cards-4">
+              {overviewLoading ? (
+                <><CardSkeleton /><CardSkeleton /><CardSkeleton /><CardSkeleton /></>
+              ) : (
+                <>
+                  <StatCard
+                    label="Pending Orders"
+                    value={overview?.totals.pendingOrders ?? 0}
+                    icon={<span>⊞</span>}
                   />
-                </div>
-              </div>
-              <div className="panel">
-                <h3 className="chart-title mb-md">Quick Stats</h3>
-                <dl className="detail-list">
-                  <div className="detail-list-item">
-                    <dt>Total Customers</dt>
-                    <dd>{overview?.totals.totalCustomers ?? '—'}</dd>
-                  </div>
-                  <div className="detail-list-item">
-                    <dt>Completed Orders</dt>
-                    <dd>{overview?.totals.completedOrders ?? '—'}</dd>
-                  </div>
-                  <div className="detail-list-item">
-                    <dt>Active Bookings</dt>
-                    <dd>{overview?.totals.activeBookings ?? 0}</dd>
-                  </div>
-                </dl>
-              </div>
-            </>
-          )}
-        </div>
+                  <StatCard
+                    label="Active Bookings"
+                    value={overview?.totals.activeBookings ?? 0}
+                    icon={<span>◈</span>}
+                  />
+                  <StatCard
+                    label="Today&rsquo;s Revenue"
+                    value={(overview?.totals.grossSalesCentsToday ?? 0) / 100}
+                    prefix="$"
+                    decimals={2}
+                    icon={<span>◆</span>}
+                  />
+                  <StatCard
+                    label="Avg Order Value"
+                    value={(overview?.totals.avgOrderCents ?? 0) / 100}
+                    prefix="$"
+                    decimals={2}
+                    icon={<span>◇</span>}
+                  />
+                </>
+              )}
+            </div>
+          </section>
 
-        {/* Recent Orders */}
-        <div className="mb-xl">
-          <div className="flex-between mb-md">
-            <h3>Recent Orders</h3>
-            <Link href="/dashboard/orders" className="btn btn-ghost btn-sm">View All →</Link>
-          </div>
-          <div className="panel">
-            <DataTable
-              columns={[
-                { header: 'Order ID', accessor: (row: Order) => row.id.slice(0, 8) },
-                { header: 'Source', accessor: (row: Order) => row.source.toUpperCase() },
-                { header: 'Status', accessor: (row: Order) => <StatusBadge status={row.status} /> },
-                { header: 'Total', accessor: (row: Order) => formatCurrency(row.totalCents), sortKey: (row: Order) => row.totalCents },
-                { header: 'Location', accessor: (row: Order) => row.location?.name ?? 'N/A' },
-                { header: 'Created', accessor: (row: Order) => formatDate(row.createdAt), sortKey: (row: Order) => row.createdAt },
-              ]}
-              data={ordersData?.data ?? []}
-            />
-          </div>
-        </div>
+          {/* Charts Row */}
+          <section className="dashboard-section">
+            <div className="grid-cards grid-cards-2">
+              {overviewLoading ? (
+                <><ChartSkeleton /><ChartSkeleton /></>
+              ) : (
+                <>
+                  <ChartCard title="Revenue Trend">
+                    <BBQAreaChart
+                      data={revenueChartData}
+                      index="date"
+                      categories={['revenue']}
+                      valueFormatter={(v) => `$${v.toLocaleString()}`}
+                      height={260}
+                    />
+                  </ChartCard>
+                  <ChartCard title="Orders by Source">
+                    <BBQDonutChart
+                      data={sourceChartData}
+                      index="name"
+                      category="value"
+                      height={260}
+                    />
+                  </ChartCard>
+                </>
+              )}
+            </div>
+          </section>
 
-        {/* Recent Bookings */}
-        <div>
-          <div className="flex-between mb-md">
-            <h3>Upcoming Catering Bookings</h3>
-            <Link href="/dashboard/bookings" className="btn btn-ghost btn-sm">View All →</Link>
-          </div>
-          <div className="panel">
-            <DataTable
-              columns={[
-                { header: 'Booking ID', accessor: (row: Booking) => row.id.slice(0, 8) },
-                { header: 'Event Date', accessor: (row: Booking) => formatDate(row.eventDate), sortKey: (row: Booking) => row.eventDate },
-                { header: 'Party Size', accessor: (row: Booking) => row.partySize, sortKey: (row: Booking) => row.partySize },
-                { header: 'Status', accessor: (row: Booking) => <StatusBadge status={row.status} type="booking" /> },
-                { header: 'Package', accessor: (row: Booking) => row.packageName ?? 'Custom' },
-                { header: 'Location', accessor: (row: Booking) => row.location?.name ?? 'N/A' },
-              ]}
-              data={bookingsData?.data ?? []}
-            />
-          </div>
+          {/* Secondary chart + quick stats */}
+          <section className="dashboard-section">
+            <div className="grid-cards grid-cards-3">
+              {overviewLoading ? (
+                <><CardSkeleton /><CardSkeleton /><CardSkeleton /></>
+              ) : (
+                <>
+                  <div className="panel dashboard-wide-panel">
+                    <div className="chart-header">
+                      <h3 className="chart-title">Order Status Breakdown</h3>
+                    </div>
+                    <div className="chart-body">
+                      <BBQBarChart
+                        data={statusChartData}
+                        index="name"
+                        categories={['value']}
+                        height={200}
+                      />
+                    </div>
+                  </div>
+                  <div className="panel">
+                    <h3 className="chart-title mb-md">Quick Stats</h3>
+                    <dl className="detail-list">
+                      <div className="detail-list-item">
+                        <dt>Total Customers</dt>
+                        <dd>{overview?.totals.totalCustomers ?? '—'}</dd>
+                      </div>
+                      <div className="detail-list-item">
+                        <dt>Completed Orders</dt>
+                        <dd>{overview?.totals.completedOrders ?? '—'}</dd>
+                      </div>
+                      <div className="detail-list-item">
+                        <dt>Active Bookings</dt>
+                        <dd>{overview?.totals.activeBookings ?? 0}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                </>
+              )}
+            </div>
+          </section>
+
+          {/* Recent Orders */}
+          <section className="dashboard-section">
+            <div className="dashboard-section-header">
+              <h3 className="dashboard-section-title">Recent Orders</h3>
+              <Link href="/dashboard/orders" className="btn btn-ghost btn-sm">View All →</Link>
+            </div>
+            <div className="panel">
+              <DataTable
+                columns={[
+                  { header: 'Order ID', accessor: (row: Order) => row.id.slice(0, 8) },
+                  { header: 'Source', accessor: (row: Order) => row.source.toUpperCase() },
+                  { header: 'Status', accessor: (row: Order) => <StatusBadge status={row.status} /> },
+                  { header: 'Total', accessor: (row: Order) => formatCurrency(row.totalCents), sortKey: (row: Order) => row.totalCents },
+                  { header: 'Location', accessor: (row: Order) => row.location?.name ?? 'N/A' },
+                  { header: 'Created', accessor: (row: Order) => formatDate(row.createdAt), sortKey: (row: Order) => row.createdAt },
+                ]}
+                data={ordersData?.data ?? []}
+              />
+            </div>
+          </section>
+
+          {/* Recent Bookings */}
+          <section className="dashboard-section">
+            <div className="dashboard-section-header">
+              <h3 className="dashboard-section-title">Upcoming Catering Bookings</h3>
+              <Link href="/dashboard/bookings" className="btn btn-ghost btn-sm">View All →</Link>
+            </div>
+            <div className="panel">
+              <DataTable
+                columns={[
+                  { header: 'Booking ID', accessor: (row: Booking) => row.id.slice(0, 8) },
+                  { header: 'Event Date', accessor: (row: Booking) => formatDate(row.eventDate), sortKey: (row: Booking) => row.eventDate },
+                  { header: 'Party Size', accessor: (row: Booking) => row.partySize, sortKey: (row: Booking) => row.partySize },
+                  { header: 'Status', accessor: (row: Booking) => <StatusBadge status={row.status} type="booking" /> },
+                  { header: 'Package', accessor: (row: Booking) => row.packageName ?? 'Custom' },
+                  { header: 'Location', accessor: (row: Booking) => row.location?.name ?? 'N/A' },
+                ]}
+                data={bookingsData?.data ?? []}
+              />
+            </div>
+          </section>
         </div>
       </AnimatedPage>
     </RoleGate>

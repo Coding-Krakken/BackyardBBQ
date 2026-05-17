@@ -5,6 +5,15 @@
 
 /* ── Design Tokens ──────────────────────────────────────────── */
 :root {
+  /* Admin shell tokens */
+  --admin-bg: #071520;
+  --admin-sidebar-bg: #08131d;
+  --admin-card-bg: rgba(11, 27, 41, 0.92);
+  --admin-border: rgba(255, 255, 255, 0.1);
+  --admin-text: #f5ebda;
+  --admin-text-muted: #9ca8b7;
+  --admin-accent: #d96d31;
+
   /* Backgrounds */
   --bg-charcoal: #0a0e12;
   --bg-midnight: #0f1f2e;
@@ -88,8 +97,8 @@ body {
   font-family: var(--font-body);
   font-size: 0.9rem;
   line-height: 1.6;
-  color: var(--cream);
-  background: var(--bg-midnight);
+  color: var(--admin-text);
+  background: var(--admin-bg);
   min-height: 100vh;
 }
 
@@ -161,9 +170,9 @@ small, .text-sm { font-size: 0.82rem; }
 
 /* ── Surfaces / Cards ──────────────────────────────────────── */
 .panel {
-  background: var(--bg-surface);
+  background: var(--admin-card-bg);
   backdrop-filter: blur(20px) saturate(160%);
-  border: 1px solid var(--line);
+  border: 1px solid var(--admin-border);
   border-radius: var(--radius-md);
   padding: clamp(1rem, 2vw, 1.5rem);
   box-shadow: var(--shadow-soft);
@@ -173,26 +182,26 @@ small, .text-sm { font-size: 0.82rem; }
 .panel:hover { border-color: var(--line-strong); }
 
 .panel-flush {
-  background: var(--bg-surface);
+  background: var(--admin-card-bg);
   backdrop-filter: blur(20px) saturate(160%);
-  border: 1px solid var(--line);
+  border: 1px solid var(--admin-border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-soft);
   overflow: hidden;
 }
 
 .panel-strong {
-  background: var(--bg-surface-strong);
+  background: var(--admin-card-bg);
   backdrop-filter: blur(28px) saturate(180%);
-  border: 1px solid var(--line);
+  border: 1px solid var(--admin-border);
   border-radius: var(--radius-md);
   padding: clamp(1rem, 2vw, 1.5rem);
   box-shadow: var(--shadow-strong);
 }
 
 .card {
-  background: rgba(10, 18, 24, 0.65);
-  border: 1px solid var(--line-soft);
+  background: var(--admin-card-bg);
+  border: 1px solid var(--admin-border);
   border-radius: var(--radius-sm);
   padding: clamp(0.85rem, 1.5vw, 1.2rem);
   transition: transform var(--duration-normal) var(--ease-spring),
@@ -612,14 +621,28 @@ input[type="checkbox"] {
 
 /* ── Dashboard Shell ──────────────────────────────────────── */
 .admin-shell {
+  position: relative;
   min-height: 100vh;
-  background: var(--bg-midnight);
+  background: var(--admin-bg);
+  isolation: isolate;
+}
+
+.admin-shell::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 14% -10%, rgba(217, 109, 49, 0.08) 0%, transparent 34%),
+    radial-gradient(circle at 95% 0%, rgba(90, 159, 212, 0.08) 0%, transparent 36%),
+    linear-gradient(180deg, #071520 0%, #071520 100%);
 }
 .admin-main {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background: var(--bg-midnight);
+  background: transparent;
   margin-left: var(--sidebar-width);
   transition: margin-left var(--duration-slow) var(--ease-spring);
 }
@@ -629,8 +652,8 @@ input[type="checkbox"] {
 .admin-content {
   flex: 1;
   padding: clamp(1rem, 2.5vw, 1.75rem);
-  overflow-y: auto;
-  background: var(--bg-midnight);
+  overflow: visible;
+  background: transparent;
   max-width: 1920px;
   margin-left: auto;
   margin-right: auto;
@@ -644,9 +667,9 @@ input[type="checkbox"] {
   left: 0;
   width: var(--sidebar-width);
   height: 100vh;
-  background: var(--bg-surface-strong);
+  background: var(--admin-sidebar-bg);
   backdrop-filter: blur(24px) saturate(180%);
-  border-right: 1px solid var(--line);
+  border-right: 1px solid var(--admin-border);
   display: flex;
   flex-direction: column;
   z-index: 40;
@@ -830,9 +853,9 @@ input[type="checkbox"] {
   align-items: center;
   justify-content: space-between;
   padding: 0 clamp(1rem, 2.5vw, 1.75rem);
-  background: rgba(6, 8, 9, 0.8);
+  background: color-mix(in srgb, var(--admin-bg) 88%, black 12%);
   backdrop-filter: blur(16px) saturate(160%);
-  border-bottom: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--admin-border);
 }
 .topbar-left {
   display: flex;
@@ -1062,6 +1085,60 @@ input[type="checkbox"] {
 }
 .chart-body { min-height: 280px; }
 
+/* Admin dashboard vertical rhythm and section rules */
+.dashboard-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  background: transparent;
+}
+
+.dashboard-section {
+  position: relative;
+  z-index: 0;
+  background: transparent;
+}
+
+.dashboard-section + .dashboard-section {
+  padding-top: 0.15rem;
+}
+
+.dashboard-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding-top: 0.2rem;
+  position: relative;
+  z-index: 1;
+}
+
+.dashboard-section-title {
+  margin: 0;
+  line-height: 1.25;
+}
+
+.dashboard-wide-panel {
+  grid-column: span 2;
+}
+
+.page-padding,
+.grid-cards,
+.dashboard-section,
+.dashboard-section > div,
+.dashboard-stack > section {
+  background: transparent !important;
+}
+
+/* Visual regression checklist:
+   - One app-shell background owns the page.
+   - Sections are transparent by default.
+   - Cards/panels own their own surface.
+   - Avoid full-width section background slabs.
+   - Keep consistent spacing between dashboard sections.
+*/
+
 /* ── Detail Pages ─────────────────────────────────────────── */
 .page-detail { max-width: 1100px; }
 .page-detail-header {
@@ -1272,6 +1349,7 @@ input[type="checkbox"] {
   /* Page headers stack */
   .page-header { flex-direction: column; }
   .page-detail-header { flex-direction: column; }
+  .dashboard-wide-panel { grid-column: span 1; }
 
   /* Modal fullish */
   .modal { max-width: calc(100vw - 2rem); }
