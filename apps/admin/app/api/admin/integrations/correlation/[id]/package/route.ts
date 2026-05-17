@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { prisma } from "@/lib/prisma";
 
@@ -215,7 +215,7 @@ export async function GET(
   const settlementsCsv = buildSettlementsCsv(correlationId, timeline);
   const timelineCsvSha256 = createHash("sha256").update(timelineCsv, "utf8").digest("hex");
   const settlementsCsvSha256 = createHash("sha256").update(settlementsCsv, "utf8").digest("hex");
-  const manifest = {
+  const manifestCore = {
     correlationId,
     eventCount: timeline.length,
     channels: Object.keys(summary.channels).sort(),
@@ -223,6 +223,25 @@ export async function GET(
     digests: {
       timelineCsvSha256,
       settlementsCsvSha256
+    }
+  };
+
+  const signingSecret = process.env.INCIDENT_PACKAGE_SIGNING_SECRET?.trim() || "";
+  const signingKeyId = process.env.INCIDENT_PACKAGE_SIGNING_KEY_ID?.trim() || "local-v1";
+  const manifestCanonical = JSON.stringify(manifestCore);
+  const manifestSha256 = createHash("sha256").update(manifestCanonical, "utf8").digest("hex");
+  const signatureHex = signingSecret
+    ? createHmac("sha256", signingSecret).update(manifestCanonical, "utf8").digest("hex")
+    : null;
+
+  const manifest = {
+    ...manifestCore,
+    integrity: {
+      algorithm: "hmac-sha256",
+      keyId: signingKeyId,
+      manifestSha256,
+      signatureHex,
+      signed: Boolean(signatureHex)
     }
   };
 
@@ -246,10 +265,17 @@ export async function GET(
       status: 200,
       headers: {
         "content-type": "application/json; charset=utf-8",
-        "content-disposition": `attachment; filename="incident-package-${correlationId}.json"`
+        "content-disposition": `attachment; filename="incident-package-${correlationId}.json"`,
+        "x-incident-package-key-id": manifest.integrity.keyId,
+        ...(manifest.integrity.signatureHex ? { "x-incident-package-signature": manifest.integrity.signatureHex } : {})
       }
     });
   }
 
-  return NextResponse.json(packagePayload);
+  return NextResponse.json(packagePayload, {
+    headers: {
+      "x-incident-package-key-id": manifest.integrity.keyId,
+      ...(manifest.integrity.signatureHex ? { "x-incident-package-signature": manifest.integrity.signatureHex } : {})
+    }
+  });
 }

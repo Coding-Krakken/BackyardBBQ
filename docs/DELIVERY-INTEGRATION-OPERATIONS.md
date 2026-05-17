@@ -221,6 +221,13 @@ Package response includes integrity metadata for audit workflows:
 - `manifest.digests.timelineCsvSha256`
 - `manifest.digests.settlementsCsvSha256`
 
+Optional package signing for audit authenticity:
+
+- `INCIDENT_PACKAGE_SIGNING_SECRET`
+- `INCIDENT_PACKAGE_SIGNING_KEY_ID` (default: `local-v1`)
+
+When signing is configured, package responses include `manifest.integrity.signatureHex` and `manifest.integrity.keyId` and emit corresponding response headers.
+
 Admin dashboard includes an Incident Package Inspector panel to fetch a correlation package by ID and verify CSV digests client-side.
 
 JSON export includes rollups for handoff:

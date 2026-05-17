@@ -118,6 +118,13 @@ interface IncidentPackageResponse {
       timelineCsvSha256: string;
       settlementsCsvSha256: string;
     };
+    integrity: {
+      algorithm: string;
+      keyId: string;
+      manifestSha256: string;
+      signatureHex: string | null;
+      signed: boolean;
+    };
   };
   package: {
     timelineCsvSha256: string;
@@ -625,6 +632,16 @@ export default function IntegrationsPage() {
                     {digestVerification.settlementsMatch === true ? 'verified' : digestVerification.settlementsMatch === false ? 'mismatch' : 'pending'}
                   </div>
                 </div>
+                <div className="card">
+                  <div className="eyebrow">Signature</div>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                    {incidentPackageData.manifest.integrity.signed ? `signed (${incidentPackageData.manifest.integrity.keyId})` : 'unsigned'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-muted" style={{ fontSize: '0.75rem' }}>
+                Signature algo: {incidentPackageData.manifest.integrity.algorithm} | Manifest SHA-256: {incidentPackageData.manifest.integrity.manifestSha256}
               </div>
 
               <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
