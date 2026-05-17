@@ -126,6 +126,7 @@ export async function GET(
 
   const { searchParams } = new URL(request.url);
   const limitParam = Number(searchParams.get("limit") ?? "1000");
+  const shouldDownload = searchParams.get("download") === "true";
   const limit = Number.isFinite(limitParam) ? Math.min(Math.max(Math.trunc(limitParam), 1), 10000) : 1000;
 
   const where: Prisma.IntegrationEventWhereInput = {
@@ -225,7 +226,7 @@ export async function GET(
     }
   };
 
-  return NextResponse.json({
+  const packagePayload = {
     correlationId,
     packagedAt: manifest.generatedAt,
     limit,
@@ -238,5 +239,17 @@ export async function GET(
       settlementsCsv
     },
     timeline
-  });
+  };
+
+  if (shouldDownload) {
+    return new NextResponse(JSON.stringify(packagePayload, null, 2), {
+      status: 200,
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "content-disposition": `attachment; filename="incident-package-${correlationId}.json"`
+      }
+    });
+  }
+
+  return NextResponse.json(packagePayload);
 }

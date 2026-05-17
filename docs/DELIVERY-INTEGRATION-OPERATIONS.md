@@ -211,6 +211,7 @@ Combined incident package endpoint (JSON + timeline CSV + settlements CSV in one
 
 ```bash
 GET /api/admin/integrations/correlation/:id/package
+GET /api/admin/integrations/correlation/:id/package?download=true
 ```
 
 Package response includes integrity metadata for audit workflows:

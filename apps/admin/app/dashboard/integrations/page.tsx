@@ -391,6 +391,10 @@ export default function IntegrationsPage() {
                             <a href={`/api/admin/integrations/correlation/${encodeURIComponent(id)}/package`} style={{ textDecoration: 'underline' }}>
                               package
                             </a>
+                            {' / '}
+                            <a href={`/api/admin/integrations/correlation/${encodeURIComponent(id)}/package?download=true`} style={{ textDecoration: 'underline' }}>
+                              download
+                            </a>
                             {index < row.evidence!.correlationIds!.length - 1 ? ', ' : ''}
                           </span>
                         ))}
@@ -430,6 +434,9 @@ export default function IntegrationsPage() {
                       </a>
                       <a href={`/api/admin/integrations/correlation/${encodeURIComponent(row.payload.correlationId)}/package`} style={{ textDecoration: 'underline' }}>
                         incident package
+                      </a>
+                      <a href={`/api/admin/integrations/correlation/${encodeURIComponent(row.payload.correlationId)}/package?download=true`} style={{ textDecoration: 'underline' }}>
+                        download package
                       </a>
                     </div>
                   ) : '-'
@@ -538,6 +545,9 @@ export default function IntegrationsPage() {
                       <a href={`/api/admin/integrations/correlation/${encodeURIComponent(row.correlationId)}/package`} style={{ textDecoration: 'underline' }}>
                         incident package
                       </a>
+                      <a href={`/api/admin/integrations/correlation/${encodeURIComponent(row.correlationId)}/package?download=true`} style={{ textDecoration: 'underline' }}>
+                        download package
+                      </a>
                     </div>
                   ) : '-'
               },
@@ -626,6 +636,9 @@ export default function IntegrationsPage() {
                 </a>
                 <a className="btn btn-ghost" href={`/api/admin/integrations/correlation/${encodeURIComponent(incidentPackageData.correlationId)}/package`}>
                   Open Incident Package
+                </a>
+                <a className="btn btn-ghost" href={`/api/admin/integrations/correlation/${encodeURIComponent(incidentPackageData.correlationId)}/package?download=true`}>
+                  Download Package JSON
                 </a>
               </div>
             </div>
