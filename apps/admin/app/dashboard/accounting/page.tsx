@@ -18,7 +18,10 @@ interface AccountingData {
   grossCents: number;
   refundsCents: number;
   netCents: number;
+  settlementNetCents?: number;
+  netAfterSettlementCents?: number;
   sourceBreakdown: { source: string; grossCents: number; refundsCents: number; netCents: number }[];
+  settlementByChannel?: { channel: string; grossCents: number; feesCents: number; netCents: number }[];
   canFinalize: boolean;
 }
 
@@ -135,6 +138,30 @@ export default function AccountingPage() {
           )}
         </div>
 
+        <div className="grid-cards grid-cards-2 mb-xl">
+          {isLoading ? (
+            <><CardSkeleton /><CardSkeleton /></>
+          ) : (
+            <>
+              <StatCard
+                label="Delivery Settlements"
+                value={(data?.settlementNetCents ?? 0) / 100}
+                prefix="$"
+                decimals={2}
+                icon={<span>⬢</span>}
+              />
+              <StatCard
+                label="Net After Settlements"
+                value={(data?.netAfterSettlementCents ?? data?.netCents ?? 0) / 100}
+                prefix="$"
+                decimals={2}
+                icon={<span>⬣</span>}
+                colorClass="text-green"
+              />
+            </>
+          )}
+        </div>
+
         {/* Charts Row */}
         <div className="grid-cards grid-cards-2 mb-xl">
           {isLoading ? (
@@ -192,6 +219,41 @@ export default function AccountingPage() {
                     <td>{row.source.toUpperCase()}</td>
                     <td>{formatCurrency(row.grossCents)}</td>
                     <td className="text-danger">{formatCurrency(row.refundsCents)}</td>
+                    <td style={{ fontWeight: 600 }}>{formatCurrency(row.netCents)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="panel mt-lg">
+          <h4 className="mb-md">Settlement Breakdown by Channel</h4>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Channel</th>
+                <th>Gross</th>
+                <th>Fees</th>
+                <th>Net</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(data?.settlementByChannel ?? []).length === 0 ? (
+                <tr>
+                  <td colSpan={4}>
+                    <div className="empty-state">
+                      <div className="empty-state-icon">🏦</div>
+                      <p>No settlement records in this date window</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                (data?.settlementByChannel ?? []).map((row) => (
+                  <tr key={row.channel}>
+                    <td>{row.channel.toUpperCase()}</td>
+                    <td>{formatCurrency(row.grossCents)}</td>
+                    <td className="text-danger">{formatCurrency(row.feesCents)}</td>
                     <td style={{ fontWeight: 600 }}>{formatCurrency(row.netCents)}</td>
                   </tr>
                 ))

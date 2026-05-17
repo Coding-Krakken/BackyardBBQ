@@ -57,6 +57,12 @@
     "/api/admin/accounting/daily-close/finalize": {
       "POST": ["owner"]
     },
+      "/api/admin/accounting": {
+        "GET": ["owner", "admin", "accounting"]
+      },
+      "/api/admin/accounting/finalize": {
+        "POST": ["owner"]
+      },
     "/api/admin/analytics/sales": {
       "GET": ["owner", "admin", "manager"]
     },
