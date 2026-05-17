@@ -871,11 +871,7 @@ function hasDeliveryWebhookAuthorization(input: {
 }) {
   const expectedToken =
     input.channel === "doordash"
-      ? {
-          orders: process.env.DOORDASH_ORDERS_WEBHOOK_TOKEN,
-          status: process.env.DOORDASH_STATUS_WEBHOOK_TOKEN,
-          settlements: process.env.DOORDASH_SETTLEMENTS_WEBHOOK_TOKEN
-        }[input.channel]
+      ? process.env[`DOORDASH_${input.channel.toUpperCase()}_WEBHOOK_TOKEN`]
       : undefined;
 
   const providedToken =
@@ -1975,7 +1971,7 @@ app.get("/api/admin/payments/disputes", async (request, reply) => {
         paymentIntentId:
           typeof payload.paymentIntentId === "string" ? payload.paymentIntentId : "unknown",
         amountCents: typeof payload.amountCents === "number" ? payload.amountCents : 0,
-        currency: typeof payload.currency
+        currency: typeof payload.currency === "string" ? payload.currency : "unknown",
         reason: typeof payload.reason === "string" ? payload.reason : "unknown",
         status: event.status,
         createdAt: event.createdAt
@@ -3461,7 +3457,7 @@ app.post(
                   grossCents: parsedSettlement.value.grossCents,
                   feesCents: parsedSettlement.value.feesCents,
                   netCents: parsedSettlement.value.netCents,
-                  currency: typeof payload.currency === "string" ? payload.currency : "unknown",
+                  currency: typeof (parsedBody.data.payload?.currency) === "string" ? parsedBody.data.payload.currency : "unknown",
                   settledAt: parsedSettlement.value.settledAt ?? null,
                   externalOrderId:
                     parsedSettlement.value.externalOrderId ?? parsedBody.data.orderExternalId ?? null
@@ -3861,7 +3857,7 @@ app.post(
             disputeId: dispute.id,
             paymentIntentId: paymentIntentId ?? "unknown",
             amountCents: dispute.amount,
-            currency: typeof payload.currency === "string" ? payload.currency : "unknown",
+            currency: typeof (dispute.currency) === "string" ? dispute.currency : "unknown",
             reason: dispute.reason,
             disputeStatus,
             evidenceDueBy: dispute.evidence_details?.due_by ?? null,
