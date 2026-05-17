@@ -93,6 +93,12 @@ Consolidated all-channel summary report (expects per-channel subdirectories unde
 npm run report:delivery:integration -- --input-dir artifacts/delivery-replay --all-channels true --require-files true --require-pass true
 ```
 
+Shortcut command:
+
+```bash
+npm run report:delivery:integration:all -- --input-dir artifacts/delivery-replay
+```
+
 ### Delivery webhook replay
 
 Command:
