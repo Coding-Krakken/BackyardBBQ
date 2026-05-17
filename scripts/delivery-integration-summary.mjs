@@ -56,6 +56,8 @@ function buildSummaryMarkdown(summary, title = "Delivery Replay Summary") {
     `| Settlement first.ok | ${summary.settlementFirstOk} |`,
     `| Settlement duplicateSuppressed | ${summary.settlementDuplicateSuppressed} |`,
     `| Settlement businessKeyDuplicateSuppressed | ${summary.settlementBusinessKeyDuplicateSuppressed} |`,
+    `| Settlement ledgerSync.observed | ${summary.settlementLedgerObserved} |`,
+    `| Settlement ledgerSync.linkedIds | ${summary.settlementLedgerLinkedIds} |`,
     `| Contract replay passed | ${summary.contractReplayPassed} |`,
     `| Contract replay scorePercent | ${summary.contractReplayScorePercent} |`,
     `| Webhook correlation.consistent | ${summary.webhookCorrelationConsistent} |`,
@@ -97,6 +99,12 @@ function buildSummaryFromArtifacts(inputDir) {
       settlementDuplicateSuppressed: settlement?.duplicateSuppressed ?? "n/a",
       settlementBusinessKeyDuplicateSuppressed:
         settlement?.businessKeyDuplicateSuppressed ?? "n/a",
+      settlementLedgerObserved: settlement?.ledgerSync?.observed ?? "n/a",
+      settlementLedgerLinkedIds:
+        typeof settlement?.ledgerSync?.settlementBatchId === "string" &&
+        settlement.ledgerSync.settlementBatchId.length > 0 &&
+        typeof settlement?.ledgerSync?.settlementLineId === "string" &&
+        settlement.ledgerSync.settlementLineId.length > 0,
       contractReplayPassed: contract?.contractPassed ?? "n/a",
       contractReplayScorePercent: contract?.scorePercent ?? "n/a",
       webhookCorrelationConsistent: webhook?.correlation?.consistent ?? "n/a",
@@ -133,6 +141,8 @@ function validate(summary) {
       "settlement.businessKeyDuplicateSuppressed",
       summary.settlementBusinessKeyDuplicateSuppressed === true
     ],
+    ["settlement.ledgerSync.observed", summary.settlementLedgerObserved === true],
+    ["settlement.ledgerSync.linkedIds", summary.settlementLedgerLinkedIds === true],
     ["contract.replayPassed", summary.contractReplayPassed === true],
     ["webhook.correlation.consistent", summary.webhookCorrelationConsistent === true],
     ["dispatch.correlation.consistent", summary.dispatchCorrelationConsistent === true],

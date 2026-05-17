@@ -3,6 +3,7 @@
 import { createHmac } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 
 function parseArgs(argv) {
   const args = {};
@@ -80,6 +81,88 @@ async function getDailyClose({ apiBaseUrl, date }) {
   };
 }
 
+async function getSettlementEvents({ apiBaseUrl, channel, correlationId }) {
+  const query = new URLSearchParams({
+    channel,
+    correlationId,
+    limit: "50"
+  });
+
+  const response = await fetch(
+    `${apiBaseUrl.replace(/\/$/, "")}/api/admin/integrations/settlements?${query.toString()}`,
+    {
+      headers: {
+        "x-admin-role": "owner"
+      }
+    }
+  );
+
+  const text = await response.text();
+  let body = null;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    body = { raw: text };
+  }
+
+  return {
+    status: response.status,
+    ok: response.ok,
+    body
+  };
+}
+
+async function waitForSettlementLedgerLink({
+  apiBaseUrl,
+  channel,
+  correlationId,
+  settlementId,
+  maxAttempts = 15,
+  delayMs = 1000
+}) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const snapshot = await getSettlementEvents({ apiBaseUrl, channel, correlationId });
+    const rows = Array.isArray(snapshot.body?.data) ? snapshot.body.data : [];
+
+    const matching = rows.find(
+      (row) =>
+        row &&
+        row.status === "processed" &&
+        row.settlementId === settlementId &&
+        typeof row.settlementBatchId === "string" &&
+        row.settlementBatchId.length > 0 &&
+        typeof row.settlementLineId === "string" &&
+        row.settlementLineId.length > 0
+    );
+
+    if (matching) {
+      return {
+        observed: true,
+        attempts: attempt,
+        settlementsApiStatus: snapshot.status,
+        settlementsApiOk: snapshot.ok,
+        eventId: typeof matching.id === "string" ? matching.id : null,
+        settlementBatchId: matching.settlementBatchId,
+        settlementLineId: matching.settlementLineId
+      };
+    }
+
+    if (attempt < maxAttempts) {
+      await delay(delayMs);
+    }
+  }
+
+  return {
+    observed: false,
+    attempts: maxAttempts,
+    settlementsApiStatus: null,
+    settlementsApiOk: false,
+    eventId: null,
+    settlementBatchId: null,
+    settlementLineId: null
+  };
+}
+
 async function main() {
   const args = parseArgs(process.argv);
 
@@ -148,6 +231,12 @@ async function main() {
     signature: businessKeySignature
   });
   const dailyClose = await getDailyClose({ apiBaseUrl, date });
+  const ledgerSync = await waitForSettlementLedgerLink({
+    apiBaseUrl,
+    channel,
+    correlationId,
+    settlementId: requestBody.payload.settlement.settlementId
+  });
 
   const settlementByChannel = Array.isArray(dailyClose.body?.settlementByChannel)
     ? dailyClose.body.settlementByChannel
@@ -186,7 +275,8 @@ async function main() {
           ? dailyClose.body.summary.settlementNetCents
           : null,
       channelSettlement
-    }
+    },
+    ledgerSync
   };
 
   if (typeof outputJson === "string" && outputJson.trim().length > 0) {
@@ -201,6 +291,7 @@ async function main() {
   if (!second.ok) process.exit(3);
   if (!thirdBusinessKeyReplay.ok) process.exit(4);
   if (!dailyClose.ok) process.exit(5);
+  if (!ledgerSync.observed) process.exit(6);
 }
 
 main().catch((error) => {

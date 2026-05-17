@@ -93,6 +93,10 @@ export async function GET(request: NextRequest) {
           typeof settlementPayload.externalOrderId === "string"
             ? settlementPayload.externalOrderId
             : null,
+        settlementBatchId:
+          typeof payload.settlementBatchId === "string" ? payload.settlementBatchId : null,
+        settlementLineId:
+          typeof payload.settlementLineId === "string" ? payload.settlementLineId : null,
         correlationId: typeof payload.correlationId === "string" ? payload.correlationId : null
       };
     });

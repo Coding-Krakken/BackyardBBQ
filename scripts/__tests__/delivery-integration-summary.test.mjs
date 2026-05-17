@@ -53,6 +53,11 @@ function setupFixtureFiles() {
     firstAttempt: { ok: true },
     duplicateSuppressed: true,
     businessKeyDuplicateSuppressed: true,
+    ledgerSync: {
+      observed: true,
+      settlementBatchId: "batch-test-1",
+      settlementLineId: "line-test-1"
+    },
     correlation: { consistent: true },
     dailyClose: { settlementNetCents: 12345 }
   }));
@@ -104,6 +109,11 @@ function setupAllChannelsFixtureFiles() {
       firstAttempt: { ok: true },
       duplicateSuppressed: true,
       businessKeyDuplicateSuppressed: true,
+      ledgerSync: {
+        observed: true,
+        settlementBatchId: `batch-${channel}`,
+        settlementLineId: `line-${channel}`
+      },
       correlation: { consistent: true },
       dailyClose: { settlementNetCents: 11111 }
     }));
