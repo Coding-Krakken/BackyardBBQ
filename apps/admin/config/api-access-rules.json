@@ -90,6 +90,9 @@
     "/api/admin/integrations/alerts": {
       "GET": ["owner", "admin"]
     },
+    "/api/admin/integrations/correlation/[id]": {
+      "GET": ["owner", "admin", "accounting"]
+    },
     "/api/admin/integrations/settlements": {
       "GET": ["owner", "admin", "accounting"]
     },

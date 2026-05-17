@@ -194,6 +194,12 @@ Dead-letter feed now supports targeted filter params for triage views:
 
 Settlement feed supports `correlationId` exact-match filtering to trace a single delivery flow end-to-end.
 
+Correlation timeline endpoint (ordered event trace for one correlation ID):
+
+```bash
+GET /api/admin/integrations/correlation/:id?limit=200
+```
+
 Retry behavior details:
 
 - Retried dead-letter events are set back to `queued` so worker loops consume them.

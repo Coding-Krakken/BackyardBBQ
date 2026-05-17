@@ -269,9 +269,17 @@ export default function IntegrationsPage() {
                       </span>
                     ) : null}
                     {row.evidence?.correlationIds && row.evidence.correlationIds.length > 0 ? (
-                      <span className="text-muted" style={{ fontSize: '0.75rem' }}>
-                        Correlations: {row.evidence.correlationIds.join(', ')}
-                      </span>
+                      <div className="text-muted" style={{ fontSize: '0.75rem' }}>
+                        Correlations:{' '}
+                        {row.evidence.correlationIds.map((id, index) => (
+                          <span key={id}>
+                            <a href={`/api/admin/integrations/correlation/${encodeURIComponent(id)}`} style={{ textDecoration: 'underline' }}>
+                              {id}
+                            </a>
+                            {index < row.evidence!.correlationIds!.length - 1 ? ', ' : ''}
+                          </span>
+                        ))}
+                      </div>
                     ) : null}
                     {row.evidence?.artifactPath ? (
                       <span className="text-muted" style={{ fontSize: '0.75rem' }}>
@@ -294,7 +302,15 @@ export default function IntegrationsPage() {
               { header: 'ID', accessor: (row: DeadLetter) => row.id.slice(0, 8) },
               { header: 'Channel', accessor: (row: DeadLetter) => row.channel.toUpperCase() },
               { header: 'Event', accessor: (row: DeadLetter) => row.eventType },
-              { header: 'Correlation', accessor: (row: DeadLetter) => row.payload.correlationId ?? '-' },
+              {
+                header: 'Correlation',
+                accessor: (row: DeadLetter) =>
+                  row.payload.correlationId ? (
+                    <a href={`/api/admin/integrations/correlation/${encodeURIComponent(row.payload.correlationId)}`} style={{ textDecoration: 'underline' }}>
+                      {row.payload.correlationId}
+                    </a>
+                  ) : '-'
+              },
               { header: 'Error', accessor: (row: DeadLetter) => (
                 <span style={{ maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
                   {row.payload.reason ?? 'Unknown error'}
@@ -385,7 +401,15 @@ export default function IntegrationsPage() {
               { header: 'Channel', accessor: (row: SettlementEvent) => row.channel.toUpperCase() },
               { header: 'Settlement ID', accessor: (row: SettlementEvent) => row.settlementId ?? '-' },
               { header: 'Payout ID', accessor: (row: SettlementEvent) => row.payoutId ?? '-' },
-              { header: 'Correlation', accessor: (row: SettlementEvent) => row.correlationId ?? '-' },
+              {
+                header: 'Correlation',
+                accessor: (row: SettlementEvent) =>
+                  row.correlationId ? (
+                    <a href={`/api/admin/integrations/correlation/${encodeURIComponent(row.correlationId)}`} style={{ textDecoration: 'underline' }}>
+                      {row.correlationId}
+                    </a>
+                  ) : '-'
+              },
               { header: 'Gross', accessor: (row: SettlementEvent) => `$${(row.grossCents / 100).toFixed(2)}` },
               { header: 'Fees', accessor: (row: SettlementEvent) => `$${(row.feesCents / 100).toFixed(2)}` },
               { header: 'Net', accessor: (row: SettlementEvent) => `$${(row.netCents / 100).toFixed(2)}` },
