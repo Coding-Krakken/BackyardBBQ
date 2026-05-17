@@ -15,7 +15,8 @@
     "test:delivery:status-replay": "node scripts/delivery-status-webhook-replay-check.mjs",
     "test:delivery:dispatch-replay": "node scripts/delivery-dispatch-replay-check.mjs",
     "test:delivery:action-replay": "node scripts/delivery-action-replay-check.mjs",
-    "test:delivery:settlement-replay": "node scripts/delivery-settlement-replay-check.mjs"
+    "test:delivery:settlement-replay": "node scripts/delivery-settlement-replay-check.mjs",
+    "test:delivery:contract-replay": "node scripts/delivery-correlation-contract-check.mjs"
   },
   "dependencies": {
     "@fastify/aws-lambda": "^6.4.0",

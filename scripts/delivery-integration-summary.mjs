@@ -56,6 +56,8 @@ function buildSummaryMarkdown(summary, title = "Delivery Replay Summary") {
     `| Settlement first.ok | ${summary.settlementFirstOk} |`,
     `| Settlement duplicateSuppressed | ${summary.settlementDuplicateSuppressed} |`,
     `| Settlement businessKeyDuplicateSuppressed | ${summary.settlementBusinessKeyDuplicateSuppressed} |`,
+    `| Contract replay passed | ${summary.contractReplayPassed} |`,
+    `| Contract replay scorePercent | ${summary.contractReplayScorePercent} |`,
     `| Webhook correlation.consistent | ${summary.webhookCorrelationConsistent} |`,
     `| Dispatch correlation.consistent | ${summary.dispatchCorrelationConsistent} |`,
     `| Status correlation.consistent | ${summary.statusCorrelationConsistent} |`,
@@ -73,6 +75,7 @@ function buildSummaryFromArtifacts(inputDir) {
   const status = readJsonIfPresent(`${inputDir}/delivery-status-webhook-replay.json`);
   const action = readJsonIfPresent(`${inputDir}/delivery-action-replay.json`);
   const settlement = readJsonIfPresent(`${inputDir}/delivery-settlement-replay.json`);
+  const contract = readJsonIfPresent(`${inputDir}/delivery-contract-replay.json`);
 
   return {
     webhook,
@@ -80,6 +83,7 @@ function buildSummaryFromArtifacts(inputDir) {
     status,
     action,
     settlement,
+    contract,
     summary: {
       webhookFirstOk: webhook?.firstAttempt?.ok ?? "n/a",
       webhookDuplicateSuppressed: webhook?.duplicateSuppressed ?? "n/a",
@@ -93,6 +97,8 @@ function buildSummaryFromArtifacts(inputDir) {
       settlementDuplicateSuppressed: settlement?.duplicateSuppressed ?? "n/a",
       settlementBusinessKeyDuplicateSuppressed:
         settlement?.businessKeyDuplicateSuppressed ?? "n/a",
+      contractReplayPassed: contract?.contractPassed ?? "n/a",
+      contractReplayScorePercent: contract?.scorePercent ?? "n/a",
       webhookCorrelationConsistent: webhook?.correlation?.consistent ?? "n/a",
       dispatchCorrelationConsistent: dispatch?.correlation?.consistent ?? "n/a",
       statusCorrelationConsistent: status?.correlation?.consistent ?? "n/a",
@@ -127,6 +133,7 @@ function validate(summary) {
       "settlement.businessKeyDuplicateSuppressed",
       summary.settlementBusinessKeyDuplicateSuppressed === true
     ],
+    ["contract.replayPassed", summary.contractReplayPassed === true],
     ["webhook.correlation.consistent", summary.webhookCorrelationConsistent === true],
     ["dispatch.correlation.consistent", summary.dispatchCorrelationConsistent === true],
     ["status.correlation.consistent", summary.statusCorrelationConsistent === true],
@@ -168,13 +175,13 @@ function buildAllChannelsMarkdown(channelSummaries) {
   const lines = [
     "## Delivery Replay Summary (All Channels)",
     "",
-    "| Channel | Webhook | Dispatch | Status | Action | Settlement | Business Key |",
-    "| --- | --- | --- | --- | --- | --- | --- |"
+    "| Channel | Webhook | Dispatch | Status | Action | Settlement | Business Key | Contract |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- |"
   ];
 
   for (const [channel, summary] of channelSummaries) {
     lines.push(
-      `| ${channel} | ${summary.webhookFirstOk === true && summary.webhookDuplicateSuppressed === true ? "pass" : "fail"} | ${summary.dispatchFirstOk === true && summary.dispatchDuplicateSuppressed === true ? "pass" : "fail"} | ${summary.statusFirstOk === true && summary.statusDuplicateSuppressed === true ? "pass" : "fail"} | ${summary.actionFirstOk === true && summary.actionDuplicateSuppressed === true ? "pass" : "fail"} | ${summary.settlementFirstOk === true && summary.settlementDuplicateSuppressed === true ? "pass" : "fail"} | ${summary.settlementBusinessKeyDuplicateSuppressed === true ? "pass" : "fail"} |`
+      `| ${channel} | ${summary.webhookFirstOk === true && summary.webhookDuplicateSuppressed === true ? "pass" : "fail"} | ${summary.dispatchFirstOk === true && summary.dispatchDuplicateSuppressed === true ? "pass" : "fail"} | ${summary.statusFirstOk === true && summary.statusDuplicateSuppressed === true ? "pass" : "fail"} | ${summary.actionFirstOk === true && summary.actionDuplicateSuppressed === true ? "pass" : "fail"} | ${summary.settlementFirstOk === true && summary.settlementDuplicateSuppressed === true ? "pass" : "fail"} | ${summary.settlementBusinessKeyDuplicateSuppressed === true ? "pass" : "fail"} | ${summary.contractReplayPassed === true ? "pass" : "fail"} |`
     );
   }
 
@@ -205,7 +212,7 @@ function main() {
       const artifacts = buildSummaryFromArtifacts(`${inputDir}/${channel}`);
       if (
         requireFiles &&
-        (!artifacts.webhook || !artifacts.dispatch || !artifacts.status || !artifacts.action || !artifacts.settlement)
+        (!artifacts.webhook || !artifacts.dispatch || !artifacts.status || !artifacts.action || !artifacts.settlement || !artifacts.contract)
       ) {
         console.error(`Missing delivery replay artifacts for ${channel} under ${inputDir}/${channel}.`);
         process.exit(1);
@@ -244,7 +251,7 @@ function main() {
 
   const artifacts = buildSummaryFromArtifacts(inputDir);
 
-  if (requireFiles && (!artifacts.webhook || !artifacts.dispatch || !artifacts.status || !artifacts.action || !artifacts.settlement)) {
+  if (requireFiles && (!artifacts.webhook || !artifacts.dispatch || !artifacts.status || !artifacts.action || !artifacts.settlement || !artifacts.contract)) {
     console.error(`Missing delivery replay artifacts under ${inputDir}.`);
     process.exit(1);
   }

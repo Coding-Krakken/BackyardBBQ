@@ -36,6 +36,7 @@
     "test:delivery:dispatch-replay": "npm run test:delivery:dispatch-replay -w @bbq/api --",
     "test:delivery:action-replay": "npm run test:delivery:action-replay -w @bbq/api --",
     "test:delivery:settlement-replay": "npm run test:delivery:settlement-replay -w @bbq/api --",
+    "test:delivery:contract-replay": "npm run test:delivery:contract-replay -w @bbq/api --",
     "report:payments:integration": "node scripts/payments-integration-summary.mjs",
     "report:delivery:integration": "node scripts/delivery-integration-summary.mjs",
     "report:delivery:integration:all": "node scripts/delivery-integration-summary.mjs --all-channels true --require-files true --require-pass true",

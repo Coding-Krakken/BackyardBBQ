@@ -56,6 +56,13 @@ function setupFixtureFiles() {
     correlation: { consistent: true },
     dailyClose: { settlementNetCents: 12345 }
   }));
+
+  writeFileSync(join(fixtureDir, "delivery-contract-replay.json"), JSON.stringify({
+    correlationId,
+    contractPassed: true,
+    scorePercent: 100,
+    failedCount: 0
+  }));
 }
 
 function setupAllChannelsFixtureFiles() {
@@ -99,6 +106,13 @@ function setupAllChannelsFixtureFiles() {
       businessKeyDuplicateSuppressed: true,
       correlation: { consistent: true },
       dailyClose: { settlementNetCents: 11111 }
+    }));
+
+    writeFileSync(join(channelDir, "delivery-contract-replay.json"), JSON.stringify({
+      correlationId,
+      contractPassed: true,
+      scorePercent: 100,
+      failedCount: 0
     }));
   }
 }

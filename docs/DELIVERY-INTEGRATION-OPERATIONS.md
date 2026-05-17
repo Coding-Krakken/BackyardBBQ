@@ -193,6 +193,20 @@ Expected:
 - Daily close summary includes `settlementNetCents` and `settlementByChannel` values.
 - Replay artifacts now include correlation consistency metadata and strict summary validation fails when correlation continuity breaks.
 
+### Correlation contract replay
+
+Command:
+
+```bash
+npm run test:delivery:contract-replay -- --api-base-url http://localhost:4000 --correlation-id corr-delivery-123
+```
+
+Expected:
+
+- Contract endpoint returns `result.passed=true` for a healthy flow.
+- Artifact includes contract score and failed check count.
+- Integration summary fails strict mode when contract replay fails.
+
 ## Admin Operations
 
 Admin dashboard supports:

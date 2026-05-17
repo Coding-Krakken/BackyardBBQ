@@ -60,6 +60,11 @@ test("supports status replay command wiring in non-live mode", () => {
   assert.equal(result.status, 0);
 });
 
+test("supports contract replay command wiring in non-live mode", () => {
+  const result = runChecks(["--run-live", "false"]);
+  assert.equal(result.status, 0);
+});
+
 test("accepts all channel mode in non-live runs", () => {
   const result = runChecks(["--channel", "all", "--run-live", "false"]);
   assert.equal(result.status, 0);

@@ -119,7 +119,8 @@ function main() {
       ["npm", ["run", "test:delivery:status-replay", "--", "--help"]],
       ["npm", ["run", "test:delivery:dispatch-replay", "--", "--help"]],
       ["npm", ["run", "test:delivery:action-replay", "--", "--help"]],
-      ["npm", ["run", "test:delivery:settlement-replay", "--", "--help"]]
+      ["npm", ["run", "test:delivery:settlement-replay", "--", "--help"]],
+      ["npm", ["run", "test:delivery:contract-replay", "--", "--help"]]
     ];
 
     for (const [command, commandArgs] of helpCommands) {
@@ -140,7 +141,7 @@ function main() {
         ? channel === "all"
           ? `${correlationId.trim()}-${channelToRun}`
           : correlationId.trim()
-        : undefined;
+        : `corr-delivery-integration-${channelToRun}-${Date.now()}`;
     const webhookSecret = getWebhookSecretForChannel(args, channelToRun);
     const channelOutputDir = channel === "all" ? `${outputDir}/${channelToRun}` : outputDir;
     const webhookOutput = `${channelOutputDir}/delivery-webhook-replay.json`;
@@ -148,6 +149,7 @@ function main() {
     const statusOutput = `${channelOutputDir}/delivery-status-webhook-replay.json`;
     const actionOutput = `${channelOutputDir}/delivery-action-replay.json`;
     const settlementOutput = `${channelOutputDir}/delivery-settlement-replay.json`;
+    const contractOutput = `${channelOutputDir}/delivery-contract-replay.json`;
 
     const webhookExit = runCommand("npm", [
       "run",
@@ -159,7 +161,8 @@ function main() {
       apiBaseUrl,
       "--webhook-secret",
       webhookSecret,
-      ...(channelCorrelationId ? ["--correlation-id", channelCorrelationId] : []),
+      "--correlation-id",
+      channelCorrelationId,
       "--output-json",
       webhookOutput
     ]);
@@ -175,7 +178,8 @@ function main() {
       channelToRun,
       "--api-base-url",
       apiBaseUrl,
-      ...(channelCorrelationId ? ["--correlation-id", channelCorrelationId] : []),
+      "--correlation-id",
+      channelCorrelationId,
       "--output-json",
       dispatchOutput
     ]);
@@ -193,7 +197,8 @@ function main() {
       apiBaseUrl,
       "--webhook-secret",
       webhookSecret,
-      ...(channelCorrelationId ? ["--correlation-id", channelCorrelationId] : []),
+      "--correlation-id",
+      channelCorrelationId,
       "--output-json",
       statusOutput
     ]);
@@ -211,7 +216,8 @@ function main() {
       "accept",
       "--api-base-url",
       apiBaseUrl,
-      ...(channelCorrelationId ? ["--correlation-id", channelCorrelationId] : []),
+      "--correlation-id",
+      channelCorrelationId,
       "--output-json",
       actionOutput
     ]);
@@ -229,12 +235,28 @@ function main() {
       apiBaseUrl,
       "--webhook-secret",
       webhookSecret,
-      ...(channelCorrelationId ? ["--correlation-id", channelCorrelationId] : []),
+      "--correlation-id",
+      channelCorrelationId,
       "--output-json",
       settlementOutput
     ]);
     if (settlementExit !== 0) {
       process.exit(settlementExit);
+    }
+
+    const contractExit = runCommand("npm", [
+      "run",
+      "test:delivery:contract-replay",
+      "--",
+      "--api-base-url",
+      apiBaseUrl,
+      "--correlation-id",
+      channelCorrelationId,
+      "--output-json",
+      contractOutput
+    ]);
+    if (contractExit !== 0) {
+      process.exit(contractExit);
     }
 
     if (validateSummary) {
@@ -248,7 +270,8 @@ function main() {
         "true",
         "--require-pass",
         "true",
-        ...(channelCorrelationId ? ["--correlation-id", channelCorrelationId] : [])
+        "--correlation-id",
+        channelCorrelationId
       ]);
       if (summaryExit !== 0) {
         process.exit(summaryExit);
