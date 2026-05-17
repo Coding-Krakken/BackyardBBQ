@@ -74,6 +74,20 @@ Expected:
 - First dispatch request queued.
 - Second dispatch request for same order/channel returns duplicate metadata.
 
+### Delivery action replay
+
+Command:
+
+```bash
+npm run test:delivery:action-replay -- --channel doordash --action accept --api-base-url http://localhost:4000
+```
+
+Expected:
+
+- First action request queued.
+- Second action request for same order/channel/action returns duplicate metadata.
+- Worker consumes queued action and transitions it to processed or dead-letter after retry exhaustion.
+
 ## Admin Operations
 
 Admin dashboard supports:
