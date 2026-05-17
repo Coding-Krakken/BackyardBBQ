@@ -109,7 +109,16 @@ export async function GET(
     total: events.length,
     channels: {} as Record<string, number>,
     statuses: {} as Record<string, number>,
-    eventTypes: {} as Record<string, number>
+    eventTypes: {} as Record<string, number>,
+    firstSeenAt: null as string | null,
+    lastSeenAt: null as string | null,
+    durationMs: 0,
+    settlementTotals: {
+      grossCents: 0,
+      feesCents: 0,
+      netCents: 0,
+      count: 0
+    }
   };
 
   const data = events.map((event) => {
@@ -129,6 +138,32 @@ export async function GET(
       payload
     };
   });
+
+  if (data.length > 0) {
+    summary.firstSeenAt = data[0]?.createdAt ?? null;
+    summary.lastSeenAt = data[data.length - 1]?.createdAt ?? null;
+    if (summary.firstSeenAt && summary.lastSeenAt) {
+      const first = new Date(summary.firstSeenAt).getTime();
+      const last = new Date(summary.lastSeenAt).getTime();
+      summary.durationMs = Number.isFinite(first) && Number.isFinite(last) ? Math.max(0, last - first) : 0;
+    }
+  }
+
+  for (const row of data) {
+    const settlement = row.payload.settlement;
+    if (!settlement || typeof settlement !== "object") {
+      continue;
+    }
+
+    const settlementPayload = settlement as Record<string, unknown>;
+    const grossCents = typeof settlementPayload.grossCents === "number" ? settlementPayload.grossCents : 0;
+    const feesCents = typeof settlementPayload.feesCents === "number" ? settlementPayload.feesCents : 0;
+    const netCents = typeof settlementPayload.netCents === "number" ? settlementPayload.netCents : 0;
+    summary.settlementTotals.grossCents += grossCents;
+    summary.settlementTotals.feesCents += feesCents;
+    summary.settlementTotals.netCents += netCents;
+    summary.settlementTotals.count += 1;
+  }
 
   if (format === "csv") {
     const csv = buildCsv(correlationId, data);

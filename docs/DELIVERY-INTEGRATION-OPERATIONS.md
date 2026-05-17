@@ -207,6 +207,12 @@ GET /api/admin/integrations/correlation/:id/export?format=json
 GET /api/admin/integrations/correlation/:id/export?format=csv
 ```
 
+JSON export includes rollups for handoff:
+
+- `summary.firstSeenAt`, `summary.lastSeenAt`, `summary.durationMs`
+- `summary.statuses` and `summary.eventTypes`
+- `summary.settlementTotals` (`grossCents`, `feesCents`, `netCents`, `count`)
+
 Retry behavior details:
 
 - Retried dead-letter events are set back to `queued` so worker loops consume them.
