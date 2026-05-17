@@ -10,8 +10,30 @@ export async function PATCH(
   if (auth instanceof NextResponse) return auth;
 
   const { id } = params;
-  const event = await prisma.integrationEvent.findUnique({ where: { id } });
+  const event = await prisma.integrationEvent.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      channel: true,
+      status: true,
+      payload: true
+    }
+  });
   if (!event) return NextResponse.json({ message: "Event not found" }, { status: 404 });
+
+  if (!['doordash', 'ubereats', 'grubhub'].includes(event.channel)) {
+    return NextResponse.json(
+      { message: "Only delivery integration events can be retried from this endpoint" },
+      { status: 409 }
+    );
+  }
+
+  if (!['dead_letter', 'retry_failed'].includes(event.status)) {
+    return NextResponse.json(
+      { message: `Cannot retry event with status ${event.status}` },
+      { status: 409 }
+    );
+  }
 
   const prevPayload = event.payload as Record<string, unknown>;
   const previousAttempts = typeof prevPayload.attempts === "number" ? prevPayload.attempts : 0;
