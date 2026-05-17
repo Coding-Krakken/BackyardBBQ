@@ -1,3 +1,12 @@
+export type ProviderSettlementInput = {
+  externalOrderId: string;
+  settlementId: string;
+  grossCents: number;
+  feesCents: number;
+  netCents: number;
+  currency: string;
+  settledAt: string;
+};
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 export type DeliveryChannel = "doordash" | "ubereats" | "grubhub";
@@ -82,6 +91,7 @@ export interface DeliveryProviderClient {
   syncOrderStatus(input: ProviderStatusSyncInput): Promise<void>;
   publishMenuSnapshot(snapshot: ProviderMenuSnapshot): Promise<void>;
   checkHealth(): Promise<ProviderHealthSnapshot>;
+  syncSettlement(input: ProviderSettlementInput): Promise<void>;
 }
 
 export function verifyWebhookHmac(input: {

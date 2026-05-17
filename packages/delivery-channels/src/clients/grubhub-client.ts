@@ -1,3 +1,21 @@
+import type { ProviderSettlementInput } from "./base-client";
+  async syncSettlement(input: ProviderSettlementInput): Promise<void> {
+    // Simulate settlement sync for Grubhub (real implementation would call provider API)
+    if (!this.credentials.apiKey || !this.credentials.storeId) return;
+    await performProviderRequest({
+      url: `${this.baseUrl}/v1/grubhub/stores/${encodeURIComponent(this.credentials.storeId)}/orders/${encodeURIComponent(input.externalOrderId)}/settlements`,
+      method: "POST",
+      apiKey: this.credentials.apiKey,
+      body: {
+        settlementId: input.settlementId,
+        grossCents: input.grossCents,
+        feesCents: input.feesCents,
+        netCents: input.netCents,
+        currency: input.currency,
+        settledAt: input.settledAt
+      }
+    });
+  }
 import {
   buildSimulatedHealth,
   type DeliveryProviderClient,

@@ -8,8 +8,10 @@ import {
   type ProviderHealthSnapshot,
   type ProviderMenuSnapshot,
   type ProviderOrderActionInput,
-  type ProviderStatusSyncInput
+  type ProviderStatusSyncInput,
+  type ProviderSettlementInput
 } from "./clients/index";
+export type { ProviderSettlementInput };
 
 export * from "./clients/index";
 
@@ -64,6 +66,7 @@ export interface DeliveryChannelAdapter {
   syncOrderStatus(input: ProviderStatusSyncInput): Promise<{ latencyMs: number }>;
   publishMenuSnapshot(snapshot: ProviderMenuSnapshot): Promise<{ latencyMs: number }>;
   checkHealth(): Promise<ProviderHealthSnapshot>;
+  syncSettlement(input: ProviderSettlementInput): Promise<{ latencyMs: number }>;
 }
 
 type AdapterConfig = {
@@ -144,6 +147,11 @@ function evaluateAttempt(
 }
 
 class ProviderBackedDeliveryAdapter implements DeliveryChannelAdapter {
+    async syncSettlement(input: ProviderSettlementInput): Promise<{ latencyMs: number }> {
+      const start = Date.now();
+      await this.providerClient.syncSettlement(input);
+      return { latencyMs: Date.now() - start };
+    }
   readonly channel: DeliveryChannel;
 
   private readonly providerClient: DeliveryProviderClient;
