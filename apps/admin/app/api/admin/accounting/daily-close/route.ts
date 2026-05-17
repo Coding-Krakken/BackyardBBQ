@@ -34,6 +34,19 @@ export async function GET(request: NextRequest) {
     getFinalizedDates()
   ]);
 
+  const settlementEvents = await prisma.integrationEvent.findMany({
+    where: {
+      channel: { in: ["doordash", "ubereats", "grubhub"] },
+      eventType: { contains: "settlement" },
+      status: "processed",
+      createdAt: { gte: dayStart, lte: dayEnd }
+    },
+    select: {
+      channel: true,
+      payload: true
+    }
+  });
+
   const refundedAgg = await prisma.paymentTransaction.aggregate({
     _sum: { amountCents: true },
     where: {
@@ -44,6 +57,30 @@ export async function GET(request: NextRequest) {
 
   const grossSalesCents = orders.reduce((sum: number, o: { totalCents: number }) => sum + o.totalCents, 0);
   const refundedCents = refundedAgg._sum.amountCents ?? 0;
+  const settlementByChannelMap: Record<string, { grossCents: number; feesCents: number; netCents: number }> = {};
+  let settlementNetCents = 0;
+
+  for (const event of settlementEvents) {
+    const payload = event.payload as Record<string, unknown>;
+    const settlementPayload =
+      payload.settlement && typeof payload.settlement === "object"
+        ? (payload.settlement as Record<string, unknown>)
+        : payload;
+
+    const grossCents = typeof settlementPayload.grossCents === "number" ? settlementPayload.grossCents : 0;
+    const feesCents = typeof settlementPayload.feesCents === "number" ? settlementPayload.feesCents : 0;
+    const netCents = typeof settlementPayload.netCents === "number" ? settlementPayload.netCents : 0;
+
+    settlementNetCents += netCents;
+
+    if (!settlementByChannelMap[event.channel]) {
+      settlementByChannelMap[event.channel] = { grossCents: 0, feesCents: 0, netCents: 0 };
+    }
+    const channelTotals = settlementByChannelMap[event.channel]!;
+    channelTotals.grossCents += grossCents;
+    channelTotals.feesCents += feesCents;
+    channelTotals.netCents += netCents;
+  }
 
   const bySourceMap: Record<string, { orders: number; totalCents: number }> = {};
   for (const o of orders) {
@@ -59,8 +96,16 @@ export async function GET(request: NextRequest) {
     summary: {
       grossSalesCents,
       refundedCents,
-      netSalesCents: grossSalesCents - refundedCents
+      settlementNetCents,
+      netSalesCents: grossSalesCents - refundedCents,
+      netAfterSettlementCents: Math.max(0, grossSalesCents - refundedCents - settlementNetCents)
     },
-    bySource: Object.entries(bySourceMap).map(([source, v]) => ({ source, ...v }))
+    bySource: Object.entries(bySourceMap).map(([source, v]) => ({ source, ...v })),
+    settlementByChannel: Object.entries(settlementByChannelMap).map(([channel, totals]) => ({
+      channel,
+      grossCents: totals.grossCents,
+      feesCents: totals.feesCents,
+      netCents: totals.netCents
+    }))
   });
 }
