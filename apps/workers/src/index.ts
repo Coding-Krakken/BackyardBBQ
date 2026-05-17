@@ -573,6 +573,145 @@ async function persistSettlementSyncEvent(input: {
   });
 }
 
+function toUtcDayBounds(dateInput: Date) {
+  const periodStart = new Date(dateInput);
+  periodStart.setUTCHours(0, 0, 0, 0);
+
+  const periodEnd = new Date(dateInput);
+  periodEnd.setUTCHours(23, 59, 59, 999);
+
+  return { periodStart, periodEnd };
+}
+
+async function persistSettlementLedgerRecord(input: {
+  channel: DeliveryChannel;
+  settlementId: string;
+  payoutId?: string;
+  externalOrderId: string;
+  grossCents: number;
+  feesCents: number;
+  netCents: number;
+  currency: string;
+  settledAt: string;
+}) {
+  if (!hasDatabaseUrl) {
+    return null;
+  }
+
+  const settledAtDate = new Date(input.settledAt);
+  const effectiveSettledAt = Number.isNaN(settledAtDate.getTime()) ? new Date() : settledAtDate;
+  const { periodStart, periodEnd } = toUtcDayBounds(effectiveSettledAt);
+
+  const matchingOrder = await prisma.order.findFirst({
+    where: {
+      externalChannel: input.channel,
+      externalOrderId: input.externalOrderId
+    },
+    select: {
+      id: true,
+      locationId: true
+    }
+  });
+
+  const fallbackLocationId = matchingOrder ? null : await getDefaultLocationId();
+  const locationId = matchingOrder?.locationId ?? fallbackLocationId;
+  if (!locationId) {
+    throw new Error("no_active_location_for_settlement");
+  }
+
+  const settlementBatch = await prisma.deliverySettlementBatch.upsert({
+    where: {
+      channel_externalBatchId: {
+        channel: input.channel,
+        externalBatchId: input.settlementId
+      }
+    },
+    update: {
+      locationId,
+      periodStart,
+      periodEnd,
+      grossCents: input.grossCents,
+      feesCents: input.feesCents,
+      adjustmentsCents: 0,
+      netPayoutCents: input.netCents,
+      payoutAt: effectiveSettledAt,
+      status: "posted",
+      metadata: {
+        payoutId: input.payoutId ?? null,
+        currency: input.currency,
+        syncedAt: new Date().toISOString()
+      }
+    },
+    create: {
+      locationId,
+      channel: input.channel,
+      externalBatchId: input.settlementId,
+      periodStart,
+      periodEnd,
+      grossCents: input.grossCents,
+      feesCents: input.feesCents,
+      adjustmentsCents: 0,
+      netPayoutCents: input.netCents,
+      payoutAt: effectiveSettledAt,
+      status: "posted",
+      metadata: {
+        payoutId: input.payoutId ?? null,
+        currency: input.currency,
+        syncedAt: new Date().toISOString()
+      }
+    },
+    select: {
+      id: true
+    }
+  });
+
+  const existingLine = await prisma.deliverySettlementLine.findFirst({
+    where: {
+      settlementBatchId: settlementBatch.id,
+      externalOrderId: input.externalOrderId
+    },
+    select: {
+      id: true
+    }
+  });
+
+  const lineData = {
+    orderId: matchingOrder?.id,
+    externalOrderId: input.externalOrderId,
+    grossCents: input.grossCents,
+    feesCents: input.feesCents,
+    adjustmentsCents: 0,
+    netCents: input.netCents,
+    metadata: {
+      settlementId: input.settlementId,
+      payoutId: input.payoutId ?? null,
+      currency: input.currency,
+      settledAt: effectiveSettledAt.toISOString(),
+      syncedAt: new Date().toISOString()
+    }
+  };
+
+  const settlementLine = existingLine
+    ? await prisma.deliverySettlementLine.update({
+        where: { id: existingLine.id },
+        data: lineData,
+        select: { id: true }
+      })
+    : await prisma.deliverySettlementLine.create({
+        data: {
+          settlementBatchId: settlementBatch.id,
+          ...lineData
+        },
+        select: { id: true }
+      });
+
+  return {
+    settlementBatchId: settlementBatch.id,
+    settlementLineId: settlementLine.id,
+    orderId: matchingOrder?.id ?? null
+  };
+}
+
 function buildInboundBatch(channel: DeliveryChannel) {
   sequence += 1;
   const currentStamp = new Date().toISOString();
@@ -1331,9 +1470,22 @@ async function runSettlementQueueCycle() {
         settledAt: normalized.settledAt
       });
 
+      const ledgerRecord = await persistSettlementLedgerRecord({
+        channel,
+        settlementId: normalized.settlementId,
+        payoutId: normalized.payoutId,
+        externalOrderId: normalized.externalOrderId,
+        grossCents: normalized.grossCents,
+        feesCents: normalized.feesCents,
+        netCents: normalized.netCents,
+        currency: normalized.currency,
+        settledAt: normalized.settledAt
+      });
+
       await prisma.integrationEvent.update({
         where: { id: settlementEvent.id },
         data: {
+          orderId: ledgerRecord?.orderId ?? undefined,
           status: "processed",
           payload: {
             ...payload,
@@ -1341,6 +1493,8 @@ async function runSettlementQueueCycle() {
             attempts: attempts + 1,
             processedAt: new Date().toISOString(),
             latencyMs: syncResult.latencyMs,
+            settlementBatchId: ledgerRecord?.settlementBatchId ?? null,
+            settlementLineId: ledgerRecord?.settlementLineId ?? null,
             settlement: {
               settlementId: normalized.settlementId,
               payoutId: normalized.payoutId ?? null,
@@ -1361,6 +1515,9 @@ async function runSettlementQueueCycle() {
         payload: {
           sourceEventId: settlementEvent.id,
           correlationId,
+          orderId: ledgerRecord?.orderId ?? null,
+          settlementBatchId: ledgerRecord?.settlementBatchId ?? null,
+          settlementLineId: ledgerRecord?.settlementLineId ?? null,
           settlementId: normalized.settlementId,
           payoutId: normalized.payoutId ?? null,
           orderExternalId: normalized.externalOrderId,
