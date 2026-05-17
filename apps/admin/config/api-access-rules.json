@@ -105,6 +105,9 @@
     "/api/admin/integrations/contracts": {
       "GET": ["owner", "admin", "accounting"]
     },
+    "/api/admin/integrations/contracts/export": {
+      "GET": ["owner", "admin", "accounting"]
+    },
     "/api/admin/integrations/settlements": {
       "GET": ["owner", "admin", "accounting"]
     },

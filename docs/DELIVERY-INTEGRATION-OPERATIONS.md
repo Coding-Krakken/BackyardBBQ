@@ -268,6 +268,17 @@ Contract health feed endpoint (recent correlation scorecards):
 GET /api/admin/integrations/contracts?days=3&limit=25&onlyFailing=true
 ```
 
+Supported filters:
+
+- `channel=doordash|ubereats|grubhub`
+- `minScore=0..100`
+
+Contract feed CSV export:
+
+```bash
+GET /api/admin/integrations/contracts/export?days=7&onlyFailing=true&channel=doordash&minScore=70
+```
+
 Feed response includes correlation-level scorecards with failed check labels and latest timestamps for proactive triage.
 
 Combined incident package endpoint (JSON + timeline CSV + settlements CSV in one response):

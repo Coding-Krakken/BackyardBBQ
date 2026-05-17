@@ -4,15 +4,14 @@ import { requireAdmin } from "@/lib/requireAdmin";
 import { prisma } from "@/lib/prisma";
 import { evaluateCorrelationContract } from "@/lib/integrations/correlation-contract";
 
-type ContractHealthRow = {
+type Row = {
   correlationId: string;
   scorePercent: number;
   passed: boolean;
-  passedCount: number;
   failedCount: number;
-  failedChecks: string[];
+  failedChecks: string;
   totalEvents: number;
-  channels: string[];
+  channels: string;
   firstSeenAt: string | null;
   lastSeenAt: string | null;
 };
@@ -28,18 +27,24 @@ function readCorrelationId(payload: unknown) {
     : null;
 }
 
+function csvValue(value: unknown) {
+  if (value === null || value === undefined) {
+    return "\"\"";
+  }
+  const raw = String(value).replace(/"/g, '""');
+  return `"${raw}"`;
+}
+
 export async function GET(request: NextRequest) {
   const auth = await requireAdmin(["owner", "admin", "accounting"]);
   if (auth instanceof NextResponse) return auth;
 
   const { searchParams } = new URL(request.url);
-  const limitParam = Number(searchParams.get("limit") ?? "25");
   const daysParam = Number(searchParams.get("days") ?? "3");
   const onlyFailing = searchParams.get("onlyFailing") === "true";
   const channelFilter = searchParams.get("channel")?.trim().toLowerCase();
   const minScoreParam = Number(searchParams.get("minScore") ?? "0");
 
-  const limit = Number.isFinite(limitParam) ? Math.min(Math.max(Math.trunc(limitParam), 1), 100) : 25;
   const days = Number.isFinite(daysParam) ? Math.min(Math.max(Math.trunc(daysParam), 1), 30) : 3;
   const minScore = Number.isFinite(minScoreParam)
     ? Math.min(Math.max(Math.trunc(minScoreParam), 0), 100)
@@ -60,7 +65,7 @@ export async function GET(request: NextRequest) {
   const events = await prisma.integrationEvent.findMany({
     where,
     orderBy: { createdAt: "desc" },
-    take: 5000,
+    take: 10000,
     select: {
       id: true,
       channel: true,
@@ -83,7 +88,7 @@ export async function GET(request: NextRequest) {
     byCorrelation.set(correlationId, bucket);
   }
 
-  const rows: ContractHealthRow[] = [];
+  const rows: Row[] = [];
   for (const [correlationId, correlationEvents] of byCorrelation) {
     const ordered = [...correlationEvents].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
     const contract = evaluateCorrelationContract(ordered, correlationId);
@@ -101,11 +106,10 @@ export async function GET(request: NextRequest) {
       correlationId,
       scorePercent: contract.result.scorePercent,
       passed: contract.result.passed,
-      passedCount: contract.result.passedCount,
       failedCount: contract.result.failedCount,
-      failedChecks,
+      failedChecks: failedChecks.join(" | "),
       totalEvents: contract.summary.totalEvents,
-      channels: contract.summary.channels,
+      channels: contract.summary.channels.join(","),
       firstSeenAt: contract.summary.firstSeenAt,
       lastSeenAt: contract.summary.lastSeenAt
     });
@@ -117,25 +121,45 @@ export async function GET(request: NextRequest) {
     return bLast - aLast;
   });
 
-  const limited = rows.slice(0, limit);
-  const failingCount = rows.filter((row) => !row.passed).length;
-  const averageScorePercent = rows.length > 0
-    ? Math.round(rows.reduce((sum, row) => sum + row.scorePercent, 0) / rows.length)
-    : 0;
+  const header = [
+    "correlationId",
+    "scorePercent",
+    "passed",
+    "failedCount",
+    "failedChecks",
+    "totalEvents",
+    "channels",
+    "firstSeenAt",
+    "lastSeenAt"
+  ];
 
-  return NextResponse.json({
-    days,
-    limit,
-    onlyFailing,
-    channel,
-    minScore,
-    count: limited.length,
-    summary: {
-      totalCorrelations: rows.length,
-      failingCorrelations: failingCount,
-      passingCorrelations: Math.max(0, rows.length - failingCount),
-      averageScorePercent
-    },
-    data: limited
+  const csvLines = [
+    header.map((value) => csvValue(value)).join(","),
+    ...rows.map((row) =>
+      [
+        row.correlationId,
+        row.scorePercent,
+        row.passed,
+        row.failedCount,
+        row.failedChecks,
+        row.totalEvents,
+        row.channels,
+        row.firstSeenAt,
+        row.lastSeenAt
+      ]
+        .map((value) => csvValue(value))
+        .join(",")
+    )
+  ];
+
+  const csv = `${csvLines.join("\n")}\n`;
+  const fileName = `contracts-feed-${new Date().toISOString().slice(0, 10)}.csv`;
+
+  return new NextResponse(csv, {
+    status: 200,
+    headers: {
+      "content-type": "text/csv; charset=utf-8",
+      "content-disposition": `attachment; filename=${fileName}`
+    }
   });
 }

@@ -105,6 +105,22 @@ interface ContractHealthRow {
   lastSeenAt: string | null;
 }
 
+interface ContractFeedResponse {
+  days: number;
+  limit: number;
+  onlyFailing: boolean;
+  channel: string | null;
+  minScore: number;
+  count: number;
+  summary: {
+    totalCorrelations: number;
+    failingCorrelations: number;
+    passingCorrelations: number;
+    averageScorePercent: number;
+  };
+  data: ContractHealthRow[];
+}
+
 interface IncidentPackageResponse {
   correlationId: string;
   packagedAt: string;
@@ -215,6 +231,8 @@ export default function IntegrationsPage() {
   const [inspectorCorrelationId, setInspectorCorrelationId] = useState('');
   const [contractWindowDays, setContractWindowDays] = useState(3);
   const [contractOnlyFailing, setContractOnlyFailing] = useState(true);
+  const [contractChannelFilter, setContractChannelFilter] = useState<'all' | 'doordash' | 'ubereats' | 'grubhub'>('all');
+  const [contractMinScore, setContractMinScore] = useState(0);
   const [digestVerification, setDigestVerification] = useState<{
     timelineMatch: boolean | null;
     settlementsMatch: boolean | null;
@@ -264,8 +282,8 @@ export default function IntegrationsPage() {
     fetcher
   );
 
-  const { data: contractFeedData } = useSWR<{ data: ContractHealthRow[] }>(
-    `/api/admin/integrations/contracts?days=${contractWindowDays}&limit=25&onlyFailing=${contractOnlyFailing ? 'true' : 'false'}`,
+  const { data: contractFeedData } = useSWR<ContractFeedResponse>(
+    `/api/admin/integrations/contracts?days=${contractWindowDays}&limit=25&onlyFailing=${contractOnlyFailing ? 'true' : 'false'}&channel=${contractChannelFilter}&minScore=${contractMinScore}`,
     fetcher,
     { refreshInterval: 30000 }
   );
@@ -515,6 +533,46 @@ export default function IntegrationsPage() {
                 checked={contractOnlyFailing}
                 onChange={(event) => setContractOnlyFailing(event.target.checked)}
               />
+              <label className="text-muted" style={{ fontSize: '0.8rem' }}>Channel</label>
+              <select className="select" value={contractChannelFilter} onChange={(event) => setContractChannelFilter(event.target.value as 'all' | 'doordash' | 'ubereats' | 'grubhub')}>
+                <option value="all">All</option>
+                <option value="doordash">DoorDash</option>
+                <option value="ubereats">UberEats</option>
+                <option value="grubhub">Grubhub</option>
+              </select>
+              <label className="text-muted" style={{ fontSize: '0.8rem' }}>Min score</label>
+              <select className="select" value={contractMinScore} onChange={(event) => setContractMinScore(Number(event.target.value))}>
+                <option value={0}>0%</option>
+                <option value={50}>50%</option>
+                <option value={70}>70%</option>
+                <option value={85}>85%</option>
+                <option value={95}>95%</option>
+              </select>
+              <a
+                className="btn btn-ghost"
+                href={`/api/admin/integrations/contracts/export?days=${contractWindowDays}&onlyFailing=${contractOnlyFailing ? 'true' : 'false'}&channel=${contractChannelFilter}&minScore=${contractMinScore}`}
+              >
+                Export Contracts CSV
+              </a>
+            </div>
+          </div>
+
+          <div className="grid-cards grid-cards-4 mb-md">
+            <div className="card">
+              <div className="eyebrow">Total Correlations</div>
+              <div style={{ fontSize: '1.05rem', fontWeight: 600 }}>{contractFeedData?.summary?.totalCorrelations ?? 0}</div>
+            </div>
+            <div className="card">
+              <div className="eyebrow">Failing</div>
+              <div style={{ fontSize: '1.05rem', fontWeight: 600 }}>{contractFeedData?.summary?.failingCorrelations ?? 0}</div>
+            </div>
+            <div className="card">
+              <div className="eyebrow">Passing</div>
+              <div style={{ fontSize: '1.05rem', fontWeight: 600 }}>{contractFeedData?.summary?.passingCorrelations ?? 0}</div>
+            </div>
+            <div className="card">
+              <div className="eyebrow">Avg Score</div>
+              <div style={{ fontSize: '1.05rem', fontWeight: 600 }}>{contractFeedData?.summary?.averageScorePercent ?? 0}%</div>
             </div>
           </div>
 
