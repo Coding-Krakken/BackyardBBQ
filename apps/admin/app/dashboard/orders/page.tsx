@@ -34,6 +34,11 @@ export default function OrdersPage() {
   const [dispatchOrderId, setDispatchOrderId] = useState<string | null>(null);
   const [dispatchChannel, setDispatchChannel] = useState<'doordash' | 'ubereats' | 'grubhub'>('doordash');
   const [isDispatching, setIsDispatching] = useState(false);
+  const [actionOrderId, setActionOrderId] = useState<string | null>(null);
+  const [actionChannel, setActionChannel] = useState<'doordash' | 'ubereats' | 'grubhub'>('doordash');
+  const [deliveryAction, setDeliveryAction] = useState<'accept' | 'reject' | 'cancel' | 'preparing' | 'ready' | 'out_for_delivery' | 'delivered'>('accept');
+  const [deliveryActionReason, setDeliveryActionReason] = useState('');
+  const [isSubmittingDeliveryAction, setIsSubmittingDeliveryAction] = useState(false);
 
   const limit = 20;
   const offset = (page - 1) * limit;
@@ -97,6 +102,35 @@ export default function OrdersPage() {
       addToast({ type: 'error', message: 'Dispatch request failed' });
     } finally {
       setIsDispatching(false);
+    }
+  };
+
+  const handleDeliveryAction = async () => {
+    if (!actionOrderId) return;
+    setIsSubmittingDeliveryAction(true);
+    try {
+      const response = await fetch(`/api/admin/orders/${actionOrderId}/delivery-action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channel: actionChannel,
+          action: deliveryAction,
+          reason: deliveryActionReason.trim() || undefined,
+        }),
+      });
+
+      if (response.ok) {
+        addToast({ type: 'success', message: `Delivery action queued: ${deliveryAction}` });
+        await mutate();
+        setActionOrderId(null);
+        setDeliveryActionReason('');
+      } else {
+        addToast({ type: 'error', message: 'Failed to queue delivery action' });
+      }
+    } catch {
+      addToast({ type: 'error', message: 'Delivery action request failed' });
+    } finally {
+      setIsSubmittingDeliveryAction(false);
     }
   };
 
@@ -170,6 +204,19 @@ export default function OrdersPage() {
                         Dispatch
                       </button>
                     ) : null}
+                    {(row.source === 'doordash' || row.source === 'ubereats' || row.source === 'grubhub') ? (
+                      <button
+                        className="btn btn-ghost btn-xs"
+                        onClick={() => {
+                          setActionOrderId(row.id);
+                          setActionChannel(row.source as 'doordash' | 'ubereats' | 'grubhub');
+                          setDeliveryAction('accept');
+                          setDeliveryActionReason('');
+                        }}
+                      >
+                        Delivery Action
+                      </button>
+                    ) : null}
                   </div>
                 ),
               },
@@ -228,6 +275,62 @@ export default function OrdersPage() {
                 <button className="btn btn-ghost btn-sm" onClick={() => setDispatchOrderId(null)} disabled={isDispatching}>Cancel</button>
                 <button className="btn btn-primary btn-sm" onClick={handleDispatch} disabled={isDispatching}>
                   {isDispatching ? 'Queueing...' : 'Queue Dispatch'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delivery Action Dialog */}
+        {actionOrderId && (
+          <div className="overlay">
+            <div className="overlay-backdrop" onClick={() => setActionOrderId(null)} />
+            <div className="modal modal-sm">
+              <h3 className="modal-title">Queue Delivery Action</h3>
+              <p className="text-muted mb-md">
+                Queue a provider action for this marketplace order.
+              </p>
+              <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                <label className="form-label">Channel</label>
+                <select
+                  className="select"
+                  value={actionChannel}
+                  onChange={(event) => setActionChannel(event.target.value as 'doordash' | 'ubereats' | 'grubhub')}
+                >
+                  <option value="doordash">DoorDash</option>
+                  <option value="ubereats">UberEats</option>
+                  <option value="grubhub">Grubhub</option>
+                </select>
+              </div>
+              <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                <label className="form-label">Action</label>
+                <select
+                  className="select"
+                  value={deliveryAction}
+                  onChange={(event) => setDeliveryAction(event.target.value as 'accept' | 'reject' | 'cancel' | 'preparing' | 'ready' | 'out_for_delivery' | 'delivered')}
+                >
+                  <option value="accept">Accept</option>
+                  <option value="reject">Reject</option>
+                  <option value="cancel">Cancel</option>
+                  <option value="preparing">Preparing</option>
+                  <option value="ready">Ready</option>
+                  <option value="out_for_delivery">Out for delivery</option>
+                  <option value="delivered">Delivered</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Reason (optional)</label>
+                <input
+                  className="input"
+                  value={deliveryActionReason}
+                  onChange={(event) => setDeliveryActionReason(event.target.value)}
+                  maxLength={240}
+                />
+              </div>
+              <div className="modal-actions">
+                <button className="btn btn-ghost btn-sm" onClick={() => setActionOrderId(null)} disabled={isSubmittingDeliveryAction}>Cancel</button>
+                <button className="btn btn-primary btn-sm" onClick={handleDeliveryAction} disabled={isSubmittingDeliveryAction}>
+                  {isSubmittingDeliveryAction ? 'Queueing...' : 'Queue Action'}
                 </button>
               </div>
             </div>

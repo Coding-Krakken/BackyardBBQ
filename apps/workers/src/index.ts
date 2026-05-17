@@ -552,6 +552,120 @@ async function runDispatchQueueCycle() {
   }
 }
 
+async function runOrderActionQueueCycle() {
+  if (!hasDatabaseUrl) {
+    return;
+  }
+
+  const queuedActions = await prisma.integrationEvent.findMany({
+    where: {
+      eventType: "delivery.order.action.requested",
+      status: {
+        in: ["queued", "pending"]
+      }
+    },
+    orderBy: {
+      createdAt: "asc"
+    },
+    take: 100
+  });
+
+  for (const actionEvent of queuedActions) {
+    const channel = actionEvent.channel as DeliveryChannel;
+    if (!deliveryChannels.includes(channel)) {
+      await prisma.integrationEvent.update({
+        where: { id: actionEvent.id },
+        data: {
+          status: "dead_letter",
+          payload: {
+            ...(actionEvent.payload as Prisma.JsonObject),
+            reason: "unsupported_channel",
+            failedAt: new Date().toISOString()
+          }
+        }
+      });
+      continue;
+    }
+
+    const payload = actionEvent.payload as Prisma.JsonObject;
+    const mappedStatus =
+      typeof payload.mappedStatus === "string"
+        ? (payload.mappedStatus as ProviderStatusSyncInput["status"])
+        : undefined;
+    const orderExternalId =
+      typeof payload.orderExternalId === "string"
+        ? payload.orderExternalId
+        : undefined;
+    const attempts = typeof payload.attempts === "number" ? payload.attempts : 0;
+    const maxAttempts = 5;
+
+    if (!mappedStatus || !orderExternalId) {
+      await prisma.integrationEvent.update({
+        where: { id: actionEvent.id },
+        data: {
+          status: "dead_letter",
+          payload: {
+            ...payload,
+            reason: "invalid_action_payload",
+            failedAt: new Date().toISOString()
+          }
+        }
+      });
+      continue;
+    }
+
+    try {
+      const result = await adapters[channel].syncOrderStatus({
+        externalOrderId: orderExternalId,
+        status: mappedStatus,
+        reason: typeof payload.reason === "string" ? payload.reason : undefined,
+        occurredAt: new Date().toISOString()
+      });
+
+      await prisma.integrationEvent.update({
+        where: { id: actionEvent.id },
+        data: {
+          status: "processed",
+          payload: {
+            ...payload,
+            attempts: attempts + 1,
+            completedAt: new Date().toISOString(),
+            latencyMs: result.latencyMs
+          }
+        }
+      });
+
+      await persistStatusSyncEvent({
+        channel,
+        status: "processed",
+        payload: {
+          sourceEventId: actionEvent.id,
+          orderExternalId,
+          mappedStatus,
+          latencyMs: result.latencyMs,
+          syncedAt: new Date().toISOString()
+        }
+      });
+    } catch (error) {
+      const nextAttempts = attempts + 1;
+      const deadLetter = nextAttempts >= maxAttempts;
+
+      await prisma.integrationEvent.update({
+        where: { id: actionEvent.id },
+        data: {
+          status: deadLetter ? "dead_letter" : "queued",
+          payload: {
+            ...payload,
+            attempts: nextAttempts,
+            lastError: error instanceof Error ? error.message : "delivery_action_sync_failed",
+            failedAt: new Date().toISOString()
+          }
+        }
+      });
+    }
+  }
+}
+
 setInterval(() => {
   runSyncCycle().catch((error) => {
     console.error("[workers] sync cycle failed", error);
@@ -573,6 +687,12 @@ setInterval(() => {
 setInterval(() => {
   runDispatchQueueCycle().catch((error) => {
     console.error("[workers] dispatch queue cycle failed", error);
+  });
+}, 10000);
+
+setInterval(() => {
+  runOrderActionQueueCycle().catch((error) => {
+    console.error("[workers] order action queue cycle failed", error);
   });
 }, 10000);
 

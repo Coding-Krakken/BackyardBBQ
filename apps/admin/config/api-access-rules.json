@@ -12,6 +12,9 @@
     "/api/admin/orders/[id]/dispatch": {
       "POST": ["owner", "admin", "manager", "staff"]
     },
+    "/api/admin/orders/[id]/delivery-action": {
+      "POST": ["owner", "admin", "manager", "staff"]
+    },
     "/api/admin/catering/bookings": {
       "GET": ["owner", "admin", "manager", "staff"]
     },

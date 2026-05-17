@@ -529,6 +529,12 @@ const createDispatchRequestSchema = z.object({
   priority: z.enum(["normal", "high"]).default("normal")
 });
 
+const createDeliveryActionRequestSchema = z.object({
+  channel: z.enum(["doordash", "ubereats", "grubhub"]),
+  action: z.enum(["accept", "reject", "cancel", "preparing", "ready", "out_for_delivery", "delivered"]),
+  reason: z.string().max(240).optional()
+});
+
 const createBookingSchema = z.object({
   customerEmail: z.string().email().optional(),
   locationId: z.string().optional(),
@@ -966,6 +972,123 @@ app.post("/api/delivery/dispatch", async (request, reply) => {
     dispatchId,
     channel: parsed.data.channel,
     orderId: order.id
+  };
+});
+
+app.post("/api/delivery/orders/:orderId/action", async (request, reply) => {
+  const paramsSchema = z.object({ orderId: z.string().min(1) });
+  const parsedParams = paramsSchema.safeParse(request.params);
+  if (!parsedParams.success) {
+    return reply.status(400).send({
+      message: "Invalid order id",
+      errors: parsedParams.error.flatten()
+    });
+  }
+
+  const parsed = createDeliveryActionRequestSchema.safeParse(request.body);
+  if (!parsed.success) {
+    return reply.status(400).send({
+      message: "Invalid delivery action payload",
+      errors: parsed.error.flatten()
+    });
+  }
+
+  const mapActionToProviderStatus = {
+    accept: "accepted",
+    reject: "cancelled",
+    cancel: "cancelled",
+    preparing: "preparing",
+    ready: "ready",
+    out_for_delivery: "out_for_delivery",
+    delivered: "delivered"
+  } as const;
+
+  if (!hasDatabaseUrl) {
+    return {
+      queued: true,
+      eventType: "delivery.order.action.requested",
+      orderId: parsedParams.data.orderId,
+      channel: parsed.data.channel,
+      action: parsed.data.action
+    };
+  }
+
+  const order = await prisma.order.findUnique({
+    where: { id: parsedParams.data.orderId },
+    select: {
+      id: true,
+      status: true,
+      externalOrderId: true
+    }
+  });
+
+  if (!order) {
+    return reply.status(404).send({ message: "Order not found" });
+  }
+
+  const duplicateEvents = await prisma.integrationEvent.findMany({
+    where: {
+      orderId: order.id,
+      channel: parsed.data.channel,
+      eventType: "delivery.order.action.requested",
+      status: { in: ["queued", "pending", "processed"] },
+      createdAt: { gte: new Date(Date.now() - 10 * 60 * 1000) }
+    },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+    select: {
+      id: true,
+      status: true,
+      createdAt: true,
+      payload: true
+    }
+  });
+
+  const duplicateAction = duplicateEvents.find((event) => {
+    const payload = event.payload as Record<string, unknown>;
+    return payload.action === parsed.data.action;
+  });
+
+  if (duplicateAction) {
+    const payload = duplicateAction.payload as Record<string, unknown>;
+    return {
+      queued: duplicateAction.status !== "processed",
+      duplicate: true,
+      eventId: duplicateAction.id,
+      action: parsed.data.action,
+      mappedStatus: payload.mappedStatus,
+      createdAt: duplicateAction.createdAt.toISOString()
+    };
+  }
+
+  const mappedStatus = mapActionToProviderStatus[parsed.data.action];
+  const event = await prisma.integrationEvent.create({
+    data: {
+      orderId: order.id,
+      channel: parsed.data.channel,
+      eventType: "delivery.order.action.requested",
+      status: "queued",
+      payload: {
+        orderId: order.id,
+        orderExternalId: order.externalOrderId ?? `${parsed.data.channel}:${order.id}`,
+        action: parsed.data.action,
+        mappedStatus,
+        reason: parsed.data.reason ?? null,
+        attempts: 0,
+        queuedAt: new Date().toISOString()
+      } as Prisma.InputJsonValue
+    },
+    select: { id: true, createdAt: true }
+  });
+
+  return {
+    queued: true,
+    eventId: event.id,
+    orderId: order.id,
+    channel: parsed.data.channel,
+    action: parsed.data.action,
+    mappedStatus,
+    createdAt: event.createdAt.toISOString()
   };
 });
 
