@@ -213,6 +213,13 @@ Combined incident package endpoint (JSON + timeline CSV + settlements CSV in one
 GET /api/admin/integrations/correlation/:id/package
 ```
 
+Package response includes integrity metadata for audit workflows:
+
+- `manifest.generatedAt`
+- `manifest.eventCount`
+- `manifest.digests.timelineCsvSha256`
+- `manifest.digests.settlementsCsvSha256`
+
 JSON export includes rollups for handoff:
 
 - `summary.firstSeenAt`, `summary.lastSeenAt`, `summary.durationMs`

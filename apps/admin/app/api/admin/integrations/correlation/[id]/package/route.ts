@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
+import { createHash } from "node:crypto";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { prisma } from "@/lib/prisma";
 
@@ -211,13 +212,28 @@ export async function GET(
 
   const timelineCsv = buildTimelineCsv(correlationId, timeline);
   const settlementsCsv = buildSettlementsCsv(correlationId, timeline);
+  const timelineCsvSha256 = createHash("sha256").update(timelineCsv, "utf8").digest("hex");
+  const settlementsCsvSha256 = createHash("sha256").update(settlementsCsv, "utf8").digest("hex");
+  const manifest = {
+    correlationId,
+    eventCount: timeline.length,
+    channels: Object.keys(summary.channels).sort(),
+    generatedAt: new Date().toISOString(),
+    digests: {
+      timelineCsvSha256,
+      settlementsCsvSha256
+    }
+  };
 
   return NextResponse.json({
     correlationId,
-    packagedAt: new Date().toISOString(),
+    packagedAt: manifest.generatedAt,
     limit,
     summary,
+    manifest,
     package: {
+      timelineCsvSha256,
+      settlementsCsvSha256,
       timelineCsv,
       settlementsCsv
     },
