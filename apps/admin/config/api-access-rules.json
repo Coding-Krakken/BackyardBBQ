@@ -93,6 +93,9 @@
     "/api/admin/integrations/settlements": {
       "GET": ["owner", "admin", "accounting"]
     },
+    "/api/admin/integrations/settlements/export": {
+      "GET": ["owner", "admin", "accounting"]
+    },
     "/api/admin/customers": {
       "GET": ["owner", "admin", "manager"]
     },

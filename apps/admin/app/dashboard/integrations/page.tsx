@@ -110,7 +110,15 @@ export default function IntegrationsPage() {
   return (
     <RoleGate allowedRoles={['owner', 'admin']}>
       <AnimatedPage>
-        <PageHeader title="Integrations" subtitle="Monitor third-party service health and queues" />
+        <PageHeader
+          title="Integrations"
+          subtitle="Monitor third-party service health and queues"
+          action={(
+            <a className="btn btn-ghost" href="/api/admin/integrations/settlements/export">
+              Export Settlements CSV
+            </a>
+          )}
+        />
 
         {/* Service Health */}
         <div className="grid-cards grid-cards-3 mb-xl">
