@@ -181,7 +181,10 @@ Dead-letter feed now supports targeted filter params for triage views:
 - `channel`
 - `status` (`failed` or `dead_letter`)
 - `eventType` (substring match)
+- `correlationId` (exact match)
 - `from` / `to` (date-time bounds)
+
+Settlement feed supports `correlationId` exact-match filtering to trace a single delivery flow end-to-end.
 
 Retry behavior details:
 

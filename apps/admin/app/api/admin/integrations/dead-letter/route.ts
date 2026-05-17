@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
   const channel = searchParams.get("channel");
   const status = searchParams.get("status");
   const eventType = searchParams.get("eventType");
+  const correlationId = searchParams.get("correlationId");
   const from = searchParams.get("from");
   const to = searchParams.get("to");
 
@@ -30,6 +31,13 @@ export async function GET(request: NextRequest) {
 
   if (eventType && eventType.trim().length > 0) {
     where.eventType = { contains: eventType.trim() };
+  }
+
+  if (correlationId && correlationId.trim().length > 0) {
+    where.payload = {
+      path: ["correlationId"],
+      equals: correlationId.trim()
+    };
   }
 
   const createdAt: Prisma.DateTimeFilter = {};

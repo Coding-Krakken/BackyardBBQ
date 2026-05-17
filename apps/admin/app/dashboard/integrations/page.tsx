@@ -97,6 +97,7 @@ export default function IntegrationsPage() {
   const [settlementChannel, setSettlementChannel] = useState<'all' | 'doordash' | 'ubereats' | 'grubhub'>('all');
   const [settlementStatus, setSettlementStatus] = useState<'all' | 'processed' | 'queued' | 'pending' | 'ignored' | 'dead_letter' | 'failed'>('all');
   const [settlementLimit, setSettlementLimit] = useState(25);
+  const [settlementCorrelationId, setSettlementCorrelationId] = useState('');
   const [settlementFromDate, setSettlementFromDate] = useState('');
   const [settlementToDate, setSettlementToDate] = useState('');
 
@@ -107,6 +108,9 @@ export default function IntegrationsPage() {
   }
   if (settlementStatus !== 'all') {
     settlementQuery.set('status', settlementStatus);
+  }
+  if (settlementCorrelationId.trim().length > 0) {
+    settlementQuery.set('correlationId', settlementCorrelationId.trim());
   }
   if (settlementFromDate) {
     settlementQuery.set('from', settlementFromDate);
@@ -360,6 +364,16 @@ export default function IntegrationsPage() {
             <div className="form-group">
               <label className="form-label">From</label>
               <input className="input" type="date" value={settlementFromDate} onChange={(event) => setSettlementFromDate(event.target.value)} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Correlation ID</label>
+              <input
+                className="input"
+                type="text"
+                placeholder="dlv-doordash-..."
+                value={settlementCorrelationId}
+                onChange={(event) => setSettlementCorrelationId(event.target.value)}
+              />
             </div>
             <div className="form-group">
               <label className="form-label">To</label>

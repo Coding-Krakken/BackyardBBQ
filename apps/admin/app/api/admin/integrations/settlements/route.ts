@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
   const limitParam = Number(searchParams.get("limit") ?? "50");
   const channelParam = searchParams.get("channel");
   const statusParam = searchParams.get("status");
+  const correlationIdParam = searchParams.get("correlationId");
   const dateFromParam = searchParams.get("from");
   const dateToParam = searchParams.get("to");
   const limit = Number.isFinite(limitParam) ? Math.min(Math.max(Math.trunc(limitParam), 1), 200) : 50;
@@ -28,6 +29,13 @@ export async function GET(request: NextRequest) {
 
   if (statusParam && statusParam.trim().length > 0) {
     where.status = statusParam;
+  }
+
+  if (correlationIdParam && correlationIdParam.trim().length > 0) {
+    where.payload = {
+      path: ["correlationId"],
+      equals: correlationIdParam.trim()
+    };
   }
 
   if (dateFromParam || dateToParam) {
