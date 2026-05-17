@@ -150,6 +150,7 @@ Admin dashboard supports:
   - dispatch processed count
 - Settlement event stream visibility (`/api/admin/integrations/settlements`) with settlementId, payoutId, gross, fees, and net.
 - Settlement CSV export (`/api/admin/integrations/settlements/export`) for reconciliation handoff and audit trails.
+- Settlement feed/export filters supported via query params: `channel`, `status`, and `limit` (feed), plus `from`/`to` (export).
 
 Dead-letter retry endpoint re-queues event and records retry metadata.
 

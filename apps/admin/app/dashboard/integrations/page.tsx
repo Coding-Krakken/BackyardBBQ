@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import useSWR from 'swr';
 import { PageHeader } from '@/components/PageHeader';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -64,6 +65,18 @@ interface SettlementEvent {
 
 export default function IntegrationsPage() {
   const { addToast } = useToast();
+  const [settlementChannel, setSettlementChannel] = useState<'all' | 'doordash' | 'ubereats' | 'grubhub'>('all');
+  const [settlementStatus, setSettlementStatus] = useState<'all' | 'processed' | 'queued' | 'pending' | 'ignored' | 'dead_letter' | 'failed'>('all');
+  const [settlementLimit, setSettlementLimit] = useState(25);
+
+  const settlementQuery = new URLSearchParams();
+  settlementQuery.set('limit', String(settlementLimit));
+  if (settlementChannel !== 'all') {
+    settlementQuery.set('channel', settlementChannel);
+  }
+  if (settlementStatus !== 'all') {
+    settlementQuery.set('status', settlementStatus);
+  }
 
   const { data: healthData } = useSWR<{ data: ServiceHealth[] }>(
     '/api/admin/integrations/health',
@@ -82,7 +95,7 @@ export default function IntegrationsPage() {
   );
 
   const { data: settlementsData } = useSWR<{ data: SettlementEvent[] }>(
-    '/api/admin/integrations/settlements?limit=25',
+    `/api/admin/integrations/settlements?${settlementQuery.toString()}`,
     fetcher
   );
 
@@ -114,7 +127,7 @@ export default function IntegrationsPage() {
           title="Integrations"
           subtitle="Monitor third-party service health and queues"
           action={(
-            <a className="btn btn-ghost" href="/api/admin/integrations/settlements/export">
+            <a className="btn btn-ghost" href={`/api/admin/integrations/settlements/export?${settlementQuery.toString()}`}>
               Export Settlements CSV
             </a>
           )}
@@ -213,6 +226,37 @@ export default function IntegrationsPage() {
 
         <div className="panel mt-lg">
           <h4 className="mb-md">Recent Settlement Events</h4>
+          <div className="form-row" style={{ marginBottom: '0.75rem' }}>
+            <div className="form-group">
+              <label className="form-label">Channel</label>
+              <select className="select" value={settlementChannel} onChange={(event) => setSettlementChannel(event.target.value as 'all' | 'doordash' | 'ubereats' | 'grubhub')}>
+                <option value="all">All</option>
+                <option value="doordash">DoorDash</option>
+                <option value="ubereats">UberEats</option>
+                <option value="grubhub">Grubhub</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Status</label>
+              <select className="select" value={settlementStatus} onChange={(event) => setSettlementStatus(event.target.value as 'all' | 'processed' | 'queued' | 'pending' | 'ignored' | 'dead_letter' | 'failed')}>
+                <option value="all">All</option>
+                <option value="processed">Processed</option>
+                <option value="queued">Queued</option>
+                <option value="pending">Pending</option>
+                <option value="ignored">Ignored</option>
+                <option value="dead_letter">Dead letter</option>
+                <option value="failed">Failed</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Limit</label>
+              <select className="select" value={settlementLimit} onChange={(event) => setSettlementLimit(Number(event.target.value))}>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+          </div>
           <DataTable
             columns={[
               { header: 'Channel', accessor: (row: SettlementEvent) => row.channel.toUpperCase() },

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { prisma } from "@/lib/prisma";
 
@@ -10,13 +11,25 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const limitParam = Number(searchParams.get("limit") ?? "50");
+  const channelParam = searchParams.get("channel");
+  const statusParam = searchParams.get("status");
   const limit = Number.isFinite(limitParam) ? Math.min(Math.max(Math.trunc(limitParam), 1), 200) : 50;
 
+  const where: Prisma.IntegrationEventWhereInput = {
+    channel: { in: [...deliveryChannels] },
+    eventType: { contains: "settlement" }
+  };
+
+  if (channelParam && deliveryChannels.includes(channelParam as (typeof deliveryChannels)[number])) {
+    where.channel = channelParam;
+  }
+
+  if (statusParam && statusParam.trim().length > 0) {
+    where.status = statusParam;
+  }
+
   const rows = await prisma.integrationEvent.findMany({
-    where: {
-      channel: { in: [...deliveryChannels] },
-      eventType: { contains: "settlement" }
-    },
+    where,
     orderBy: { createdAt: "desc" },
     take: limit,
     select: {
