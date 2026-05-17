@@ -33,6 +33,13 @@ interface Alert {
   channel: string;
   message: string;
   severity: 'critical' | 'warning' | 'info';
+  evidence?: {
+    eventIds?: string[];
+    settlementIds?: string[];
+    apiPath?: string;
+    artifactPath?: string;
+    baselineApiPath?: string;
+  };
 }
 
 interface DeadLetter {
@@ -228,7 +235,40 @@ export default function IntegrationsPage() {
               { header: 'Service', accessor: (row: Alert) => row.channel.toUpperCase() },
               { header: 'Message', accessor: (row: Alert) => row.message },
               { header: 'Severity', accessor: (row: Alert) => <StatusBadge status={row.severity} /> },
-              { header: 'Action', accessor: () => <span className="text-muted">Automatic</span> },
+              {
+                header: 'Action',
+                accessor: (row: Alert) => (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', minWidth: '220px' }}>
+                    {row.evidence?.apiPath ? (
+                      <a href={row.evidence.apiPath} className="text-muted" style={{ textDecoration: 'underline' }}>
+                        View alert evidence
+                      </a>
+                    ) : (
+                      <span className="text-muted">Automatic</span>
+                    )}
+                    {row.evidence?.baselineApiPath ? (
+                      <a href={row.evidence.baselineApiPath} className="text-muted" style={{ textDecoration: 'underline' }}>
+                        View baseline window
+                      </a>
+                    ) : null}
+                    {row.evidence?.eventIds && row.evidence.eventIds.length > 0 ? (
+                      <span className="text-muted" style={{ fontSize: '0.75rem' }}>
+                        Events: {row.evidence.eventIds.join(', ')}
+                      </span>
+                    ) : null}
+                    {row.evidence?.settlementIds && row.evidence.settlementIds.length > 0 ? (
+                      <span className="text-muted" style={{ fontSize: '0.75rem' }}>
+                        Settlements: {row.evidence.settlementIds.join(', ')}
+                      </span>
+                    ) : null}
+                    {row.evidence?.artifactPath ? (
+                      <span className="text-muted" style={{ fontSize: '0.75rem' }}>
+                        Artifact: {row.evidence.artifactPath}
+                      </span>
+                    ) : null}
+                  </div>
+                )
+              },
             ]}
             data={alertsData?.alerts ?? []}
           />

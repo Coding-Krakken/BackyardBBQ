@@ -176,6 +176,13 @@ Admin dashboard supports:
 
 Dead-letter retry endpoint re-queues event and records retry metadata.
 
+Dead-letter feed now supports targeted filter params for triage views:
+
+- `channel`
+- `status` (`failed` or `dead_letter`)
+- `eventType` (substring match)
+- `from` / `to` (date-time bounds)
+
 Retry behavior details:
 
 - Retried dead-letter events are set back to `queued` so worker loops consume them.
@@ -187,6 +194,7 @@ Alerting behavior details:
 - Integrations alerts include settlement-specific dead-letter/failure signals.
 - Integrations alerts include queued/pending settlement backlog thresholds.
 - Integrations alerts include settlement fee-rate spike detection versus the previous 7-day baseline window.
+- Integrations alerts now include triage evidence pointers (sample event IDs, settlement IDs, and API/artifact paths) in dashboard responses.
 
 ## Suggested Operational Checks
 

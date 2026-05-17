@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { prisma } from "@/lib/prisma";
 
@@ -9,9 +10,47 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const limit = Math.min(parseInt(searchParams.get("limit") ?? "20"), 100);
   const offset = parseInt(searchParams.get("offset") ?? "0");
+  const channel = searchParams.get("channel");
+  const status = searchParams.get("status");
+  const eventType = searchParams.get("eventType");
+  const from = searchParams.get("from");
+  const to = searchParams.get("to");
+
+  const where: Prisma.IntegrationEventWhereInput = {
+    status: { in: ["failed", "dead_letter"] }
+  };
+
+  if (channel && ["doordash", "ubereats", "grubhub", "stripe", "internal"].includes(channel)) {
+    where.channel = channel;
+  }
+
+  if (status && ["failed", "dead_letter"].includes(status)) {
+    where.status = status;
+  }
+
+  if (eventType && eventType.trim().length > 0) {
+    where.eventType = { contains: eventType.trim() };
+  }
+
+  const createdAt: Prisma.DateTimeFilter = {};
+  if (from) {
+    const fromDate = new Date(from);
+    if (!Number.isNaN(fromDate.getTime())) {
+      createdAt.gte = fromDate;
+    }
+  }
+  if (to) {
+    const toDate = new Date(to);
+    if (!Number.isNaN(toDate.getTime())) {
+      createdAt.lte = toDate;
+    }
+  }
+  if (createdAt.gte || createdAt.lte) {
+    where.createdAt = createdAt;
+  }
 
   const events = await prisma.integrationEvent.findMany({
-    where: { status: { in: ["failed", "dead_letter"] } },
+    where,
     orderBy: { createdAt: "desc" },
     take: limit,
     skip: offset
