@@ -26,6 +26,9 @@ export async function GET() {
       actionQueued: number;
       actionProcessed: number;
       actionDeadLetter: number;
+      settlementQueued: number;
+      settlementProcessed: number;
+      settlementNetCents: number;
       latencies: number[];
       lastCheck: string;
     }
@@ -43,6 +46,9 @@ export async function GET() {
         actionQueued: 0,
         actionProcessed: 0,
         actionDeadLetter: 0,
+        settlementQueued: 0,
+        settlementProcessed: 0,
+        settlementNetCents: 0,
         latencies: [],
         lastCheck: e.createdAt.toISOString()
       };
@@ -65,6 +71,20 @@ export async function GET() {
       if (e.status === "dead_letter" || e.status === "failed") c.actionDeadLetter += 1;
     }
 
+    if (e.eventType.includes("settlement")) {
+      if (e.status === "queued" || e.status === "pending") c.settlementQueued += 1;
+      if (e.status === "processed") c.settlementProcessed += 1;
+
+      const payload = e.payload as Record<string, unknown>;
+      const settlementPayload =
+        payload.settlement && typeof payload.settlement === "object"
+          ? (payload.settlement as Record<string, unknown>)
+          : payload;
+      if (typeof settlementPayload.netCents === "number") {
+        c.settlementNetCents += settlementPayload.netCents;
+      }
+    }
+
     const payload = e.payload as Record<string, unknown>;
     const payloadLatency = typeof payload.latencyMs === "number" ? payload.latencyMs : undefined;
     c.latencies.push(payloadLatency ?? Math.max(1, Date.now() - e.createdAt.getTime()));
@@ -83,6 +103,9 @@ export async function GET() {
     actionQueuedCount: v.actionQueued,
     actionProcessedCount: v.actionProcessed,
     actionDeadLetterCount: v.actionDeadLetter,
+    settlementQueuedCount: v.settlementQueued,
+    settlementProcessedCount: v.settlementProcessed,
+    settlementNetCents: v.settlementNetCents,
     latencyMs: v.latencies.length > 0 ? Math.round(v.latencies.reduce((a, b) => a + b, 0) / v.latencies.length) : 0,
     recordedAt: v.lastCheck
   }));
