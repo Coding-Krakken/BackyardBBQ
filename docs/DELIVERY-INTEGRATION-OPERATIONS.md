@@ -120,6 +120,7 @@ Expected:
 
 - First settlement webhook event is accepted and persisted.
 - Second settlement webhook event with the same `eventId` returns duplicate metadata.
+- Settlement events with a reused `settlementId` are also suppressed, even if event IDs differ.
 - Daily close summary includes `settlementNetCents` and `settlementByChannel` values.
 
 ## Admin Operations

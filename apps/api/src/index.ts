@@ -25,6 +25,9 @@ const webhookRateLimit = Number(process.env.WEBHOOK_RATE_LIMIT_PER_MINUTE ?? "10
 const webhookRateWindowMs = 60 * 1000;
 const processedWebhookEvents = new Map<string, number>();
 const webhookEventTtlMs = Number(process.env.WEBHOOK_EVENT_TTL_MS ?? String(24 * 60 * 60 * 1000));
+const settlementIdempotencyWindowMs = Number(
+  process.env.DELIVERY_SETTLEMENT_IDEMPOTENCY_WINDOW_MS ?? String(7 * 24 * 60 * 60 * 1000)
+);
 const webhookAllowedIps = (process.env.STRIPE_WEBHOOK_ALLOWED_IPS ?? "")
   .split(",")
   .map((value) => value.trim())
@@ -2874,6 +2877,40 @@ app.post(
           ingestStatus = "failed";
           ingestReason = "invalid_settlement_payload";
         } else {
+          const duplicateSettlement = await prisma.integrationEvent.findFirst({
+            where: {
+              channel,
+              eventType: { contains: "settlement" },
+              createdAt: {
+                gte: new Date(Date.now() - settlementIdempotencyWindowMs)
+              },
+              OR: [
+                {
+                  payload: {
+                    path: ["settlement", "settlementId"],
+                    equals: parsedSettlement.value.settlementId
+                  }
+                },
+                {
+                  payload: {
+                    path: ["settlementId"],
+                    equals: parsedSettlement.value.settlementId
+                  }
+                }
+              ]
+            },
+            select: { id: true }
+          });
+
+          if (duplicateSettlement) {
+            return {
+              received: true,
+              duplicate: true,
+              duplicateType: "settlement",
+              settlementId: parsedSettlement.value.settlementId
+            };
+          }
+
           const settlementOrderExternalId =
             parsedSettlement.value.externalOrderId ?? parsedBody.data.orderExternalId;
 

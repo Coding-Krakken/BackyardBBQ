@@ -27,7 +27,7 @@
     "test:coverage": "jest --coverage",
     "test:payments:coverage": "jest --config jest.payments.config.js --coverage --runInBand",
     "test:payments:scripts": "node --test scripts/__tests__/payments-integration-summary.test.mjs scripts/__tests__/payments-integration-checks.test.mjs",
-    "test:delivery:scripts": "node --test scripts/__tests__/delivery-integration-checks.test.mjs",
+    "test:delivery:scripts": "node --test scripts/__tests__/delivery-integration-checks.test.mjs scripts/__tests__/delivery-integration-summary.test.mjs",
     "test:payments:integration": "node scripts/payments-integration-checks.mjs",
     "test:delivery:integration": "node scripts/delivery-integration-checks.mjs",
     "test:delivery:webhook-replay": "npm run test:delivery:webhook-replay -w @bbq/api --",
