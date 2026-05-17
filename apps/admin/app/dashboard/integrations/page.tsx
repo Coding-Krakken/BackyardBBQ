@@ -274,7 +274,11 @@ export default function IntegrationsPage() {
                         {row.evidence.correlationIds.map((id, index) => (
                           <span key={id}>
                             <a href={`/api/admin/integrations/correlation/${encodeURIComponent(id)}`} style={{ textDecoration: 'underline' }}>
-                              {id}
+                              trace:{id}
+                            </a>
+                            {' / '}
+                            <a href={`/api/admin/integrations/correlation/${encodeURIComponent(id)}/export?format=csv`} style={{ textDecoration: 'underline' }}>
+                              export
                             </a>
                             {index < row.evidence!.correlationIds!.length - 1 ? ', ' : ''}
                           </span>
@@ -306,9 +310,14 @@ export default function IntegrationsPage() {
                 header: 'Correlation',
                 accessor: (row: DeadLetter) =>
                   row.payload.correlationId ? (
-                    <a href={`/api/admin/integrations/correlation/${encodeURIComponent(row.payload.correlationId)}`} style={{ textDecoration: 'underline' }}>
-                      {row.payload.correlationId}
-                    </a>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                      <a href={`/api/admin/integrations/correlation/${encodeURIComponent(row.payload.correlationId)}`} style={{ textDecoration: 'underline' }}>
+                        trace:{row.payload.correlationId}
+                      </a>
+                      <a href={`/api/admin/integrations/correlation/${encodeURIComponent(row.payload.correlationId)}/export?format=csv`} style={{ textDecoration: 'underline' }}>
+                        export CSV
+                      </a>
+                    </div>
                   ) : '-'
               },
               { header: 'Error', accessor: (row: DeadLetter) => (
@@ -405,9 +414,14 @@ export default function IntegrationsPage() {
                 header: 'Correlation',
                 accessor: (row: SettlementEvent) =>
                   row.correlationId ? (
-                    <a href={`/api/admin/integrations/correlation/${encodeURIComponent(row.correlationId)}`} style={{ textDecoration: 'underline' }}>
-                      {row.correlationId}
-                    </a>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                      <a href={`/api/admin/integrations/correlation/${encodeURIComponent(row.correlationId)}`} style={{ textDecoration: 'underline' }}>
+                        trace:{row.correlationId}
+                      </a>
+                      <a href={`/api/admin/integrations/correlation/${encodeURIComponent(row.correlationId)}/export?format=csv`} style={{ textDecoration: 'underline' }}>
+                        export CSV
+                      </a>
+                    </div>
                   ) : '-'
               },
               { header: 'Gross', accessor: (row: SettlementEvent) => `$${(row.grossCents / 100).toFixed(2)}` },

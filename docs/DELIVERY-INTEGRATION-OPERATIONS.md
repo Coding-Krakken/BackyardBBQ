@@ -200,6 +200,13 @@ Correlation timeline endpoint (ordered event trace for one correlation ID):
 GET /api/admin/integrations/correlation/:id?limit=200
 ```
 
+Correlation incident export endpoint (handoff bundle):
+
+```bash
+GET /api/admin/integrations/correlation/:id/export?format=json
+GET /api/admin/integrations/correlation/:id/export?format=csv
+```
+
 Retry behavior details:
 
 - Retried dead-letter events are set back to `queued` so worker loops consume them.
