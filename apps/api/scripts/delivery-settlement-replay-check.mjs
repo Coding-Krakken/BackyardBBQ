@@ -32,7 +32,7 @@ function makeSignature(rawBody, secret) {
 }
 
 async function postWebhook({ apiBaseUrl, channel, payload, signature }) {
-  const url = `${apiBaseUrl.replace(/\/$/, "")}/api/webhooks/${channel}`;
+  const url = `${apiBaseUrl.replace(/\/$/, "")}/api/webhooks/delivery/${channel}/settlements`;
   const response = await fetch(url, {
     method: "POST",
     headers: {

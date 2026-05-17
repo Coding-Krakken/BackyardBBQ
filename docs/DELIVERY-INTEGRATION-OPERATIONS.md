@@ -135,6 +135,20 @@ Expected:
 - Second POST with same `eventId`: duplicate suppression (`duplicate: true`).
 - No duplicate order creation for same `(externalChannel, externalOrderId)`.
 
+### Delivery status webhook replay
+
+Command:
+
+```bash
+npm run test:delivery:status-replay -- --channel doordash --api-base-url http://localhost:4000 --webhook-secret <secret>
+```
+
+Expected:
+
+- First status webhook event is accepted and queued.
+- Second status webhook event with same `eventId` returns duplicate metadata.
+- Correlation ID remains consistent across the replay pair.
+
 ### Dispatch replay
 
 Command:

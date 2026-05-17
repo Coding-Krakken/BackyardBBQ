@@ -12,6 +12,7 @@
     "test:stripe:webhook-replay": "node scripts/stripe-webhook-replay.mjs",
     "test:stripe:dispute-replay": "node scripts/stripe-dispute-replay-check.mjs",
     "test:delivery:webhook-replay": "node scripts/delivery-webhook-replay.mjs",
+    "test:delivery:status-replay": "node scripts/delivery-status-webhook-replay-check.mjs",
     "test:delivery:dispatch-replay": "node scripts/delivery-dispatch-replay-check.mjs",
     "test:delivery:action-replay": "node scripts/delivery-action-replay-check.mjs",
     "test:delivery:settlement-replay": "node scripts/delivery-settlement-replay-check.mjs"

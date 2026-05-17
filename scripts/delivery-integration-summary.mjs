@@ -49,6 +49,8 @@ function buildSummaryMarkdown(summary, title = "Delivery Replay Summary") {
     `| Webhook duplicateSuppressed | ${summary.webhookDuplicateSuppressed} |`,
     `| Dispatch first.ok | ${summary.dispatchFirstOk} |`,
     `| Dispatch duplicateSuppressed | ${summary.dispatchDuplicateSuppressed} |`,
+    `| Status firstAttempt.ok | ${summary.statusFirstOk} |`,
+    `| Status duplicateSuppressed | ${summary.statusDuplicateSuppressed} |`,
     `| Action first.ok | ${summary.actionFirstOk} |`,
     `| Action duplicateSuppressed | ${summary.actionDuplicateSuppressed} |`,
     `| Settlement first.ok | ${summary.settlementFirstOk} |`,
@@ -56,6 +58,7 @@ function buildSummaryMarkdown(summary, title = "Delivery Replay Summary") {
     `| Settlement businessKeyDuplicateSuppressed | ${summary.settlementBusinessKeyDuplicateSuppressed} |`,
     `| Webhook correlation.consistent | ${summary.webhookCorrelationConsistent} |`,
     `| Dispatch correlation.consistent | ${summary.dispatchCorrelationConsistent} |`,
+    `| Status correlation.consistent | ${summary.statusCorrelationConsistent} |`,
     `| Action correlation.consistent | ${summary.actionCorrelationConsistent} |`,
     `| Settlement correlation.consistent | ${summary.settlementCorrelationConsistent} |`,
     `| Correlation IDs | ${summary.correlationIds.join(", ")} |`,
@@ -67,12 +70,14 @@ function buildSummaryMarkdown(summary, title = "Delivery Replay Summary") {
 function buildSummaryFromArtifacts(inputDir) {
   const webhook = readJsonIfPresent(`${inputDir}/delivery-webhook-replay.json`);
   const dispatch = readJsonIfPresent(`${inputDir}/delivery-dispatch-replay.json`);
+  const status = readJsonIfPresent(`${inputDir}/delivery-status-webhook-replay.json`);
   const action = readJsonIfPresent(`${inputDir}/delivery-action-replay.json`);
   const settlement = readJsonIfPresent(`${inputDir}/delivery-settlement-replay.json`);
 
   return {
     webhook,
     dispatch,
+    status,
     action,
     settlement,
     summary: {
@@ -80,6 +85,8 @@ function buildSummaryFromArtifacts(inputDir) {
       webhookDuplicateSuppressed: webhook?.duplicateSuppressed ?? "n/a",
       dispatchFirstOk: dispatch?.first?.ok ?? "n/a",
       dispatchDuplicateSuppressed: dispatch?.duplicateSuppressed ?? "n/a",
+      statusFirstOk: status?.firstAttempt?.ok ?? "n/a",
+      statusDuplicateSuppressed: status?.duplicateSuppressed ?? "n/a",
       actionFirstOk: action?.firstAction?.ok ?? "n/a",
       actionDuplicateSuppressed: action?.duplicateSuppressed ?? "n/a",
       settlementFirstOk: settlement?.firstAttempt?.ok ?? "n/a",
@@ -88,11 +95,13 @@ function buildSummaryFromArtifacts(inputDir) {
         settlement?.businessKeyDuplicateSuppressed ?? "n/a",
       webhookCorrelationConsistent: webhook?.correlation?.consistent ?? "n/a",
       dispatchCorrelationConsistent: dispatch?.correlation?.consistent ?? "n/a",
+      statusCorrelationConsistent: status?.correlation?.consistent ?? "n/a",
       actionCorrelationConsistent: action?.correlation?.consistent ?? "n/a",
       settlementCorrelationConsistent: settlement?.correlation?.consistent ?? "n/a",
       correlationIds: [
         typeof webhook?.correlationId === "string" ? webhook.correlationId : null,
         typeof dispatch?.correlationId === "string" ? dispatch.correlationId : null,
+        typeof status?.correlationId === "string" ? status.correlationId : null,
         typeof action?.correlationId === "string" ? action.correlationId : null,
         typeof settlement?.correlationId === "string" ? settlement.correlationId : null
       ].filter((value) => typeof value === "string"),
@@ -108,6 +117,8 @@ function validate(summary) {
     ["webhook.duplicateSuppressed", summary.webhookDuplicateSuppressed === true],
     ["dispatch.first.ok", summary.dispatchFirstOk === true],
     ["dispatch.duplicateSuppressed", summary.dispatchDuplicateSuppressed === true],
+    ["status.firstAttempt.ok", summary.statusFirstOk === true],
+    ["status.duplicateSuppressed", summary.statusDuplicateSuppressed === true],
     ["action.first.ok", summary.actionFirstOk === true],
     ["action.duplicateSuppressed", summary.actionDuplicateSuppressed === true],
     ["settlement.first.ok", summary.settlementFirstOk === true],
@@ -118,6 +129,7 @@ function validate(summary) {
     ],
     ["webhook.correlation.consistent", summary.webhookCorrelationConsistent === true],
     ["dispatch.correlation.consistent", summary.dispatchCorrelationConsistent === true],
+    ["status.correlation.consistent", summary.statusCorrelationConsistent === true],
     ["action.correlation.consistent", summary.actionCorrelationConsistent === true],
     ["settlement.correlation.consistent", summary.settlementCorrelationConsistent === true]
   ];
@@ -156,13 +168,13 @@ function buildAllChannelsMarkdown(channelSummaries) {
   const lines = [
     "## Delivery Replay Summary (All Channels)",
     "",
-    "| Channel | Webhook | Dispatch | Action | Settlement | Business Key |",
-    "| --- | --- | --- | --- | --- | --- |"
+    "| Channel | Webhook | Dispatch | Status | Action | Settlement | Business Key |",
+    "| --- | --- | --- | --- | --- | --- | --- |"
   ];
 
   for (const [channel, summary] of channelSummaries) {
     lines.push(
-      `| ${channel} | ${summary.webhookFirstOk === true && summary.webhookDuplicateSuppressed === true ? "pass" : "fail"} | ${summary.dispatchFirstOk === true && summary.dispatchDuplicateSuppressed === true ? "pass" : "fail"} | ${summary.actionFirstOk === true && summary.actionDuplicateSuppressed === true ? "pass" : "fail"} | ${summary.settlementFirstOk === true && summary.settlementDuplicateSuppressed === true ? "pass" : "fail"} | ${summary.settlementBusinessKeyDuplicateSuppressed === true ? "pass" : "fail"} |`
+      `| ${channel} | ${summary.webhookFirstOk === true && summary.webhookDuplicateSuppressed === true ? "pass" : "fail"} | ${summary.dispatchFirstOk === true && summary.dispatchDuplicateSuppressed === true ? "pass" : "fail"} | ${summary.statusFirstOk === true && summary.statusDuplicateSuppressed === true ? "pass" : "fail"} | ${summary.actionFirstOk === true && summary.actionDuplicateSuppressed === true ? "pass" : "fail"} | ${summary.settlementFirstOk === true && summary.settlementDuplicateSuppressed === true ? "pass" : "fail"} | ${summary.settlementBusinessKeyDuplicateSuppressed === true ? "pass" : "fail"} |`
     );
   }
 
@@ -193,7 +205,7 @@ function main() {
       const artifacts = buildSummaryFromArtifacts(`${inputDir}/${channel}`);
       if (
         requireFiles &&
-        (!artifacts.webhook || !artifacts.dispatch || !artifacts.action || !artifacts.settlement)
+        (!artifacts.webhook || !artifacts.dispatch || !artifacts.status || !artifacts.action || !artifacts.settlement)
       ) {
         console.error(`Missing delivery replay artifacts for ${channel} under ${inputDir}/${channel}.`);
         process.exit(1);
@@ -232,7 +244,7 @@ function main() {
 
   const artifacts = buildSummaryFromArtifacts(inputDir);
 
-  if (requireFiles && (!artifacts.webhook || !artifacts.dispatch || !artifacts.action || !artifacts.settlement)) {
+  if (requireFiles && (!artifacts.webhook || !artifacts.dispatch || !artifacts.status || !artifacts.action || !artifacts.settlement)) {
     console.error(`Missing delivery replay artifacts under ${inputDir}.`);
     process.exit(1);
   }

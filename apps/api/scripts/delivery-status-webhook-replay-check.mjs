@@ -24,7 +24,7 @@ function parseArgs(argv) {
 }
 
 function printUsage() {
-  console.log(`Usage:\n  node apps/api/scripts/delivery-webhook-replay.mjs [--api-base-url http://localhost:4000] [--channel doordash] [--event-id evt_123] [--external-order-id order_123] [--correlation-id corr_123] [--webhook-secret secret] [--output-json ./artifacts/delivery-webhook-replay.json]\n\nEnv fallbacks:\n  API_BASE_URL\n  DELIVERY_CHANNEL\n  <CHANNEL>_WEBHOOK_SECRET\n  DELIVERY_WEBHOOK_SECRET`);
+  console.log(`Usage:\n  node apps/api/scripts/delivery-status-webhook-replay-check.mjs [--api-base-url http://localhost:4000] [--channel doordash] [--event-id evt_123] [--external-order-id ext_123] [--internal-order-id order_123] [--correlation-id corr_123] [--webhook-secret secret] [--output-json ./artifacts/delivery-status-webhook-replay.json]\n\nEnv fallbacks:\n  API_BASE_URL\n  DELIVERY_CHANNEL\n  <CHANNEL>_WEBHOOK_SECRET\n  DELIVERY_WEBHOOK_SECRET`);
 }
 
 function makeSignature(rawBody, secret) {
@@ -32,7 +32,7 @@ function makeSignature(rawBody, secret) {
 }
 
 async function postWebhook({ apiBaseUrl, channel, payload, signature }) {
-  const url = `${apiBaseUrl.replace(/\/$/, "")}/api/webhooks/delivery/${channel}/orders`;
+  const url = `${apiBaseUrl.replace(/\/$/, "")}/api/webhooks/delivery/${channel}/status`;
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -57,25 +57,27 @@ async function postWebhook({ apiBaseUrl, channel, payload, signature }) {
   };
 }
 
-async function listOrders({ apiBaseUrl, role = "owner" }) {
-  const response = await fetch(`${apiBaseUrl.replace(/\/$/, "")}/api/admin/orders?limit=100`, {
+async function postJson(url, body) {
+  const response = await fetch(url, {
+    method: "POST",
     headers: {
-      "x-admin-role": role
-    }
+      "content-type": "application/json"
+    },
+    body: JSON.stringify(body)
   });
 
   const text = await response.text();
-  let body = null;
+  let payload = null;
   try {
-    body = text ? JSON.parse(text) : null;
+    payload = text ? JSON.parse(text) : null;
   } catch {
-    body = { raw: text };
+    payload = { raw: text };
   }
 
   return {
     status: response.status,
     ok: response.ok,
-    body
+    body: payload
   };
 }
 
@@ -89,39 +91,51 @@ async function main() {
 
   const apiBaseUrl = args["api-base-url"] ?? process.env.API_BASE_URL ?? "http://localhost:4000";
   const channel = args.channel ?? process.env.DELIVERY_CHANNEL ?? "doordash";
-  const externalOrderId = args["external-order-id"] ?? `replay-${Date.now()}`;
-  const eventId = args["event-id"] ?? `evt-delivery-${Date.now()}`;
-  const correlationId = args["correlation-id"] ?? `corr-delivery-webhook-${channel}-${Date.now()}`;
+  const eventId = args["event-id"] ?? `evt-delivery-status-${Date.now()}`;
+  const correlationId = args["correlation-id"] ?? `corr-delivery-status-${channel}-${Date.now()}`;
+  const outputJson = args["output-json"];
+
   const webhookSecret =
     args["webhook-secret"] ??
     process.env[`${channel.toUpperCase()}_WEBHOOK_SECRET`] ??
     process.env.DELIVERY_WEBHOOK_SECRET;
-  const outputJson = args["output-json"];
 
   if (!webhookSecret) {
     console.error("Missing webhook secret. Use --webhook-secret or CHANNEL_WEBHOOK_SECRET env var.");
     process.exit(1);
   }
 
+  const createdOrder = await postJson(`${apiBaseUrl.replace(/\/$/, "")}/api/orders`, {
+    customerEmail: `status+${Date.now()}@example.com`,
+    source: channel,
+    items: [
+      {
+        menuItemName: "Smoked Chicken Plate",
+        quantity: 1,
+        unitPriceCents: 2500
+      }
+    ],
+    tipCents: 300,
+    taxCents: 200
+  });
+
+  if (!createdOrder.ok || !createdOrder.body?.id) {
+    console.error("Failed to create order for status replay", createdOrder);
+    process.exit(2);
+  }
+
+  const internalOrderId = args["internal-order-id"] ?? createdOrder.body.id;
+  const externalOrderId = args["external-order-id"] ?? `${channel}:${internalOrderId}`;
+
   const requestBody = {
     eventId,
-    eventType: "order.created",
+    eventType: "order.status.updated",
     orderExternalId: externalOrderId,
     payload: {
       correlationId,
-      order: {
-        externalOrderId,
-        customerEmail: `delivery+${Date.now()}@example.com`,
-        subtotalCents: 3200,
-        taxCents: 256,
-        tipCents: 400,
-        items: [
-          {
-            name: "Rib Combo",
-            quantity: 1,
-            unitPriceCents: 3200
-          }
-        ]
+      statusUpdate: {
+        internalOrderId,
+        status: "ready"
       }
     }
   };
@@ -132,15 +146,11 @@ async function main() {
   const first = await postWebhook({ apiBaseUrl, channel, payload, signature });
   const second = await postWebhook({ apiBaseUrl, channel, payload, signature });
 
-  const orders = await listOrders({ apiBaseUrl });
-  const matchedOrders = Array.isArray(orders.body?.data)
-    ? orders.body.data.filter((order) => order?.source === channel)
-    : [];
-
   const result = {
     channel,
     eventId,
     correlationId,
+    internalOrderId,
     externalOrderId,
     firstAttempt: first,
     secondAttempt: second,
@@ -152,10 +162,6 @@ async function main() {
         typeof first.body?.correlationId === "string" &&
         typeof second.body?.correlationId === "string" &&
         first.body.correlationId === second.body.correlationId
-    },
-    ordersLookup: {
-      ok: orders.ok,
-      countByChannel: matchedOrders.length
     }
   };
 
@@ -167,11 +173,11 @@ async function main() {
 
   console.log(JSON.stringify(result, null, 2));
 
-  if (!first.ok) process.exit(2);
-  if (!second.ok) process.exit(3);
+  if (!first.ok) process.exit(3);
+  if (!second.ok) process.exit(4);
 }
 
 main().catch((error) => {
-  console.error("delivery-webhook-replay failed", error);
+  console.error("delivery-status-webhook-replay-check failed", error);
   process.exit(99);
 });

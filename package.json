@@ -32,6 +32,7 @@
     "test:payments:integration": "node scripts/payments-integration-checks.mjs",
     "test:delivery:integration": "node scripts/delivery-integration-checks.mjs",
     "test:delivery:webhook-replay": "npm run test:delivery:webhook-replay -w @bbq/api --",
+    "test:delivery:status-replay": "npm run test:delivery:status-replay -w @bbq/api --",
     "test:delivery:dispatch-replay": "npm run test:delivery:dispatch-replay -w @bbq/api --",
     "test:delivery:action-replay": "npm run test:delivery:action-replay -w @bbq/api --",
     "test:delivery:settlement-replay": "npm run test:delivery:settlement-replay -w @bbq/api --",

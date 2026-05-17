@@ -116,6 +116,7 @@ function main() {
   if (!runLive) {
     const helpCommands = [
       ["npm", ["run", "test:delivery:webhook-replay", "--", "--help"]],
+      ["npm", ["run", "test:delivery:status-replay", "--", "--help"]],
       ["npm", ["run", "test:delivery:dispatch-replay", "--", "--help"]],
       ["npm", ["run", "test:delivery:action-replay", "--", "--help"]],
       ["npm", ["run", "test:delivery:settlement-replay", "--", "--help"]]
@@ -144,6 +145,7 @@ function main() {
     const channelOutputDir = channel === "all" ? `${outputDir}/${channelToRun}` : outputDir;
     const webhookOutput = `${channelOutputDir}/delivery-webhook-replay.json`;
     const dispatchOutput = `${channelOutputDir}/delivery-dispatch-replay.json`;
+    const statusOutput = `${channelOutputDir}/delivery-status-webhook-replay.json`;
     const actionOutput = `${channelOutputDir}/delivery-action-replay.json`;
     const settlementOutput = `${channelOutputDir}/delivery-settlement-replay.json`;
 
@@ -179,6 +181,24 @@ function main() {
     ]);
     if (dispatchExit !== 0) {
       process.exit(dispatchExit);
+    }
+
+    const statusExit = runCommand("npm", [
+      "run",
+      "test:delivery:status-replay",
+      "--",
+      "--channel",
+      channelToRun,
+      "--api-base-url",
+      apiBaseUrl,
+      "--webhook-secret",
+      webhookSecret,
+      ...(channelCorrelationId ? ["--correlation-id", channelCorrelationId] : []),
+      "--output-json",
+      statusOutput
+    ]);
+    if (statusExit !== 0) {
+      process.exit(statusExit);
     }
 
     const actionExit = runCommand("npm", [

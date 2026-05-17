@@ -34,6 +34,13 @@ function setupFixtureFiles() {
     correlation: { consistent: true }
   }));
 
+  writeFileSync(join(fixtureDir, "delivery-status-webhook-replay.json"), JSON.stringify({
+    correlationId,
+    firstAttempt: { ok: true },
+    duplicateSuppressed: true,
+    correlation: { consistent: true }
+  }));
+
   writeFileSync(join(fixtureDir, "delivery-action-replay.json"), JSON.stringify({
     correlationId,
     firstAction: { ok: true },
@@ -67,6 +74,13 @@ function setupAllChannelsFixtureFiles() {
     writeFileSync(join(channelDir, "delivery-dispatch-replay.json"), JSON.stringify({
       correlationId,
       first: { ok: true },
+      duplicateSuppressed: true,
+      correlation: { consistent: true }
+    }));
+
+    writeFileSync(join(channelDir, "delivery-status-webhook-replay.json"), JSON.stringify({
+      correlationId,
+      firstAttempt: { ok: true },
       duplicateSuppressed: true,
       correlation: { consistent: true }
     }));
