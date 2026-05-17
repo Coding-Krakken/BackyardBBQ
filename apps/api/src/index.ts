@@ -1909,7 +1909,7 @@ app.patch("/api/admin/integrations/dead-letter/:eventId/retry", async (request, 
   if (!hasDatabaseUrl) {
     return {
       id: params.data.eventId,
-      status: "retried"
+      status: "queued"
     };
   }
 
@@ -1932,15 +1932,18 @@ app.patch("/api/admin/integrations/dead-letter/:eventId/retry", async (request, 
   }
 
   const payload = existing.payload as Record<string, unknown>;
+  const previousAttempts = typeof payload.attempts === "number" ? payload.attempts : 0;
 
   const updated = await prisma.integrationEvent.update({
     where: { id: existing.id },
     data: {
-      status: "retried",
+      status: "queued",
       payload: {
         ...payload,
+        attempts: previousAttempts + 1,
         retriedAt: new Date().toISOString(),
-        retriedByRole: role
+        retryRequestedByRole: role,
+        lastError: null
       }
     },
     select: {

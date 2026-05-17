@@ -117,6 +117,17 @@ Admin dashboard supports:
 
 Dead-letter retry endpoint re-queues event and records retry metadata.
 
+Retry behavior details:
+
+- Retried dead-letter events are set back to `queued` so worker loops consume them.
+- Retry metadata is persisted (`retriedAt`, role, and incremented attempts).
+- Re-queued events disappear from dead-letter views once status transitions away from dead-letter.
+
+Alerting behavior details:
+
+- Integrations alerts include settlement-specific dead-letter/failure signals.
+- Integrations alerts include queued/pending settlement backlog thresholds.
+
 ## Suggested Operational Checks
 
 1. Verify `/api/health/delivery/:channel` for each provider.
