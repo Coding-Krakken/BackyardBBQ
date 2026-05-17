@@ -159,6 +159,7 @@ Admin dashboard supports:
 - Settlement CSV export (`/api/admin/integrations/settlements/export`) for reconciliation handoff and audit trails.
 - Settlement feed/export filters supported via query params: `channel`, `status`, and `limit` (feed), plus `from`/`to` (export).
 - Settlement feed now returns summary totals for the filtered window (`grossCents`, `feesCents`, `netCents`, and status counts) to support on-page reconciliation.
+- Settlement trend analytics endpoint (`/api/admin/integrations/settlements/trend`) provides daily gross/fees/net and fee-rate series for the selected channel window.
 
 Dead-letter retry endpoint re-queues event and records retry metadata.
 

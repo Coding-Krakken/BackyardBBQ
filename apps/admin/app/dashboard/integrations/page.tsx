@@ -73,6 +73,15 @@ interface SettlementSummary {
   netCents: number;
 }
 
+interface SettlementTrendRow {
+  date: string;
+  grossCents: number;
+  feesCents: number;
+  netCents: number;
+  count: number;
+  feeRatePercent: number;
+}
+
 export default function IntegrationsPage() {
   const { addToast } = useToast();
   const [settlementChannel, setSettlementChannel] = useState<'all' | 'doordash' | 'ubereats' | 'grubhub'>('all');
@@ -114,6 +123,11 @@ export default function IntegrationsPage() {
 
   const { data: settlementsData } = useSWR<{ summary: SettlementSummary; data: SettlementEvent[] }>(
     `/api/admin/integrations/settlements?${settlementQuery.toString()}`,
+    fetcher
+  );
+
+  const { data: settlementTrendData } = useSWR<{ windowDays: number; data: SettlementTrendRow[] }>(
+    `/api/admin/integrations/settlements/trend?days=14${settlementChannel !== 'all' ? `&channel=${settlementChannel}` : ''}`,
     fetcher
   );
 
@@ -315,6 +329,21 @@ export default function IntegrationsPage() {
               { header: 'Settled', accessor: (row: SettlementEvent) => formatDate(row.settledAt) },
             ]}
             data={settlementsData?.data ?? []}
+          />
+        </div>
+
+        <div className="panel mt-lg">
+          <h4 className="mb-md">Settlement Trend (Last {(settlementTrendData?.windowDays ?? 14)} Days)</h4>
+          <DataTable
+            columns={[
+              { header: 'Date', accessor: (row: SettlementTrendRow) => row.date },
+              { header: 'Count', accessor: (row: SettlementTrendRow) => row.count },
+              { header: 'Gross', accessor: (row: SettlementTrendRow) => `$${(row.grossCents / 100).toFixed(2)}` },
+              { header: 'Fees', accessor: (row: SettlementTrendRow) => `$${(row.feesCents / 100).toFixed(2)}` },
+              { header: 'Net', accessor: (row: SettlementTrendRow) => `$${(row.netCents / 100).toFixed(2)}` },
+              { header: 'Fee Rate', accessor: (row: SettlementTrendRow) => `${row.feeRatePercent.toFixed(2)}%` },
+            ]}
+            data={settlementTrendData?.data ?? []}
           />
         </div>
       </AnimatedPage>
