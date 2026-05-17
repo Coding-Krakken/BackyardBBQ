@@ -207,6 +207,12 @@ GET /api/admin/integrations/correlation/:id/export?format=json
 GET /api/admin/integrations/correlation/:id/export?format=csv
 ```
 
+Combined incident package endpoint (JSON + timeline CSV + settlements CSV in one response):
+
+```bash
+GET /api/admin/integrations/correlation/:id/package
+```
+
 JSON export includes rollups for handoff:
 
 - `summary.firstSeenAt`, `summary.lastSeenAt`, `summary.durationMs`

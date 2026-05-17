@@ -280,6 +280,10 @@ export default function IntegrationsPage() {
                             <a href={`/api/admin/integrations/correlation/${encodeURIComponent(id)}/export?format=csv`} style={{ textDecoration: 'underline' }}>
                               export
                             </a>
+                            {' / '}
+                            <a href={`/api/admin/integrations/correlation/${encodeURIComponent(id)}/package`} style={{ textDecoration: 'underline' }}>
+                              package
+                            </a>
                             {index < row.evidence!.correlationIds!.length - 1 ? ', ' : ''}
                           </span>
                         ))}
@@ -316,6 +320,9 @@ export default function IntegrationsPage() {
                       </a>
                       <a href={`/api/admin/integrations/correlation/${encodeURIComponent(row.payload.correlationId)}/export?format=csv`} style={{ textDecoration: 'underline' }}>
                         export CSV
+                      </a>
+                      <a href={`/api/admin/integrations/correlation/${encodeURIComponent(row.payload.correlationId)}/package`} style={{ textDecoration: 'underline' }}>
+                        incident package
                       </a>
                     </div>
                   ) : '-'
@@ -420,6 +427,9 @@ export default function IntegrationsPage() {
                       </a>
                       <a href={`/api/admin/integrations/correlation/${encodeURIComponent(row.correlationId)}/export?format=csv`} style={{ textDecoration: 'underline' }}>
                         export CSV
+                      </a>
+                      <a href={`/api/admin/integrations/correlation/${encodeURIComponent(row.correlationId)}/package`} style={{ textDecoration: 'underline' }}>
+                        incident package
                       </a>
                     </div>
                   ) : '-'
