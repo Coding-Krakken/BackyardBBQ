@@ -10,6 +10,7 @@ import { SiteFooter } from "../components/HomeSections";
 import { SiteNavbar } from "../components/SiteNavbar";
 import { businessInfo } from "../config/content";
 import { siteImages } from "../config/images";
+import { calculateCateringPricing } from "../../lib/catering-pricing";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ?? "";
 
@@ -31,11 +32,46 @@ type BookingResponse = {
   message: string;
 };
 
+const CATERING_PACKAGE_DETAILS = {
+  "Classic Smokehouse": {
+    summary: "Balanced smokehouse service with core favorites for straightforward event execution.",
+    includes: [
+      "Choice of 2 smoked proteins",
+      "3 house-made sides and fresh rolls",
+      "Sauce and condiment station",
+      "Buffet line setup with eco dinnerware"
+    ],
+    idealFor: "Ideal for family celebrations, school events, and community gatherings."
+  },
+  "Pitmaster Signature": {
+    summary: "Expanded pitmaster menu with elevated presentation and service pacing.",
+    includes: [
+      "Choice of 3 premium smoked proteins",
+      "4 gourmet sides and seasonal salad",
+      "Carving-station presentation style",
+      "On-site buffet attendant support"
+    ],
+    idealFor: "Ideal for weddings, rehearsal dinners, and branded company events."
+  },
+  Premium: {
+    summary: "Top-tier package with concierge planning and premium execution support.",
+    includes: [
+      "Chef-curated menu consultation",
+      "Full buffet design and service timeline",
+      "Dedicated on-site coordinator",
+      "Premium tableware and post-service breakdown"
+    ],
+    idealFor: "Ideal for executive functions, formal galas, and VIP hospitality programs."
+  }
+} as const;
+
+type CateringPackageName = keyof typeof CATERING_PACKAGE_DETAILS;
+
 export default function CateringPage() {
   const router = useRouter();
   const [date, setDate] = useState("");
   const [partySize, setPartySize] = useState(50);
-  const [packageName, setPackageName] = useState("Classic Smokehouse");
+  const [packageName, setPackageName] = useState<CateringPackageName>("Classic Smokehouse");
   const [eventAddress, setEventAddress] = useState("");
   const [notes, setNotes] = useState("");
   const [result, setResult] = useState<AvailabilityResponse | null>(null);
@@ -43,6 +79,10 @@ export default function CateringPage() {
   const [creatingBooking, setCreatingBooking] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [bookingMessage, setBookingMessage] = useState<string | null>(null);
+  const selectedPackageDetails = CATERING_PACKAGE_DETAILS[packageName];
+  const pricingPreview = calculateCateringPricing({ partySize, packageName });
+
+  const formatCurrency = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -162,12 +202,33 @@ export default function CateringPage() {
 
             <label>
               Catering Package
-              <select value={packageName} onChange={(event) => setPackageName(event.target.value)}>
-                <option value="Classic Smokehouse">Classic Smokehouse</option>
-                <option value="Premium Pitmaster">Premium Pitmaster</option>
-                <option value="Executive Catering">Executive Catering</option>
+              <select
+                value={packageName}
+                onChange={(event) => setPackageName(event.target.value as CateringPackageName)}
+              >
+                {Object.keys(CATERING_PACKAGE_DETAILS).map((packageOption) => (
+                  <option key={packageOption} value={packageOption}>
+                    {packageOption}
+                  </option>
+                ))}
               </select>
             </label>
+
+            <aside className="package-details" aria-live="polite">
+              <strong>{packageName} includes:</strong>
+              <p>{selectedPackageDetails.summary}</p>
+              <ul>
+                {selectedPackageDetails.includes.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+              <p>
+                Current estimate for {partySize} guests: {formatCurrency(pricingPreview.estimatedTotalCents)} total,
+                {" "}{formatCurrency(pricingPreview.depositCents)} due as a {Math.round(pricingPreview.depositRate * 100)}%
+                deposit.
+              </p>
+              <p className="package-ideal-for">{selectedPackageDetails.idealFor}</p>
+            </aside>
 
             <label>
               Event Address (Optional)

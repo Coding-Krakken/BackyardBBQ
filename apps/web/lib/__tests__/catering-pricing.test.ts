@@ -22,7 +22,7 @@ describe("calculateCateringPricing", () => {
   it("applies premium package multiplier", () => {
     const result = calculateCateringPricing({
       partySize: 60,
-      packageName: "Premium Smokehouse",
+      packageName: "Premium",
     });
 
     expect(result.perGuestCents).toBe(2820);

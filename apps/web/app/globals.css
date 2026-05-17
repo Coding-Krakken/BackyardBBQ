@@ -1136,6 +1136,70 @@ input:focus-visible {
   padding: 0.7rem 0.72rem;
 }
 
+.form-stack select,
+.form-stack textarea {
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: rgba(3, 8, 11, 0.75);
+  color: var(--cream);
+  padding: 0.7rem 0.72rem;
+}
+
+.form-stack select {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--ember-soft) 50%),
+    linear-gradient(135deg, var(--ember-soft) 50%, transparent 50%);
+  background-position: calc(100% - 18px) calc(50% - 1px), calc(100% - 12px) calc(50% - 1px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+  padding-right: 2.2rem;
+}
+
+.form-stack textarea {
+  resize: vertical;
+  min-height: 96px;
+}
+
+.form-stack input[type="date"] {
+  color-scheme: dark;
+}
+
+.package-details {
+  margin-top: -0.1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(184, 146, 88, 0.24);
+  background: linear-gradient(180deg, rgba(20, 14, 8, 0.55), rgba(8, 13, 18, 0.8));
+  padding: 0.8rem 0.85rem;
+}
+
+.package-details strong {
+  color: var(--cream);
+  font-size: 0.9rem;
+}
+
+.package-details p {
+  margin: 0.5rem 0 0;
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.package-details ul {
+  margin: 0.6rem 0 0;
+  padding-left: 1.05rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.package-details li {
+  color: #ddcfbc;
+  font-size: 0.83rem;
+}
+
+.package-details .package-ideal-for {
+  margin-top: 0.65rem;
+  color: var(--ember-soft);
+}
+
 .status-text {
   margin-top: 0.85rem;
   color: var(--ember-soft);
