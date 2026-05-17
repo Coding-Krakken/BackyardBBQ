@@ -27,7 +27,7 @@ function parseArgs(argv) {
 }
 
 function printUsage() {
-  console.log(`Usage:\n  node scripts/delivery-integration-checks.mjs [--channel doordash|ubereats|grubhub|all] [--api-base-url http://localhost:4000] [--run-live true] [--webhook-secret secret] [--output-dir artifacts/delivery-replay] [--validate-summary true]\n\nRun modes:\n  --run-live true  Executes replay scripts against a running API service.\n  --run-live false Validates replay command wiring via --help (default).\n\nValidation options:\n  --validate-summary true|false  In live mode, enforce summary file checks (default: true).\n\nEnvironment options:\n  API_BASE_URL\n  DELIVERY_CHANNEL\n  <CHANNEL>_WEBHOOK_SECRET\n  DELIVERY_WEBHOOK_SECRET`);
+  console.log(`Usage:\n  node scripts/delivery-integration-checks.mjs [--channel doordash|ubereats|grubhub|all] [--api-base-url http://localhost:4000] [--run-live true] [--webhook-secret secret] [--output-dir artifacts/delivery-replay] [--validate-summary true] [--correlation-id corr_123]\n\nRun modes:\n  --run-live true  Executes replay scripts against a running API service.\n  --run-live false Validates replay command wiring via --help (default).\n\nValidation options:\n  --validate-summary true|false  In live mode, enforce summary file checks (default: true).\n\nEnvironment options:\n  API_BASE_URL\n  DELIVERY_CHANNEL\n  <CHANNEL>_WEBHOOK_SECRET\n  DELIVERY_WEBHOOK_SECRET`);
 }
 
 function ensureAbsoluteHttpUrl(value, flagName) {
@@ -88,6 +88,7 @@ function main() {
   const channel = args.channel ?? process.env.DELIVERY_CHANNEL ?? "doordash";
   const apiBaseUrl = args["api-base-url"] ?? process.env.API_BASE_URL ?? "http://localhost:4000";
   const outputDir = args["output-dir"] ?? "artifacts/delivery-replay";
+  const correlationId = args["correlation-id"];
 
   try {
     ensureChannel(channel);
@@ -133,6 +134,12 @@ function main() {
   const channelsToRun = channel === "all" ? ["doordash", "ubereats", "grubhub"] : [channel];
 
   for (const channelToRun of channelsToRun) {
+    const channelCorrelationId =
+      typeof correlationId === "string" && correlationId.trim().length > 0
+        ? channel === "all"
+          ? `${correlationId.trim()}-${channelToRun}`
+          : correlationId.trim()
+        : undefined;
     const webhookSecret = getWebhookSecretForChannel(args, channelToRun);
     const channelOutputDir = channel === "all" ? `${outputDir}/${channelToRun}` : outputDir;
     const webhookOutput = `${channelOutputDir}/delivery-webhook-replay.json`;
@@ -150,6 +157,7 @@ function main() {
       apiBaseUrl,
       "--webhook-secret",
       webhookSecret,
+      ...(channelCorrelationId ? ["--correlation-id", channelCorrelationId] : []),
       "--output-json",
       webhookOutput
     ]);
@@ -165,6 +173,7 @@ function main() {
       channelToRun,
       "--api-base-url",
       apiBaseUrl,
+      ...(channelCorrelationId ? ["--correlation-id", channelCorrelationId] : []),
       "--output-json",
       dispatchOutput
     ]);
@@ -182,6 +191,7 @@ function main() {
       "accept",
       "--api-base-url",
       apiBaseUrl,
+      ...(channelCorrelationId ? ["--correlation-id", channelCorrelationId] : []),
       "--output-json",
       actionOutput
     ]);
@@ -199,6 +209,7 @@ function main() {
       apiBaseUrl,
       "--webhook-secret",
       webhookSecret,
+      ...(channelCorrelationId ? ["--correlation-id", channelCorrelationId] : []),
       "--output-json",
       settlementOutput
     ]);
@@ -216,7 +227,8 @@ function main() {
         "--require-files",
         "true",
         "--require-pass",
-        "true"
+        "true",
+        ...(channelCorrelationId ? ["--correlation-id", channelCorrelationId] : [])
       ]);
       if (summaryExit !== 0) {
         process.exit(summaryExit);

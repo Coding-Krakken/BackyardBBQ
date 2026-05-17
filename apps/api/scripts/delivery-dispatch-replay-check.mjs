@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
+
 function parseArgs(argv) {
   const args = {};
   for (let i = 2; i < argv.length; i += 1) {
@@ -20,7 +23,7 @@ function parseArgs(argv) {
 }
 
 function printUsage() {
-  console.log(`Usage:\n  node apps/api/scripts/delivery-dispatch-replay-check.mjs [--api-base-url http://localhost:4000] [--channel doordash]\n\nEnv fallbacks:\n  API_BASE_URL`);
+  console.log(`Usage:\n  node apps/api/scripts/delivery-dispatch-replay-check.mjs [--api-base-url http://localhost:4000] [--channel doordash] [--correlation-id corr_123] [--output-json ./artifacts/delivery-dispatch-replay.json]\n\nEnv fallbacks:\n  API_BASE_URL`);
 }
 
 async function postJson(url, body) {
@@ -57,6 +60,8 @@ async function main() {
 
   const apiBaseUrl = args["api-base-url"] ?? process.env.API_BASE_URL ?? "http://localhost:4000";
   const channel = args.channel ?? "doordash";
+  const correlationId = args["correlation-id"] ?? `corr-delivery-dispatch-${channel}-${Date.now()}`;
+  const outputJson = args["output-json"];
 
   const createOrder = await postJson(`${apiBaseUrl.replace(/\/$/, "")}/api/orders`, {
     customerEmail: `dispatch+${Date.now()}@example.com`,
@@ -82,22 +87,45 @@ async function main() {
   const firstDispatch = await postJson(`${apiBaseUrl.replace(/\/$/, "")}/api/delivery/dispatch`, {
     orderId,
     channel,
-    priority: "normal"
+    priority: "normal",
+    correlationId
   });
 
   const secondDispatch = await postJson(`${apiBaseUrl.replace(/\/$/, "")}/api/delivery/dispatch`, {
     orderId,
     channel,
-    priority: "normal"
+    priority: "normal",
+    correlationId
   });
 
   const result = {
     orderId,
     channel,
+    requestedCorrelationId: correlationId,
+    correlationId:
+      typeof firstDispatch.body?.correlationId === "string"
+        ? firstDispatch.body.correlationId
+        : typeof secondDispatch.body?.correlationId === "string"
+          ? secondDispatch.body.correlationId
+          : null,
     firstDispatch,
     secondDispatch,
-    duplicateSuppressed: Boolean(secondDispatch.body?.duplicate === true)
+    duplicateSuppressed: Boolean(secondDispatch.body?.duplicate === true),
+    correlation: {
+      first: typeof firstDispatch.body?.correlationId === "string" ? firstDispatch.body.correlationId : null,
+      second: typeof secondDispatch.body?.correlationId === "string" ? secondDispatch.body.correlationId : null,
+      consistent:
+        typeof firstDispatch.body?.correlationId === "string" &&
+        typeof secondDispatch.body?.correlationId === "string" &&
+        firstDispatch.body.correlationId === secondDispatch.body.correlationId
+    }
   };
+
+  if (typeof outputJson === "string" && outputJson.trim().length > 0) {
+    const normalizedPath = outputJson.trim();
+    await mkdir(dirname(normalizedPath), { recursive: true });
+    await writeFile(normalizedPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+  }
 
   console.log(JSON.stringify(result, null, 2));
 

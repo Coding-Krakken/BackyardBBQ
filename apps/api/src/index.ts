@@ -529,13 +529,15 @@ const createOrderSchema = z.object({
 const createDispatchRequestSchema = z.object({
   orderId: z.string().min(1),
   channel: z.enum(["doordash", "ubereats", "grubhub"]),
-  priority: z.enum(["normal", "high"]).default("normal")
+  priority: z.enum(["normal", "high"]).default("normal"),
+  correlationId: z.string().min(1).max(120).optional()
 });
 
 const createDeliveryActionRequestSchema = z.object({
   channel: z.enum(["doordash", "ubereats", "grubhub"]),
   action: z.enum(["accept", "reject", "cancel", "preparing", "ready", "out_for_delivery", "delivered"]),
-  reason: z.string().max(240).optional()
+  reason: z.string().max(240).optional(),
+  correlationId: z.string().min(1).max(120).optional()
 });
 
 const createBookingSchema = z.object({
@@ -974,11 +976,13 @@ app.post("/api/delivery/dispatch", async (request, reply) => {
   }
 
   const dispatchId = `${parsed.data.channel}-${order.id}-${Date.now()}`;
-  const correlationId = createDeliveryCorrelationId({
-    channel: parsed.data.channel,
-    eventType: "delivery.dispatch.requested",
-    referenceId: dispatchId
-  });
+  const correlationId =
+    parsed.data.correlationId ??
+    createDeliveryCorrelationId({
+      channel: parsed.data.channel,
+      eventType: "delivery.dispatch.requested",
+      referenceId: dispatchId
+    });
 
   const duplicateDispatch = await prisma.integrationEvent.findFirst({
     where: {
@@ -1132,11 +1136,13 @@ app.post("/api/delivery/orders/:orderId/action", async (request, reply) => {
   }
 
   const mappedStatus = mapActionToProviderStatus[parsed.data.action];
-  const correlationId = createDeliveryCorrelationId({
-    channel: parsed.data.channel,
-    eventType: "delivery.order.action.requested",
-    referenceId: `${order.id}-${parsed.data.action}`
-  });
+  const correlationId =
+    parsed.data.correlationId ??
+    createDeliveryCorrelationId({
+      channel: parsed.data.channel,
+      eventType: "delivery.order.action.requested",
+      referenceId: `${order.id}-${parsed.data.action}`
+    });
   const event = await prisma.integrationEvent.create({
     data: {
       orderId: order.id,

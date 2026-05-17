@@ -80,6 +80,7 @@ Notes:
 - Disable strict summary gating only for exploratory runs with `--validate-summary false`.
 - In `--channel all` mode, channel-specific webhook secrets must be configured for each provider.
 - In `--channel all` live mode, a consolidated strict summary is also generated and validated after per-channel runs.
+- Optional: pass `--correlation-id <id>` to `test:delivery:integration` for deterministic replay traces. In `--channel all` mode, the runner appends `-<channel>` automatically.
 
 Summary report from replay artifacts:
 
@@ -91,6 +92,12 @@ Consolidated all-channel summary report (expects per-channel subdirectories unde
 
 ```bash
 npm run report:delivery:integration -- --input-dir artifacts/delivery-replay --all-channels true --require-files true --require-pass true
+```
+
+Strict validation can also target one correlation ID in single-channel mode:
+
+```bash
+npm run report:delivery:integration -- --input-dir artifacts/delivery-replay --require-files true --require-pass true --correlation-id corr-delivery-123
 ```
 
 Shortcut command:
@@ -155,6 +162,7 @@ Expected:
 - Settlement events with a reused `settlementId` are also suppressed, even if event IDs differ.
 - Replay checker validates both duplicate paths (`eventId` replay and `settlementId` business-key replay).
 - Daily close summary includes `settlementNetCents` and `settlementByChannel` values.
+- Replay artifacts now include correlation consistency metadata and strict summary validation fails when correlation continuity breaks.
 
 ## Admin Operations
 

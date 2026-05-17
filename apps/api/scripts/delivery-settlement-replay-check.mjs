@@ -24,7 +24,7 @@ function parseArgs(argv) {
 }
 
 function printUsage() {
-  console.log(`Usage:\n  node apps/api/scripts/delivery-settlement-replay-check.mjs [--api-base-url http://localhost:4000] [--channel doordash] [--event-id evt_123] [--external-order-id order_123] [--webhook-secret secret] [--date 2026-05-16] [--output-json ./artifacts/delivery-settlement-replay.json]\n\nEnv fallbacks:\n  API_BASE_URL\n  DELIVERY_CHANNEL\n  <CHANNEL>_WEBHOOK_SECRET\n  DELIVERY_WEBHOOK_SECRET`);
+  console.log(`Usage:\n  node apps/api/scripts/delivery-settlement-replay-check.mjs [--api-base-url http://localhost:4000] [--channel doordash] [--event-id evt_123] [--external-order-id order_123] [--correlation-id corr_123] [--webhook-secret secret] [--date 2026-05-16] [--output-json ./artifacts/delivery-settlement-replay.json]\n\nEnv fallbacks:\n  API_BASE_URL\n  DELIVERY_CHANNEL\n  <CHANNEL>_WEBHOOK_SECRET\n  DELIVERY_WEBHOOK_SECRET`);
 }
 
 function makeSignature(rawBody, secret) {
@@ -92,6 +92,7 @@ async function main() {
   const channel = args.channel ?? process.env.DELIVERY_CHANNEL ?? "doordash";
   const externalOrderId = args["external-order-id"] ?? `settlement-${Date.now()}`;
   const eventId = args["event-id"] ?? `evt-settlement-${Date.now()}`;
+  const correlationId = args["correlation-id"] ?? `corr-delivery-settlement-${channel}-${Date.now()}`;
   const date = args.date;
   const outputJson = args["output-json"];
   const webhookSecret =
@@ -109,6 +110,7 @@ async function main() {
     eventType: "settlement.created",
     orderExternalId: externalOrderId,
     payload: {
+      correlationId,
       settlement: {
         settlementId: `stl-${Date.now()}`,
         payoutId: `po-${Date.now()}`,
@@ -155,6 +157,7 @@ async function main() {
   const result = {
     channel,
     eventId,
+    correlationId,
     externalOrderId,
     settlementId: requestBody.payload.settlement.settlementId,
     firstAttempt: first,
@@ -165,6 +168,17 @@ async function main() {
       Boolean(thirdBusinessKeyReplay.body?.duplicate === true) &&
       (thirdBusinessKeyReplay.body?.duplicateType === "settlement" ||
         thirdBusinessKeyReplay.body?.settlementId === requestBody.payload.settlement.settlementId),
+    correlation: {
+      first: typeof first.body?.correlationId === "string" ? first.body.correlationId : null,
+      second: typeof second.body?.correlationId === "string" ? second.body.correlationId : null,
+      third: typeof thirdBusinessKeyReplay.body?.correlationId === "string" ? thirdBusinessKeyReplay.body.correlationId : null,
+      consistent:
+        typeof first.body?.correlationId === "string" &&
+        typeof second.body?.correlationId === "string" &&
+        typeof thirdBusinessKeyReplay.body?.correlationId === "string" &&
+        first.body.correlationId === second.body.correlationId &&
+        second.body.correlationId === thirdBusinessKeyReplay.body.correlationId
+    },
     dailyClose: {
       ok: dailyClose.ok,
       settlementNetCents:

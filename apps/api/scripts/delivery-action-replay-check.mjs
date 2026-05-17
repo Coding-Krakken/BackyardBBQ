@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
+
 function parseArgs(argv) {
   const args = {};
   for (let i = 2; i < argv.length; i += 1) {
@@ -20,7 +23,7 @@ function parseArgs(argv) {
 }
 
 function printUsage() {
-  console.log(`Usage:\n  node apps/api/scripts/delivery-action-replay-check.mjs [--api-base-url http://localhost:4000] [--channel doordash] [--action accept] [--reason \"manual override\"]\n\nEnv fallbacks:\n  API_BASE_URL`);
+  console.log(`Usage:\n  node apps/api/scripts/delivery-action-replay-check.mjs [--api-base-url http://localhost:4000] [--channel doordash] [--action accept] [--reason \"manual override\"] [--correlation-id corr_123] [--output-json ./artifacts/delivery-action-replay.json]\n\nEnv fallbacks:\n  API_BASE_URL`);
 }
 
 async function postJson(url, body) {
@@ -59,6 +62,8 @@ async function main() {
   const channel = args.channel ?? "doordash";
   const action = args.action ?? "accept";
   const reason = args.reason ?? "manual_action_replay";
+  const correlationId = args["correlation-id"] ?? `corr-delivery-action-${channel}-${Date.now()}`;
+  const outputJson = args["output-json"];
 
   const createOrder = await postJson(`${apiBaseUrl.replace(/\/$/, "")}/api/orders`, {
     customerEmail: `action+${Date.now()}@example.com`,
@@ -84,23 +89,46 @@ async function main() {
   const firstAction = await postJson(`${apiBaseUrl.replace(/\/$/, "")}/api/delivery/orders/${orderId}/action`, {
     channel,
     action,
-    reason
+    reason,
+    correlationId
   });
 
   const secondAction = await postJson(`${apiBaseUrl.replace(/\/$/, "")}/api/delivery/orders/${orderId}/action`, {
     channel,
     action,
-    reason
+    reason,
+    correlationId
   });
 
   const result = {
     orderId,
     channel,
     action,
+    requestedCorrelationId: correlationId,
+    correlationId:
+      typeof firstAction.body?.correlationId === "string"
+        ? firstAction.body.correlationId
+        : typeof secondAction.body?.correlationId === "string"
+          ? secondAction.body.correlationId
+          : null,
     firstAction,
     secondAction,
-    duplicateSuppressed: Boolean(secondAction.body?.duplicate === true)
+    duplicateSuppressed: Boolean(secondAction.body?.duplicate === true),
+    correlation: {
+      first: typeof firstAction.body?.correlationId === "string" ? firstAction.body.correlationId : null,
+      second: typeof secondAction.body?.correlationId === "string" ? secondAction.body.correlationId : null,
+      consistent:
+        typeof firstAction.body?.correlationId === "string" &&
+        typeof secondAction.body?.correlationId === "string" &&
+        firstAction.body.correlationId === secondAction.body.correlationId
+    }
   };
+
+  if (typeof outputJson === "string" && outputJson.trim().length > 0) {
+    const normalizedPath = outputJson.trim();
+    await mkdir(dirname(normalizedPath), { recursive: true });
+    await writeFile(normalizedPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+  }
 
   console.log(JSON.stringify(result, null, 2));
 

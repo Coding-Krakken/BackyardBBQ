@@ -54,6 +54,11 @@ function buildSummaryMarkdown(summary, title = "Delivery Replay Summary") {
     `| Settlement first.ok | ${summary.settlementFirstOk} |`,
     `| Settlement duplicateSuppressed | ${summary.settlementDuplicateSuppressed} |`,
     `| Settlement businessKeyDuplicateSuppressed | ${summary.settlementBusinessKeyDuplicateSuppressed} |`,
+    `| Webhook correlation.consistent | ${summary.webhookCorrelationConsistent} |`,
+    `| Dispatch correlation.consistent | ${summary.dispatchCorrelationConsistent} |`,
+    `| Action correlation.consistent | ${summary.actionCorrelationConsistent} |`,
+    `| Settlement correlation.consistent | ${summary.settlementCorrelationConsistent} |`,
+    `| Correlation IDs | ${summary.correlationIds.join(", ")} |`,
     `| Daily close settlementNetCents | ${summary.settlementNetCents} |`,
     ""
   ].join("\n");
@@ -81,6 +86,16 @@ function buildSummaryFromArtifacts(inputDir) {
       settlementDuplicateSuppressed: settlement?.duplicateSuppressed ?? "n/a",
       settlementBusinessKeyDuplicateSuppressed:
         settlement?.businessKeyDuplicateSuppressed ?? "n/a",
+      webhookCorrelationConsistent: webhook?.correlation?.consistent ?? "n/a",
+      dispatchCorrelationConsistent: dispatch?.correlation?.consistent ?? "n/a",
+      actionCorrelationConsistent: action?.correlation?.consistent ?? "n/a",
+      settlementCorrelationConsistent: settlement?.correlation?.consistent ?? "n/a",
+      correlationIds: [
+        typeof webhook?.correlationId === "string" ? webhook.correlationId : null,
+        typeof dispatch?.correlationId === "string" ? dispatch.correlationId : null,
+        typeof action?.correlationId === "string" ? action.correlationId : null,
+        typeof settlement?.correlationId === "string" ? settlement.correlationId : null
+      ].filter((value) => typeof value === "string"),
       settlementNetCents: settlement?.dailyClose?.settlementNetCents ?? "n/a"
     }
   };
@@ -100,7 +115,11 @@ function validate(summary) {
     [
       "settlement.businessKeyDuplicateSuppressed",
       summary.settlementBusinessKeyDuplicateSuppressed === true
-    ]
+    ],
+    ["webhook.correlation.consistent", summary.webhookCorrelationConsistent === true],
+    ["dispatch.correlation.consistent", summary.dispatchCorrelationConsistent === true],
+    ["action.correlation.consistent", summary.actionCorrelationConsistent === true],
+    ["settlement.correlation.consistent", summary.settlementCorrelationConsistent === true]
   ];
 
   for (const [name, passed] of checks) {
@@ -110,6 +129,27 @@ function validate(summary) {
   }
 
   return failures;
+}
+
+function validateCorrelationTarget(summary, expectedCorrelationId) {
+  if (!expectedCorrelationId) {
+    return [];
+  }
+
+  const uniqueCorrelationIds = Array.from(new Set(summary.correlationIds));
+  if (uniqueCorrelationIds.length === 0) {
+    return ["correlationId.missing"];
+  }
+
+  if (uniqueCorrelationIds.length !== 1) {
+    return ["correlationId.not_uniform"];
+  }
+
+  if (uniqueCorrelationIds[0] !== expectedCorrelationId) {
+    return ["correlationId.mismatch"];
+  }
+
+  return [];
 }
 
 function buildAllChannelsMarkdown(channelSummaries) {
@@ -142,6 +182,7 @@ function main() {
   const summaryPath = process.env.GITHUB_STEP_SUMMARY;
   const requireFiles = args["require-files"] === "true";
   const requirePass = args["require-pass"] === "true";
+  const correlationId = args["correlation-id"];
 
   const allChannels = args["all-channels"] === "true";
 
@@ -171,6 +212,10 @@ function main() {
         for (const failure of channelFailures) {
           failures.push(`${channel}:${failure}`);
         }
+        const correlationFailures = validateCorrelationTarget(summary, correlationId);
+        for (const failure of correlationFailures) {
+          failures.push(`${channel}:${failure}`);
+        }
       }
       if (failures.length > 0) {
         console.error(`Delivery replay validation failed: ${failures.join(", ")}`);
@@ -196,7 +241,10 @@ function main() {
   console.log(markdown);
 
   if (requirePass) {
-    const failures = validate(artifacts.summary);
+    const failures = [
+      ...validate(artifacts.summary),
+      ...validateCorrelationTarget(artifacts.summary, correlationId)
+    ];
     if (failures.length > 0) {
       console.error(`Delivery replay validation failed: ${failures.join(", ")}`);
       process.exit(1);

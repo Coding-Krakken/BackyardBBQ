@@ -24,7 +24,7 @@ function parseArgs(argv) {
 }
 
 function printUsage() {
-  console.log(`Usage:\n  node apps/api/scripts/delivery-webhook-replay.mjs [--api-base-url http://localhost:4000] [--channel doordash] [--event-id evt_123] [--external-order-id order_123] [--webhook-secret secret] [--output-json ./artifacts/delivery-webhook-replay.json]\n\nEnv fallbacks:\n  API_BASE_URL\n  DELIVERY_CHANNEL\n  <CHANNEL>_WEBHOOK_SECRET\n  DELIVERY_WEBHOOK_SECRET`);
+  console.log(`Usage:\n  node apps/api/scripts/delivery-webhook-replay.mjs [--api-base-url http://localhost:4000] [--channel doordash] [--event-id evt_123] [--external-order-id order_123] [--correlation-id corr_123] [--webhook-secret secret] [--output-json ./artifacts/delivery-webhook-replay.json]\n\nEnv fallbacks:\n  API_BASE_URL\n  DELIVERY_CHANNEL\n  <CHANNEL>_WEBHOOK_SECRET\n  DELIVERY_WEBHOOK_SECRET`);
 }
 
 function makeSignature(rawBody, secret) {
@@ -91,6 +91,7 @@ async function main() {
   const channel = args.channel ?? process.env.DELIVERY_CHANNEL ?? "doordash";
   const externalOrderId = args["external-order-id"] ?? `replay-${Date.now()}`;
   const eventId = args["event-id"] ?? `evt-delivery-${Date.now()}`;
+  const correlationId = args["correlation-id"] ?? `corr-delivery-webhook-${channel}-${Date.now()}`;
   const webhookSecret =
     args["webhook-secret"] ??
     process.env[`${channel.toUpperCase()}_WEBHOOK_SECRET`] ??
@@ -107,6 +108,7 @@ async function main() {
     eventType: "order.created",
     orderExternalId: externalOrderId,
     payload: {
+      correlationId,
       order: {
         externalOrderId,
         customerEmail: `delivery+${Date.now()}@example.com`,
@@ -138,10 +140,19 @@ async function main() {
   const result = {
     channel,
     eventId,
+    correlationId,
     externalOrderId,
     firstAttempt: first,
     secondAttempt: second,
     duplicateSuppressed: Boolean(second.body?.duplicate === true),
+    correlation: {
+      first: typeof first.body?.correlationId === "string" ? first.body.correlationId : null,
+      second: typeof second.body?.correlationId === "string" ? second.body.correlationId : null,
+      consistent:
+        typeof first.body?.correlationId === "string" &&
+        typeof second.body?.correlationId === "string" &&
+        first.body.correlationId === second.body.correlationId
+    },
     ordersLookup: {
       ok: orders.ok,
       countByChannel: matchedOrders.length
