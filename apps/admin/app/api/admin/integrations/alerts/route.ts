@@ -7,7 +7,7 @@ export async function GET() {
   if (auth instanceof NextResponse) return auth;
 
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const [failedEvents, settlementBacklog] = await Promise.all([
+  const [failedEvents, settlementBacklog, settlementProcessed] = await Promise.all([
     prisma.integrationEvent.findMany({
       where: { createdAt: { gte: since }, status: { in: ["failed", "dead_letter"] } },
       select: { channel: true, status: true, eventType: true, payload: true }
@@ -20,6 +20,17 @@ export async function GET() {
         status: { in: ["queued", "pending"] }
       },
       _count: { _all: true }
+    }),
+    prisma.integrationEvent.findMany({
+      where: {
+        createdAt: { gte: since },
+        eventType: { contains: "settlement" },
+        status: "processed"
+      },
+      select: {
+        channel: true,
+        payload: true
+      }
     })
   ]);
 
@@ -27,6 +38,7 @@ export async function GET() {
   const channelFailures: Record<string, number> = {};
   const actionDeadLettersByChannel: Record<string, number> = {};
   const settlementDeadLettersByChannel: Record<string, number> = {};
+  const settlementTotalsByChannel: Record<string, { grossCents: number; feesCents: number }> = {};
 
   for (const e of failedEvents) {
     channelFailures[e.channel] = (channelFailures[e.channel] ?? 0) + 1;
@@ -37,6 +49,25 @@ export async function GET() {
     if (e.eventType.includes("settlement") && (e.status === "dead_letter" || e.status === "failed")) {
       settlementDeadLettersByChannel[e.channel] = (settlementDeadLettersByChannel[e.channel] ?? 0) + 1;
     }
+  }
+
+  for (const settlementEvent of settlementProcessed) {
+    const payload = settlementEvent.payload as Record<string, unknown>;
+    const settlementPayload =
+      payload.settlement && typeof payload.settlement === "object"
+        ? (payload.settlement as Record<string, unknown>)
+        : payload;
+
+    const grossCents = typeof settlementPayload.grossCents === "number" ? settlementPayload.grossCents : 0;
+    const feesCents = typeof settlementPayload.feesCents === "number" ? settlementPayload.feesCents : 0;
+
+    if (!settlementTotalsByChannel[settlementEvent.channel]) {
+      settlementTotalsByChannel[settlementEvent.channel] = { grossCents: 0, feesCents: 0 };
+    }
+
+    const totals = settlementTotalsByChannel[settlementEvent.channel]!;
+    totals.grossCents += grossCents;
+    totals.feesCents += feesCents;
   }
 
   for (const [channel, count] of Object.entries(channelFailures)) {
@@ -69,6 +100,24 @@ export async function GET() {
       severity,
       channel: row.channel,
       message: `${count} delivery settlement event(s) are still queued/pending`
+    });
+  }
+
+  for (const [channel, totals] of Object.entries(settlementTotalsByChannel)) {
+    if (totals.grossCents <= 0) {
+      continue;
+    }
+
+    const feeRatio = totals.feesCents / totals.grossCents;
+    if (feeRatio < 0.35) {
+      continue;
+    }
+
+    const severity: "critical" | "warning" | "info" = feeRatio >= 0.45 ? "critical" : "warning";
+    alerts.push({
+      severity,
+      channel,
+      message: `Settlement fee ratio is ${(feeRatio * 100).toFixed(1)}% in the last 24 h`
     });
   }
 
