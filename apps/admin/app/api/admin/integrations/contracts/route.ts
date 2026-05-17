@@ -17,6 +17,11 @@ type ContractHealthRow = {
   lastSeenAt: string | null;
 };
 
+type ChannelStat = {
+  total: number;
+  failing: number;
+};
+
 function readCorrelationId(payload: unknown) {
   if (!payload || typeof payload !== "object") {
     return null;
@@ -84,6 +89,9 @@ export async function GET(request: NextRequest) {
   }
 
   const rows: ContractHealthRow[] = [];
+  const failedCheckCounts = new Map<string, number>();
+  const channelStats = new Map<string, ChannelStat>();
+
   for (const [correlationId, correlationEvents] of byCorrelation) {
     const ordered = [...correlationEvents].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
     const contract = evaluateCorrelationContract(ordered, correlationId);
@@ -97,7 +105,7 @@ export async function GET(request: NextRequest) {
       continue;
     }
 
-    rows.push({
+    const row: ContractHealthRow = {
       correlationId,
       scorePercent: contract.result.scorePercent,
       passed: contract.result.passed,
@@ -108,7 +116,22 @@ export async function GET(request: NextRequest) {
       channels: contract.summary.channels,
       firstSeenAt: contract.summary.firstSeenAt,
       lastSeenAt: contract.summary.lastSeenAt
-    });
+    };
+
+    rows.push(row);
+
+    for (const failedCheck of failedChecks) {
+      failedCheckCounts.set(failedCheck, (failedCheckCounts.get(failedCheck) ?? 0) + 1);
+    }
+
+    for (const rowChannel of row.channels) {
+      const stat = channelStats.get(rowChannel) ?? { total: 0, failing: 0 };
+      stat.total += 1;
+      if (!row.passed) {
+        stat.failing += 1;
+      }
+      channelStats.set(rowChannel, stat);
+    }
   }
 
   rows.sort((a, b) => {
@@ -122,6 +145,26 @@ export async function GET(request: NextRequest) {
   const averageScorePercent = rows.length > 0
     ? Math.round(rows.reduce((sum, row) => sum + row.scorePercent, 0) / rows.length)
     : 0;
+  const failRatePercent = rows.length > 0 ? Math.round((failingCount / rows.length) * 100) : 0;
+
+  const topFailedChecks = [...failedCheckCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([label, count]) => ({ label, count }));
+
+  const channelBreakdown = [...channelStats.entries()]
+    .map(([name, stat]) => ({
+      name,
+      totalCorrelations: stat.total,
+      failingCorrelations: stat.failing,
+      failRatePercent: stat.total > 0 ? Math.round((stat.failing / stat.total) * 100) : 0
+    }))
+    .sort((a, b) => {
+      if (b.failRatePercent !== a.failRatePercent) {
+        return b.failRatePercent - a.failRatePercent;
+      }
+      return b.totalCorrelations - a.totalCorrelations;
+    });
 
   return NextResponse.json({
     days,
@@ -134,7 +177,10 @@ export async function GET(request: NextRequest) {
       totalCorrelations: rows.length,
       failingCorrelations: failingCount,
       passingCorrelations: Math.max(0, rows.length - failingCount),
-      averageScorePercent
+      averageScorePercent,
+      failRatePercent,
+      topFailedChecks,
+      channelBreakdown
     },
     data: limited
   });

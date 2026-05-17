@@ -281,6 +281,14 @@ GET /api/admin/integrations/contracts/export?days=7&onlyFailing=true&channel=doo
 
 Feed response includes correlation-level scorecards with failed check labels and latest timestamps for proactive triage.
 
+Summary analytics now include:
+
+- `failRatePercent`
+- `topFailedChecks` (top 5 failing contract controls)
+- `channelBreakdown` with per-channel fail rates
+
+Use these metrics to prioritize replay/triage by dominant contract failure mode and highest-risk channel first.
+
 Combined incident package endpoint (JSON + timeline CSV + settlements CSV in one response):
 
 ```bash

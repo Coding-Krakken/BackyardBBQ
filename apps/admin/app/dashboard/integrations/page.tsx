@@ -117,6 +117,17 @@ interface ContractFeedResponse {
     failingCorrelations: number;
     passingCorrelations: number;
     averageScorePercent: number;
+    failRatePercent: number;
+    topFailedChecks: Array<{
+      label: string;
+      count: number;
+    }>;
+    channelBreakdown: Array<{
+      name: string;
+      totalCorrelations: number;
+      failingCorrelations: number;
+      failRatePercent: number;
+    }>;
   };
   data: ContractHealthRow[];
 }
@@ -567,12 +578,49 @@ export default function IntegrationsPage() {
               <div style={{ fontSize: '1.05rem', fontWeight: 600 }}>{contractFeedData?.summary?.failingCorrelations ?? 0}</div>
             </div>
             <div className="card">
-              <div className="eyebrow">Passing</div>
-              <div style={{ fontSize: '1.05rem', fontWeight: 600 }}>{contractFeedData?.summary?.passingCorrelations ?? 0}</div>
+              <div className="eyebrow">Fail Rate</div>
+              <div style={{ fontSize: '1.05rem', fontWeight: 600 }}>{contractFeedData?.summary?.failRatePercent ?? 0}%</div>
             </div>
             <div className="card">
               <div className="eyebrow">Avg Score</div>
               <div style={{ fontSize: '1.05rem', fontWeight: 600 }}>{contractFeedData?.summary?.averageScorePercent ?? 0}%</div>
+            </div>
+          </div>
+
+          <div className="grid-cards grid-cards-2 mb-md">
+            <div className="card">
+              <div className="eyebrow">Top Failed Checks</div>
+              {(contractFeedData?.summary?.topFailedChecks?.length ?? 0) > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginTop: '0.45rem' }}>
+                  {(contractFeedData?.summary?.topFailedChecks ?? []).map((item) => (
+                    <div key={item.label} className="flex-between" style={{ fontSize: '0.85rem' }}>
+                      <span>{item.label}</span>
+                      <strong>{item.count}</strong>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-muted" style={{ fontSize: '0.8rem', marginTop: '0.45rem' }}>
+                  No failed checks in this filter window.
+                </div>
+              )}
+            </div>
+            <div className="card">
+              <div className="eyebrow">Channel Risk Breakdown</div>
+              {(contractFeedData?.summary?.channelBreakdown?.length ?? 0) > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginTop: '0.45rem' }}>
+                  {(contractFeedData?.summary?.channelBreakdown ?? []).map((item) => (
+                    <div key={item.name} className="flex-between" style={{ fontSize: '0.85rem' }}>
+                      <span>{item.name}: {item.failingCorrelations}/{item.totalCorrelations}</span>
+                      <strong>{item.failRatePercent}%</strong>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-muted" style={{ fontSize: '0.8rem', marginTop: '0.45rem' }}>
+                  No channel data available.
+                </div>
+              )}
             </div>
           </div>
 
