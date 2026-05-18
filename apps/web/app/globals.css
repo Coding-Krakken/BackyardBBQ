@@ -895,6 +895,11 @@ input:focus-visible {
 }
 
 .ordering-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: 100%;
+  min-height: 92px;
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-md);
   background: linear-gradient(180deg, rgba(8, 21, 29, 0.86), rgba(9, 12, 16, 0.9));
