@@ -130,6 +130,27 @@ async function main() {
     });
   }
 
+  // Create PaymentTransaction for the demo order to ensure data integrity
+  // (Gross Sales from Orders should match Payment volume)
+  const existingPayment = await prisma.paymentTransaction.findFirst({
+    where: { orderId: order.id },
+    select: { id: true }
+  });
+
+  if (!existingPayment) {
+    await prisma.paymentTransaction.create({
+      data: {
+        customerId: customer.id,
+        orderId: order.id,
+        stripePaymentIntentId: "pi_seed_demo_order_" + order.id,
+        amountCents: 4802,
+        currency: "usd",
+        status: "succeeded",
+        paymentType: "order"
+      }
+    });
+  }
+
   await prisma.integrationEvent.createMany({
     data: [
       {

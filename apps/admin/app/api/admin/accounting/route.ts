@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { prisma } from "@/lib/prisma";
+import {
+  PAYMENT_REVENUE_STATUSES,
+  PAYMENT_REFUND_STATUSES,
+  THIRD_PARTY_DELIVERY_CHANNELS,
+} from "@bbq/domain";
+import type { PaymentStatus } from "@prisma/client";
 
-const deliveryChannels = ["doordash", "ubereats", "grubhub"] as const;
+const deliveryChannels = [...THIRD_PARTY_DELIVERY_CHANNELS] as const;
 
 function parseRange(fromRaw: string | null, toRaw: string | null) {
   const now = new Date();
@@ -41,55 +47,63 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const { from, to } = parseRange(searchParams.get("from"), searchParams.get("to"));
 
-  const [orders, refundedTransactions, settlements] = await Promise.all([
-    prisma.order.findMany({
+  // Use PaymentTransaction as the single source of truth for Stripe revenue
+  const [successfulPayments, refundedPayments, settlements] = await Promise.all([
+    prisma.paymentTransaction.findMany({
       where: {
         createdAt: { gte: from, lte: to },
-        status: { notIn: ["cancelled"] }
+        status: { in: PAYMENT_REVENUE_STATUSES as unknown as PaymentStatus[] },
       },
       select: {
-        source: true,
-        totalCents: true
-      }
+        amountCents: true,
+        status: true,
+        order: {
+          select: {
+            source: true,
+          },
+        },
+      },
     }),
     prisma.paymentTransaction.findMany({
       where: {
         createdAt: { gte: from, lte: to },
-        status: { in: ["refunded", "partially_refunded"] }
+        status: { in: PAYMENT_REFUND_STATUSES as unknown as PaymentStatus[] },
       },
       select: {
         amountCents: true,
         order: {
           select: {
-            source: true
-          }
-        }
-      }
+            source: true,
+          },
+        },
+      },
     }),
     prisma.integrationEvent.findMany({
       where: {
         channel: { in: [...deliveryChannels] },
         eventType: { contains: "settlement" },
         status: "processed",
-        createdAt: { gte: from, lte: to }
+        createdAt: { gte: from, lte: to },
       },
       select: {
         channel: true,
-        payload: true
-      }
-    })
+        payload: true,
+      },
+    }),
   ]);
 
+  // Build source breakdown from PaymentTransaction data
   const bySource = new Map<string, { grossCents: number; refundsCents: number; netCents: number }>();
 
-  for (const order of orders) {
-    const current = bySource.get(order.source) ?? { grossCents: 0, refundsCents: 0, netCents: 0 };
-    current.grossCents += order.totalCents;
-    current.netCents += order.totalCents;
-    bySource.set(order.source, current);
+  for (const payment of successfulPayments) {
+    const source = payment.order?.source ?? "direct";
+    const current = bySource.get(source) ?? { grossCents: 0, refundsCents: 0, netCents: 0 };
+    current.grossCents += payment.amountCents;
+    current.netCents += payment.amountCents;
+    bySource.set(source, current);
   }
 
-  for (const refund of refundedTransactions) {
+  for (const refund of refundedPayments) {
     const source = refund.order?.source ?? "direct";
     const current = bySource.get(source) ?? { grossCents: 0, refundsCents: 0, netCents: 0 };
     current.refundsCents += refund.amountCents;
@@ -115,8 +129,9 @@ export async function GET(request: NextRequest) {
     settlementByChannel.set(settlementEvent.channel, current);
   }
 
-  const grossCents = orders.reduce((sum, order) => sum + order.totalCents, 0);
-  const refundsCents = refundedTransactions.reduce((sum, row) => sum + row.amountCents, 0);
+  // Calculate totals from PaymentTransaction (single source of truth)
+  const grossCents = successfulPayments.reduce((sum, p) => sum + p.amountCents, 0);
+  const refundsCents = refundedPayments.reduce((sum, p) => sum + p.amountCents, 0);
   const netCents = Math.max(0, grossCents - refundsCents);
 
   return NextResponse.json({

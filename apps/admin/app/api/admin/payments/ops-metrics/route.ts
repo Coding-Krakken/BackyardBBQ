@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { prisma } from "@/lib/prisma";
+import {
+  PAYMENT_SUCCESS_STATUSES,
+  PAYMENT_REFUND_STATUSES,
+  PAYMENT_REVENUE_STATUSES,
+} from "@bbq/domain";
 
 function toDateKey(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -39,19 +44,22 @@ export async function GET(request: NextRequest) {
   ]);
 
   const totalTransactions = payments.length;
-  const successfulTransactions = payments.filter((p) => p.status === "succeeded").length;
+  const successfulTransactions = payments.filter(
+    (p) => PAYMENT_SUCCESS_STATUSES.includes(p.status as typeof PAYMENT_SUCCESS_STATUSES[number])
+  ).length;
   const refundedTransactions = payments.filter(
-    (p) => p.status === "refunded" || p.status === "partially_refunded"
+    (p) => PAYMENT_REFUND_STATUSES.includes(p.status as typeof PAYMENT_REFUND_STATUSES[number])
   ).length;
 
   const settledVolumeCents = payments
-    .filter((p) => ["succeeded", "refunded", "partially_refunded"].includes(p.status))
+    .filter((p) => PAYMENT_REVENUE_STATUSES.includes(p.status as typeof PAYMENT_REVENUE_STATUSES[number]))
     .reduce((sum, p) => sum + p.amountCents, 0);
   const refundedVolumeCents = payments
-    .filter((p) => p.status === "refunded" || p.status === "partially_refunded")
+    .filter((p) => PAYMENT_REFUND_STATUSES.includes(p.status as typeof PAYMENT_REFUND_STATUSES[number]))
     .reduce((sum, p) => sum + p.amountCents, 0);
 
-  const disputeEvents = stripeEvents.filter((e) => e.eventType.includes("charge.dispute"));
+  // Use consistent event type matching for disputes
+  const disputeEvents = stripeEvents.filter((e) => e.eventType.includes("dispute"));
 
   const webhookWithLatency = stripeEvents
     .map((e) => {
@@ -88,10 +96,10 @@ export async function GET(request: NextRequest) {
     if (!dailyRevenueMap[key]) dailyRevenueMap[key] = 0;
     if (!dailyRefundMap[key]) dailyRefundMap[key] = 0;
 
-    if (["succeeded", "refunded", "partially_refunded"].includes(payment.status)) {
+    if (PAYMENT_REVENUE_STATUSES.includes(payment.status as typeof PAYMENT_REVENUE_STATUSES[number])) {
       dailyRevenueMap[key] += payment.amountCents;
     }
-    if (payment.status === "refunded" || payment.status === "partially_refunded") {
+    if (PAYMENT_REFUND_STATUSES.includes(payment.status as typeof PAYMENT_REFUND_STATUSES[number])) {
       dailyRefundMap[key] += payment.amountCents;
     }
   }

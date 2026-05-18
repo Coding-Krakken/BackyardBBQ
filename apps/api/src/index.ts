@@ -3746,46 +3746,50 @@ app.post(
             "Reconciling payment intent webhook"
           );
 
-          await prisma.paymentTransaction.upsert({
-            where: { stripePaymentIntentId: paymentIntent.id },
-            update: {
-              amountCents: paymentIntent.amount,
-              currency: paymentIntent.currency,
-              status: mapStripeStatusToPaymentStatus(paymentIntent.status),
-              orderId,
-              bookingId,
-              paymentType
-            },
-            create: {
-              stripePaymentIntentId: paymentIntent.id,
-              amountCents: paymentIntent.amount,
-              currency: paymentIntent.currency,
-              status: mapStripeStatusToPaymentStatus(paymentIntent.status),
-              orderId,
-              bookingId,
-              paymentType
-            }
-          });
-
-          if (orderId) {
-            await prisma.order.update({
-              where: { id: orderId },
-              data: { stripeIntentId: paymentIntent.id }
+          // Use a transaction to ensure atomicity - PaymentTransaction, Order, and IntegrationEvent
+          // must all succeed or fail together to maintain data integrity
+          await prisma.$transaction(async (tx) => {
+            await tx.paymentTransaction.upsert({
+              where: { stripePaymentIntentId: paymentIntent.id },
+              update: {
+                amountCents: paymentIntent.amount,
+                currency: paymentIntent.currency,
+                status: mapStripeStatusToPaymentStatus(paymentIntent.status),
+                orderId,
+                bookingId,
+                paymentType
+              },
+              create: {
+                stripePaymentIntentId: paymentIntent.id,
+                amountCents: paymentIntent.amount,
+                currency: paymentIntent.currency,
+                status: mapStripeStatusToPaymentStatus(paymentIntent.status),
+                orderId,
+                bookingId,
+                paymentType
+              }
             });
-          }
 
-          await prisma.integrationEvent.create({
-            data: {
-              orderId,
-              channel: "stripe",
-              eventType: event.type,
-              status: "processed",
-              payload: {
-                eventId: event.id,
-                paymentIntentId: paymentIntent.id,
-                status: paymentIntent.status
-              } as Prisma.InputJsonValue
+            if (orderId) {
+              await tx.order.update({
+                where: { id: orderId },
+                data: { stripeIntentId: paymentIntent.id }
+              });
             }
+
+            await tx.integrationEvent.create({
+              data: {
+                orderId,
+                channel: "stripe",
+                eventType: event.type,
+                status: "processed",
+                payload: {
+                  eventId: event.id,
+                  paymentIntentId: paymentIntent.id,
+                  status: paymentIntent.status
+                } as Prisma.InputJsonValue
+              }
+            });
           });
         } catch (error) {
           request.log.error({ error }, "Failed to reconcile payment intent webhook");

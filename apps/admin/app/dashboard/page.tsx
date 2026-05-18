@@ -14,6 +14,7 @@ import { BBQBarChart } from '@/components/charts/BarChart';
 import { CardSkeleton, ChartSkeleton } from '@/components/LoadingSkeleton';
 import { RoleGate } from '@/components/RoleGate';
 import { AnimatedPage } from '@/components/AnimatedPage';
+import { DataIntegrityBanner } from '@/components/DataIntegrityBanner';
 import { fetcher, formatCurrency, formatDate } from '@/lib/utils';
 
 interface OverviewData {
@@ -107,6 +108,9 @@ export default function DashboardOverviewPage() {
             title="Mission Control"
             subtitle="Real-time overview of your restaurant operations"
           />
+
+          {/* Data integrity warning - shown only when issues detected */}
+          <DataIntegrityBanner />
 
           {/* KPI Cards — Primary Metrics */}
           <section className="dashboard-section">
