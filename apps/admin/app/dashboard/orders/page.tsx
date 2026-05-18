@@ -18,6 +18,7 @@ interface Order {
   totalCents: number;
   createdAt: string;
   location?: { name: string };
+  payment?: { status: string } | null;
 }
 
 const ORDER_STATUSES = ['pending', 'confirmed', 'preparing', 'ready', 'completed', 'cancelled'];
@@ -43,7 +44,7 @@ export default function OrdersPage() {
   const limit = 20;
   const offset = (page - 1) * limit;
 
-  const { data, mutate, isLoading } = useSWR<{ data: Order[] }>(
+  const { data, mutate, isLoading } = useSWR<{ data: Order[]; total: number }>(
     `/api/admin/orders?limit=${limit}&offset=${offset}`,
     fetcher,
     { refreshInterval: 30000 }
@@ -56,6 +57,9 @@ export default function OrdersPage() {
     if (searchQuery && !order.id.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
+
+  const totalOrders = typeof data?.total === 'number' ? data.total : filteredOrders.length;
+  const totalPages = Math.max(1, Math.ceil(totalOrders / limit));
 
   const handleStatusUpdate = async () => {
     if (!selectedOrder || !newStatus) return;
@@ -182,6 +186,11 @@ export default function OrdersPage() {
               { header: 'Order ID', accessor: (row: Order) => row.id.slice(0, 8) },
               { header: 'Source', accessor: (row: Order) => row.source.toUpperCase(), sortKey: (row: Order) => row.source },
               { header: 'Status', accessor: (row: Order) => <StatusBadge status={row.status} />, sortKey: (row: Order) => row.status },
+              {
+                header: 'Payment',
+                accessor: (row: Order) => row.payment?.status ? <StatusBadge status={row.payment.status} type="payment" /> : 'Unlinked',
+                sortKey: (row: Order) => row.payment?.status ?? 'unlinked'
+              },
               { header: 'Total', accessor: (row: Order) => formatCurrency(row.totalCents), sortKey: (row: Order) => row.totalCents },
               { header: 'Location', accessor: (row: Order) => row.location?.name ?? 'N/A' },
               { header: 'Created', accessor: (row: Order) => formatDate(row.createdAt), sortKey: (row: Order) => row.createdAt },
@@ -223,7 +232,7 @@ export default function OrdersPage() {
             ]}
             data={filteredOrders}
             currentPage={page}
-            totalPages={Math.max(1, Math.ceil((data?.data.length ?? 0) / limit))}
+            totalPages={totalPages}
             onPageChange={setPage}
             isLoading={isLoading}
           />

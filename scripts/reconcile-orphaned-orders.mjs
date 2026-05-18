@@ -40,6 +40,24 @@ async function getOrphanedOrders() {
   });
 }
 
+async function getOrphanedSuccessfulPayments() {
+  return prisma.paymentTransaction.findMany({
+    where: {
+      status: "succeeded",
+      paymentType: "order",
+      orderId: null,
+    },
+    select: {
+      id: true,
+      stripePaymentIntentId: true,
+      amountCents: true,
+      currency: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
 async function cancelOrders(orderIds, dryRun = true) {
   if (dryRun) {
     console.log(`\n[DRY RUN] Would cancel ${orderIds.length} orders`);
@@ -185,9 +203,26 @@ async function main() {
 
   // Get orphaned orders
   const orphanedOrders = await getOrphanedOrders();
+  const orphanedPayments = await getOrphanedSuccessfulPayments();
 
-  if (orphanedOrders.length === 0) {
-    console.log("No orphaned orders found. Database is healthy.\n");
+  if (orphanedPayments.length > 0) {
+    console.log(`Found ${orphanedPayments.length} successful payments with no linked order:\n`);
+    for (const payment of orphanedPayments.slice(0, 10)) {
+      console.log(`  - ${payment.id}`);
+      console.log(`    PI: ${payment.stripePaymentIntentId}`);
+      console.log(`    Amount: ${payment.amountCents} ${payment.currency.toUpperCase()}`);
+      console.log();
+    }
+
+    if (orphanedPayments.length > 10) {
+      console.log(`  ... and ${orphanedPayments.length - 10} more\n`);
+    }
+
+    console.log("WARNING: Payments without linked orders indicate webhook/order linkage gaps.\n");
+  }
+
+  if (orphanedOrders.length === 0 && orphanedPayments.length === 0) {
+    console.log("No orphaned orders or unlinked successful payments found. Database is healthy.\n");
     process.exit(0);
   }
 

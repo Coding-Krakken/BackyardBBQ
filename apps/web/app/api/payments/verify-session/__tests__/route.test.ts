@@ -3,6 +3,7 @@
 import { NextRequest } from "next/server";
 import { GET } from "../route";
 import { TEST_STRIPE_SECRET_KEY } from "../../__tests__/test-constants";
+import { prisma } from "../../../../../lib/prisma";
 
 var mockCheckoutSessionsRetrieve: jest.Mock;
 
@@ -30,6 +31,7 @@ describe("GET /api/payments/verify-session", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.spyOn(prisma.paymentTransaction, "findUnique").mockResolvedValue(null as never);
   });
 
   it("returns 400 when session_id is missing", async () => {
@@ -72,6 +74,7 @@ describe("GET /api/payments/verify-session", () => {
       amountSubtotal: 2000,
       amountTax: 160,
       amountTotal: 2160,
+      orderId: null,
     });
     expect(mockCheckoutSessionsRetrieve).toHaveBeenCalledWith("cs_123");
   });
@@ -96,6 +99,61 @@ describe("GET /api/payments/verify-session", () => {
 
     expect(response.status).toBe(200);
     expect(payload.amountTax).toBe(0);
+    expect(payload.orderId).toBeNull();
+  });
+
+  it("resolves orderId from session metadata when present", async () => {
+    mockCheckoutSessionsRetrieve.mockResolvedValue({
+      status: "complete",
+      payment_status: "paid",
+      customer_details: { email: "guest@example.com" },
+      currency: "usd",
+      amount_subtotal: 1200,
+      total_details: { amount_tax: 96 },
+      amount_total: 1296,
+      metadata: { orderId: "ord_meta_1" },
+      payment_intent: "pi_meta_1",
+    });
+
+    const request = new NextRequest("http://localhost/api/payments/verify-session?session_id=cs_meta_1", {
+      method: "GET",
+    });
+
+    const response = await GET(request);
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.orderId).toBe("ord_meta_1");
+    expect(prisma.paymentTransaction.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("falls back to payment transaction lookup when metadata orderId is missing", async () => {
+    (prisma.paymentTransaction.findUnique as jest.Mock).mockResolvedValue({ orderId: "ord_from_payment" });
+    mockCheckoutSessionsRetrieve.mockResolvedValue({
+      status: "complete",
+      payment_status: "paid",
+      customer_details: { email: "guest@example.com" },
+      currency: "usd",
+      amount_subtotal: 1200,
+      total_details: { amount_tax: 96 },
+      amount_total: 1296,
+      metadata: {},
+      payment_intent: "pi_lookup_1",
+    });
+
+    const request = new NextRequest("http://localhost/api/payments/verify-session?session_id=cs_lookup_1", {
+      method: "GET",
+    });
+
+    const response = await GET(request);
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.orderId).toBe("ord_from_payment");
+    expect(prisma.paymentTransaction.findUnique).toHaveBeenCalledWith({
+      where: { stripePaymentIntentId: "pi_lookup_1" },
+      select: { orderId: true },
+    });
   });
 
   it("returns 500 when Stripe retrieval throws", async () => {

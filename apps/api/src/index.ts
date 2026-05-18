@@ -666,6 +666,8 @@ function getRecentDateKeys(days: number) {
 
 const integrationChannels = ["doordash", "ubereats", "grubhub"] as const;
 const integrationChannelSchema = z.enum(integrationChannels);
+const deliveryWebhookKinds = ["orders", "status", "settlements"] as const;
+type DeliveryWebhookKind = (typeof deliveryWebhookKinds)[number];
 
 const deliveryWebhookParamsSchema = z.object({
   channel: integrationChannelSchema
@@ -715,6 +717,12 @@ const deliveryWebhookSecretByChannel: Record<(typeof integrationChannels)[number
   doordash: process.env.DOORDASH_WEBHOOK_SECRET,
   ubereats: process.env.UBEREATS_WEBHOOK_SECRET,
   grubhub: process.env.GRUBHUB_WEBHOOK_SECRET
+};
+
+const uberWebhookDeveloperUuidByKind: Record<DeliveryWebhookKind, string | undefined> = {
+  orders: process.env.UBEREATS_ORDERS_WEBHOOK_UUID,
+  status: process.env.UBEREATS_STATUS_WEBHOOK_UUID,
+  settlements: process.env.UBEREATS_SETTLEMENTS_WEBHOOK_UUID
 };
 
 function isSupportedIntegrationChannel(channel: string): channel is (typeof integrationChannels)[number] {
@@ -831,8 +839,27 @@ function createDeliveryCorrelationId(input: {
   return `dlv-${input.channel}-${normalizedEventType}-${normalizedReference}-${suffix}`;
 }
 
+function inferWebhookKindFromEventType(eventType: string): DeliveryWebhookKind | undefined {
+  const normalized = eventType.toLowerCase();
+
+  if (normalized.includes("settlement")) {
+    return "settlements";
+  }
+
+  if (normalized.includes("status")) {
+    return "status";
+  }
+
+  if (normalized.includes("order")) {
+    return "orders";
+  }
+
+  return undefined;
+}
+
 function hasDeliveryWebhookSignature(input: {
   channel: (typeof integrationChannels)[number];
+  webhookKind?: DeliveryWebhookKind;
   headers: Record<string, unknown>;
   rawBody: string;
 }) {
@@ -843,7 +870,11 @@ function hasDeliveryWebhookSignature(input: {
 
   const providedSignatureRaw =
     (typeof input.headers["x-delivery-signature"] === "string" ? input.headers["x-delivery-signature"] : undefined) ??
-    (typeof input.headers["x-signature"] === "string" ? input.headers["x-signature"] : undefined);
+    (typeof input.headers["x-signature"] === "string" ? input.headers["x-signature"] : undefined) ??
+    (typeof input.headers["x-uber-signature"] === "string" ? input.headers["x-uber-signature"] : undefined) ??
+    (typeof input.headers["x-uber-signature-sha256"] === "string"
+      ? input.headers["x-uber-signature-sha256"]
+      : undefined);
 
   if (!providedSignatureRaw || input.rawBody.length === 0) {
     return false;
@@ -857,6 +888,7 @@ function hasDeliveryWebhookSignature(input: {
 
   const isAuthorizationValid = hasDeliveryWebhookAuthorization({
     channel: input.channel,
+    webhookKind: input.webhookKind,
     headers: input.headers
   });
 
@@ -865,6 +897,7 @@ function hasDeliveryWebhookSignature(input: {
 
 function hasDeliveryWebhookAuthorization(input: {
   channel: (typeof integrationChannels)[number];
+  webhookKind?: DeliveryWebhookKind;
   headers: Record<string, unknown>;
 }) {
   const expectedTokens =
@@ -877,7 +910,29 @@ function hasDeliveryWebhookAuthorization(input: {
       : [];
 
   if (expectedTokens.length === 0) {
-    return true;
+    if (input.channel !== "ubereats") {
+      return true;
+    }
+
+    const expectedUberUuids = [
+      input.webhookKind ? uberWebhookDeveloperUuidByKind[input.webhookKind] : undefined,
+      process.env.UBEREATS_WEBHOOK_UUID
+    ].filter((value): value is string => typeof value === "string" && value.length > 0);
+
+    if (expectedUberUuids.length === 0) {
+      return true;
+    }
+
+    const providedUberDeveloperUuid =
+      (typeof input.headers["x-uber-developer-uuid"] === "string"
+        ? input.headers["x-uber-developer-uuid"]
+        : undefined) ??
+      (typeof input.headers["x-developer-uuid"] === "string" ? input.headers["x-developer-uuid"] : undefined);
+
+    return (
+      typeof providedUberDeveloperUuid === "string" &&
+      expectedUberUuids.includes(providedUberDeveloperUuid)
+    );
   }
 
   const providedToken =
@@ -1320,6 +1375,7 @@ app.post(
     const requiresSignature = Boolean(deliveryWebhookSecretByChannel[channel]);
     const signatureVerified = hasDeliveryWebhookSignature({
       channel,
+      webhookKind: "orders",
       headers: request.headers,
       rawBody
     });
@@ -1389,6 +1445,7 @@ app.post(
     const requiresSignature = Boolean(deliveryWebhookSecretByChannel[channel]);
     const signatureVerified = hasDeliveryWebhookSignature({
       channel,
+      webhookKind: "status",
       headers: request.headers,
       rawBody
     });
@@ -1460,6 +1517,7 @@ app.post(
     const requiresSignature = Boolean(deliveryWebhookSecretByChannel[channel]);
     const signatureVerified = hasDeliveryWebhookSignature({
       channel,
+      webhookKind: "settlements",
       headers: request.headers,
       rawBody
     });
@@ -3198,7 +3256,17 @@ app.post(
       return reply.status(400).send({ message: "Missing webhook payload" });
     }
 
-    if (!hasDeliveryWebhookSignature({ channel, headers: request.headers, rawBody: raw })) {
+    const parsedBody = deliveryWebhookBodySchema.safeParse(request.body);
+    if (!parsedBody.success) {
+      return reply.status(400).send({
+        message: "Invalid delivery webhook payload",
+        errors: parsedBody.error.flatten()
+      });
+    }
+
+    const webhookKind = inferWebhookKindFromEventType(parsedBody.data.eventType);
+
+    if (!hasDeliveryWebhookSignature({ channel, webhookKind, headers: request.headers, rawBody: raw })) {
       await sendOperationalAlert({
         type: "delivery_webhook_signature_invalid",
         severity: "critical",
@@ -3209,14 +3277,6 @@ app.post(
         }
       });
       return reply.status(401).send({ message: "Invalid signature" });
-    }
-
-    const parsedBody = deliveryWebhookBodySchema.safeParse(request.body);
-    if (!parsedBody.success) {
-      return reply.status(400).send({
-        message: "Invalid delivery webhook payload",
-        errors: parsedBody.error.flatten()
-      });
     }
 
     const payloadCorrelationId = extractCorrelationId(parsedBody.data.payload);
@@ -3609,9 +3669,25 @@ app.post(
             });
           };
 
-          if (!stripeCustomerId || !paymentIntentId) {
+          if (!paymentIntentId) {
             await writeCheckoutEvent("ignored", {
-              reason: "missing_customer_or_payment_intent"
+              reason: "missing_payment_intent"
+            });
+            return { received: true };
+          }
+
+          if (orderId) {
+            await prisma.order.updateMany({
+              where: { id: orderId },
+              data: { stripeIntentId: paymentIntentId }
+            });
+          }
+
+          if (!stripeCustomerId) {
+            await writeCheckoutEvent("processed", {
+              reason: "guest_checkout_no_customer",
+              linkedOrderId: orderId ?? null,
+              paymentIntentId
             });
             return { received: true };
           }
@@ -3721,9 +3797,38 @@ app.post(
 
       if (hasDatabaseUrl) {
         try {
-          const orderId = typeof paymentIntent.metadata.orderId === "string" && paymentIntent.metadata.orderId
+          const metadataOrderId = typeof paymentIntent.metadata.orderId === "string" && paymentIntent.metadata.orderId
             ? paymentIntent.metadata.orderId
             : undefined;
+          const orderByStripeIntent = await prisma.order.findFirst({
+            where: { stripeIntentId: paymentIntent.id },
+            select: { id: true }
+          });
+          let resolvedOrderId = metadataOrderId ?? orderByStripeIntent?.id;
+
+          if (!resolvedOrderId) {
+            try {
+              const sessions = await stripe.checkout.sessions.list({
+                payment_intent: paymentIntent.id,
+                limit: 1
+              });
+              const sessionOrderId =
+                typeof sessions.data[0]?.metadata?.orderId === "string" && sessions.data[0].metadata.orderId
+                  ? sessions.data[0].metadata.orderId
+                  : undefined;
+              if (sessionOrderId) {
+                resolvedOrderId = sessionOrderId;
+              }
+            } catch (lookupError) {
+              request.log.warn(
+                {
+                  paymentIntentId: paymentIntent.id,
+                  error: lookupError instanceof Error ? lookupError.message : "Unknown lookup error"
+                },
+                "Failed to resolve payment intent order via checkout session lookup"
+              );
+            }
+          }
           const bookingId =
             typeof paymentIntent.metadata.bookingId === "string" && paymentIntent.metadata.bookingId
               ? paymentIntent.metadata.bookingId
@@ -3739,7 +3844,8 @@ app.post(
               paymentIntentId: paymentIntent.id,
               amountCents: paymentIntent.amount,
               status: paymentIntent.status,
-              orderId,
+              orderId: resolvedOrderId,
+              metadataOrderId,
               bookingId,
               paymentType
             },
@@ -3755,7 +3861,7 @@ app.post(
                 amountCents: paymentIntent.amount,
                 currency: paymentIntent.currency,
                 status: mapStripeStatusToPaymentStatus(paymentIntent.status),
-                orderId,
+                orderId: resolvedOrderId,
                 bookingId,
                 paymentType
               },
@@ -3764,22 +3870,22 @@ app.post(
                 amountCents: paymentIntent.amount,
                 currency: paymentIntent.currency,
                 status: mapStripeStatusToPaymentStatus(paymentIntent.status),
-                orderId,
+                orderId: resolvedOrderId,
                 bookingId,
                 paymentType
               }
             });
 
-            if (orderId) {
+            if (resolvedOrderId) {
               await tx.order.update({
-                where: { id: orderId },
+                where: { id: resolvedOrderId },
                 data: { stripeIntentId: paymentIntent.id }
               });
             }
 
             await tx.integrationEvent.create({
               data: {
-                orderId,
+                orderId: resolvedOrderId,
                 channel: "stripe",
                 eventType: event.type,
                 status: "processed",
@@ -3791,6 +3897,19 @@ app.post(
               }
             });
           });
+
+          if (!resolvedOrderId && event.type === "payment_intent.succeeded") {
+            await sendOperationalAlert({
+              type: "payment_intent_missing_order_link",
+              severity: "warning",
+              message: "Successful payment intent has no linked order",
+              details: {
+                eventType: event.type,
+                paymentIntentId: paymentIntent.id,
+                metadataOrderId: metadataOrderId ?? null
+              }
+            });
+          }
         } catch (error) {
           request.log.error({ error }, "Failed to reconcile payment intent webhook");
           await sendOperationalAlert({

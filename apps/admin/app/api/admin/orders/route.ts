@@ -10,12 +10,18 @@ export async function GET(request: NextRequest) {
   const limit = Math.min(parseInt(searchParams.get("limit") ?? "20"), 100);
   const offset = parseInt(searchParams.get("offset") ?? "0");
 
-  const orders = await prisma.order.findMany({
-    include: { location: { select: { name: true } } },
-    orderBy: { createdAt: "desc" },
-    take: limit,
-    skip: offset
-  });
+  const [orders, total] = await Promise.all([
+    prisma.order.findMany({
+      include: {
+        location: { select: { name: true } },
+        payment: { select: { status: true } }
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      skip: offset
+    }),
+    prisma.order.count()
+  ]);
 
-  return NextResponse.json({ data: orders });
+  return NextResponse.json({ data: orders, total, limit, offset });
 }

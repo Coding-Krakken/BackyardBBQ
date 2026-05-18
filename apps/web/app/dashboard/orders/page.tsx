@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion, PanInfo } from "framer-motion";
 import { DashboardHeader, DashboardSidebar } from "../components/DashboardLayout";
 import { OrderStatusTimeline } from "../components/OrderStatusTimeline";
@@ -41,6 +41,9 @@ interface Order {
 export default function OrdersPage() {
   const { status: sessionStatus } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const guestSessionId = searchParams.get("session_id");
+  const isGuestTracking = sessionStatus === "unauthenticated" && Boolean(guestSessionId);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -50,16 +53,16 @@ export default function OrdersPage() {
   const [reorderMessage, setReorderMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
-    if (sessionStatus === "unauthenticated") {
+    if (sessionStatus === "unauthenticated" && !guestSessionId) {
       router.push("/auth/login");
     }
-  }, [sessionStatus, router]);
+  }, [sessionStatus, router, guestSessionId]);
 
   useEffect(() => {
-    if (sessionStatus === "authenticated") {
+    if (sessionStatus === "authenticated" || isGuestTracking) {
       fetchOrders();
     }
-  }, [sessionStatus, statusFilter]);
+  }, [sessionStatus, statusFilter, isGuestTracking]);
 
   const fetchOrders = async () => {
     try {
@@ -69,6 +72,9 @@ export default function OrdersPage() {
         params.set("status", statusFilter);
       }
       params.set("limit", "100");
+      if (guestSessionId) {
+        params.set("session_id", guestSessionId);
+      }
 
       const response = await fetch(`/api/customer/orders?${params.toString()}`);
       if (response.ok) {
@@ -106,6 +112,15 @@ export default function OrdersPage() {
       });
 
       const data = await response.json();
+
+      if (isGuestTracking) {
+        setReorderMessage({
+          type: "error",
+          text: "Sign in to reorder from your order history"
+        });
+        setTimeout(() => setReorderMessage(null), 5000);
+        return;
+      }
 
       if (response.ok) {
         setReorderMessage({
@@ -179,6 +194,11 @@ export default function OrdersPage() {
             <p style={{ color: "var(--warm-gray)", marginTop: "0.5rem" }}>
               Track all your orders, view details, and reorder your favorites.
             </p>
+            {isGuestTracking && (
+              <p style={{ color: "var(--ember-soft)", marginTop: "0.5rem" }}>
+                Guest tracking mode: showing your latest checkout order.
+              </p>
+            )}
           </section>
 
           {reorderMessage && (
@@ -256,6 +276,7 @@ export default function OrdersPage() {
                     onToggle={() => toggleOrderExpanded(order.id)}
                     onReorder={handleReorder}
                     isReordering={reordering === order.id}
+                    allowReorder={!isGuestTracking}
                   />
                 ))}
               </div>
@@ -276,6 +297,7 @@ export default function OrdersPage() {
                     onToggle={() => toggleOrderExpanded(order.id)}
                     onReorder={handleReorder}
                     isReordering={reordering === order.id}
+                    allowReorder={!isGuestTracking}
                   />
                 ))}
               </div>
@@ -300,13 +322,15 @@ function OrderCard({
   isExpanded,
   onToggle,
   onReorder,
-  isReordering
+  isReordering,
+  allowReorder
 }: {
   order: Order;
   isExpanded: boolean;
   onToggle: () => void;
   onReorder: (orderId: string) => void;
   isReordering: boolean;
+  allowReorder: boolean;
 }) {
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -349,7 +373,7 @@ function OrderCard({
 
   const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     // If dragged significantly to the right (> 100px), trigger reorder
-    if (info.offset.x > 100 && order.status === "completed") {
+    if (allowReorder && info.offset.x > 100 && order.status === "completed") {
       onReorder(order.id);
     }
     setDragX(0);
@@ -381,7 +405,7 @@ function OrderCard({
       <motion.article
         className="panel"
         drag="x"
-        dragConstraints={{ left: 0, right: order.status === "completed" ? 150 : 0 }}
+        dragConstraints={{ left: 0, right: allowReorder && order.status === "completed" ? 150 : 0 }}
         dragElastic={0.2}
         onDrag={(e, info) => setDragX(info.offset.x)}
         onDragEnd={handleDragEnd}
@@ -438,7 +462,7 @@ function OrderCard({
         <button className="btn btn-secondary" onClick={onToggle} style={{ flex: "1", minWidth: "120px" }}>
           {isExpanded ? "Hide Details" : "View Details"}
         </button>
-        {order.status === "completed" && (
+        {allowReorder && order.status === "completed" && (
           <button 
             className="btn btn-ghost" 
             style={{ flex: "1", minWidth: "120px" }}

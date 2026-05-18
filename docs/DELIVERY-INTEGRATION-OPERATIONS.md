@@ -16,6 +16,10 @@ Set provider credentials in the runtime environment for workers and API:
 - `UBEREATS_API_KEY`
 - `UBEREATS_API_SECRET`
 - `UBEREATS_WEBHOOK_SECRET`
+- `UBEREATS_ORDERS_WEBHOOK_UUID` (optional but recommended)
+- `UBEREATS_STATUS_WEBHOOK_UUID` (optional but recommended)
+- `UBEREATS_SETTLEMENTS_WEBHOOK_UUID` (optional but recommended)
+- `UBEREATS_WEBHOOK_UUID` (optional fallback UUID accepted across webhook types)
 - `UBEREATS_MERCHANT_ID`
 - `UBEREATS_STORE_ID`
 - `UBEREATS_ENVIRONMENT` (`sandbox` or `production`)
@@ -32,6 +36,12 @@ Delivery webhook endpoints:
 - `POST /api/webhooks/delivery/:channel/orders`
 - `POST /api/webhooks/delivery/:channel/status`
 - `POST /api/webhooks/delivery/:channel/settlements`
+
+Uber webhook auth expectations:
+
+- Signature headers accepted: `x-delivery-signature`, `x-signature`, `x-uber-signature`, `x-uber-signature-sha256`
+- Developer UUID headers accepted: `x-uber-developer-uuid`, `x-developer-uuid`
+- When UUID env vars are configured, UUID values are validated per Uber webhook endpoint type (`orders`, `status`, `settlements`)
 
 Worker webhook processing behavior:
 

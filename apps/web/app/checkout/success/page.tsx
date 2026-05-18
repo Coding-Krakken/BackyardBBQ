@@ -33,6 +33,7 @@ function formatMoney(amountCents: number, currency = "usd") {
   }).format(amountCents / 100);
 }
 
+
 function CheckoutSuccessContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -41,6 +42,7 @@ function CheckoutSuccessContent() {
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummary | null>(null);
   const [estimatedWindow, setEstimatedWindow] = useState<string | null>(null);
+  const [orderId, setOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!sessionId) {
@@ -49,6 +51,7 @@ function CheckoutSuccessContent() {
     }
 
     // Verify the session and clear cart
+
     const verifySession = async () => {
       try {
         const response = await fetch(
@@ -62,17 +65,19 @@ function CheckoutSuccessContent() {
             amountSubtotal?: number;
             amountTax?: number;
             amountTotal?: number;
+            orderId?: string;
           };
           if (data.status === "complete") {
             // Clear the cart
             dispatch({ type: "CLEAR_CART" });
-            trackEvent(AnalyticsEvents.orderConfirmed, { sessionId });
+            trackEvent(AnalyticsEvents.orderConfirmed, { sessionId, orderId: data.orderId });
             setPaymentSummary({
               currency: data.currency,
               amountSubtotal: data.amountSubtotal,
               amountTax: data.amountTax,
               amountTotal: data.amountTotal,
             });
+            if (data.orderId) setOrderId(data.orderId);
 
             const windowStart = new Date(Date.now() + 25 * 60 * 1000);
             const windowEnd = new Date(Date.now() + 40 * 60 * 1000);
@@ -183,8 +188,16 @@ function CheckoutSuccessContent() {
                   </div>
                 </div>
               ) : null}
+              {orderId && (
+                <div style={{ marginTop: "1rem", fontSize: "0.95em", color: "#aaa" }}>
+                  <strong>Order ID:</strong> {orderId}
+                </div>
+              )}
               <div className="cta-row" style={{ marginTop: "2rem" }}>
-                <Link href="/dashboard/orders" className="btn btn-primary">
+                <Link
+                  href={sessionId ? `/dashboard/orders?session_id=${encodeURIComponent(sessionId)}` : "/dashboard/orders"}
+                  className="btn btn-primary"
+                >
                   Track Order
                 </Link>
                 <Link href="/menu" className="btn btn-secondary">

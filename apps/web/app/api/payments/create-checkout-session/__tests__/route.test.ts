@@ -46,6 +46,9 @@ describe("POST /api/payments/create-checkout-session", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     clearRateLimitStore();
+    jest.spyOn(prisma.location, "findFirst").mockResolvedValue({ id: "loc_test" } as never);
+    jest.spyOn(prisma.order, "create").mockResolvedValue({ id: "ord_created_test" } as never);
+    jest.spyOn(prisma.order, "delete").mockResolvedValue({ id: "ord_created_test" } as never);
   });
 
   afterAll(() => {
@@ -205,7 +208,40 @@ describe("POST /api/payments/create-checkout-session", () => {
         ]),
         metadata: expect.objectContaining({
           source: "web-checkout",
-          orderId: "ord_2",
+          orderId: "ord_created_test",
+        }),
+      }),
+      undefined
+    );
+  });
+
+  it("uses server-created orderId even when metadata includes orderId", async () => {
+    (getServerSession as jest.Mock).mockResolvedValue(null);
+    mockCheckoutSessionsCreate.mockResolvedValue({
+      client_secret: "seti_client_secret_order_id",
+      id: "cs_test_order_id",
+    });
+
+    const request = new NextRequest("http://localhost/api/payments/create-checkout-session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        amountCents: 1200,
+        currency: "usd",
+        metadata: { subtotalCents: 1200, orderId: "client_supplied_order" },
+      }),
+    });
+
+    const response = await POST(request);
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.orderId).toBe("ord_created_test");
+    expect(mockCheckoutSessionsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ orderId: "ord_created_test" }),
+        payment_intent_data: expect.objectContaining({
+          metadata: expect.objectContaining({ orderId: "ord_created_test" }),
         }),
       }),
       undefined

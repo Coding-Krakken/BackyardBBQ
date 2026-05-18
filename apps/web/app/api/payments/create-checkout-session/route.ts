@@ -48,6 +48,7 @@ function getRequestIp(request: NextRequest) {
 const requestSchema = z.object({
   amountCents: z.number().int().min(50),
   currency: z.string().default("usd"),
+  locationId: z.string().trim().min(1).optional(),
   metadata: z.record(z.union([z.string(), z.number(), z.boolean()])).default({}),
 });
 
@@ -94,7 +95,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { amountCents, currency, metadata } = parsedBody.data;
+    const { amountCents, currency, locationId, metadata } = parsedBody.data;
 
     const parsedMetadata = metadataSchema.safeParse(metadata);
     if (!parsedMetadata.success) {
@@ -111,6 +112,8 @@ export async function POST(request: NextRequest) {
     const tipCents = parsedMetadata.data.tipCents ?? 0;
     const clientTaxCents = parsedMetadata.data.clientTaxCents;
     const metadataIdempotencyKey = parsedMetadata.data.idempotencyKey;
+    const metadataLocationId = typeof metadata.locationId === "string" ? metadata.locationId : undefined;
+    const effectiveLocationId = locationId ?? metadataLocationId;
     const subtotalLineItemCents =
       typeof subtotalCents === "number"
         ? subtotalCents
@@ -202,80 +205,121 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const resolvedLocation = effectiveLocationId
+      ? await prisma.location.findFirst({ where: { id: effectiveLocationId, isActive: true }, select: { id: true } })
+      : await prisma.location.findFirst({ where: { isActive: true }, select: { id: true } });
+
+    if (!resolvedLocation) {
+      return NextResponse.json(
+        { error: "No active location available for checkout" },
+        { status: 503 }
+      );
+    }
+
     // Compute tax server-side (Syracuse, NY: 8% on prepared food)
     const taxCents = Math.round(subtotalLineItemCents * SERVER_TAX_RATE);
 
-    // Create Checkout Session with ui_mode: "elements" for PaymentElement / ExpressCheckoutElement
-    const checkoutSession = await stripe.checkout.sessions.create(
-      {
-        ui_mode: "elements",
-        mode: "payment",
-        customer: stripeCustomerId,
-        line_items: [
-          {
-            price_data: {
-              currency,
-              unit_amount: subtotalLineItemCents,
-              product_data: {
-                name: "Backyard BBQ Order",
-                description: "Premium BBQ order from Backyard BBQ King",
-              },
-            },
-            quantity: 1,
-          },
-          ...(tipCents > 0
-            ? [
-                {
-                  price_data: {
-                    currency,
-                    unit_amount: tipCents,
-                    product_data: {
-                      name: "Tip",
-                      description: "Customer gratuity",
-                    },
-                  },
-                  quantity: 1,
-                },
-              ]
-            : []),
-          ...(taxCents > 0
-            ? [
-                {
-                  price_data: {
-                    currency,
-                    unit_amount: taxCents,
-                    product_data: {
-                      name: "Sales Tax",
-                      description: `NY State + Onondaga County (${(SERVER_TAX_RATE * 100).toFixed(0)}%)`,
-                    },
-                  },
-                  quantity: 1,
-                },
-              ]
-            : []),
-        ],
-        payment_intent_data: {
-          setup_future_usage: stripeCustomerId ? "off_session" : undefined,
-        },
-        // Add metadata for searchability and reporting
-        metadata: {
-          source: "web-checkout",
-          serverTaxRate: String(SERVER_TAX_RATE),
-          serverEstimatedTaxCents:
-            typeof subtotalCents === "number"
-              ? String(Math.round(subtotalCents * SERVER_TAX_RATE))
-              : "0",
-          ...stripeMetadata,
-        },
-        // Return URL for after payment confirmation
-        return_url: `${process.env.NEXT_PUBLIC_SITE_URL}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+    // Create Order in DB before Stripe session
+    const order = await prisma.order.create({
+      data: {
+        customerId: authSession?.user?.id ?? null,
+        locationId: resolvedLocation.id,
+        source: "direct",
+        status: "pending",
+        subtotalCents: subtotalLineItemCents,
+        taxCents,
+        tipCents,
+        totalCents: subtotalLineItemCents + taxCents + tipCents,
+        currency,
       },
-      stripeIdempotencyKey ? { idempotencyKey: stripeIdempotencyKey } : undefined
-    );
+    });
+
+    let checkoutSession: { client_secret: string | null; id: string };
+    try {
+      // Create Checkout Session with ui_mode: "elements" for PaymentElement / ExpressCheckoutElement
+      checkoutSession = await stripe.checkout.sessions.create(
+        {
+          ui_mode: "elements",
+          mode: "payment",
+          customer: stripeCustomerId,
+          line_items: [
+            {
+              price_data: {
+                currency,
+                unit_amount: subtotalLineItemCents,
+                product_data: {
+                  name: "Backyard BBQ Order",
+                  description: "Premium BBQ order from Backyard BBQ King",
+                },
+              },
+              quantity: 1,
+            },
+            ...(tipCents > 0
+              ? [
+                  {
+                    price_data: {
+                      currency,
+                      unit_amount: tipCents,
+                      product_data: {
+                        name: "Tip",
+                        description: "Customer gratuity",
+                      },
+                    },
+                    quantity: 1,
+                  },
+                ]
+              : []),
+            ...(taxCents > 0
+              ? [
+                  {
+                    price_data: {
+                      currency,
+                      unit_amount: taxCents,
+                      product_data: {
+                        name: "Sales Tax",
+                        description: `NY State + Onondaga County (${(SERVER_TAX_RATE * 100).toFixed(0)}%)`,
+                      },
+                    },
+                    quantity: 1,
+                  },
+                ]
+              : []),
+          ],
+          payment_intent_data: {
+            setup_future_usage: stripeCustomerId ? "off_session" : undefined,
+            metadata: {
+              ...stripeMetadata,
+              orderId: order.id,
+              source: "web-checkout",
+              locationId: resolvedLocation.id,
+            },
+          },
+          // Add metadata for searchability and reporting
+          metadata: {
+            ...stripeMetadata,
+            source: "web-checkout",
+            orderId: order.id,
+            locationId: resolvedLocation.id,
+            serverTaxRate: String(SERVER_TAX_RATE),
+            serverEstimatedTaxCents:
+              typeof subtotalCents === "number"
+                ? String(Math.round(subtotalCents * SERVER_TAX_RATE))
+                : "0",
+          },
+          // Return URL for after payment confirmation
+          return_url: `${process.env.NEXT_PUBLIC_SITE_URL}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+        },
+        stripeIdempotencyKey ? { idempotencyKey: stripeIdempotencyKey } : undefined
+      );
+    } catch (stripeError) {
+      await prisma.order.delete({ where: { id: order.id } }).catch(() => undefined);
+      throw stripeError;
+    }
 
     return NextResponse.json({
       clientSecret: checkoutSession.client_secret,
       sessionId: checkoutSession.id,
+      orderId: order.id,
     });
   } catch (error) {
     console.error("Error creating checkout session:", error);
