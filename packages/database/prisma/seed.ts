@@ -143,6 +143,9 @@ async function main() {
       }
     ]
   });
+
+  // Keep full menu data aligned with the primary seed path.
+  await import("./seed-menu");
 }
 
 main()

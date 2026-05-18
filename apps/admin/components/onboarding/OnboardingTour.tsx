@@ -153,9 +153,9 @@ export function OnboardingTour() {
         prevBtnText: '← Back',
         doneBtnText: '🎉 Complete Tour',
         animate: true,
-        overlayColor: 'rgba(0, 0, 0, 0.75)',
-        stagePadding: 8,
-        stageRadius: 10,
+        overlayColor: 'rgba(4, 12, 20, 0.56)',
+        stagePadding: 14,
+        stageRadius: 14,
         popoverClass: 'onboarding-popover',
         steps: pageSteps,
         onDestroyStarted: () => {
