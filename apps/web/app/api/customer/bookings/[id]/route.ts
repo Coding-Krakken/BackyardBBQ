@@ -55,8 +55,8 @@ export async function GET(
     });
 
     const depositPaidCents = successfulPayments
-      .filter((payment) => payment.paymentType === "deposit")
-      .reduce((sum, payment) => sum + payment.amountCents, 0);
+      .filter((payment: { paymentType: string | null }) => payment.paymentType === "deposit")
+      .reduce((sum: number, payment: { amountCents: number }) => sum + payment.amountCents, 0);
 
     return NextResponse.json({
       booking,

@@ -64,8 +64,13 @@ export async function POST(request: NextRequest) {
       }
     });
 
+    const typedMenuItems = menuItems as Array<{
+      name: string;
+      basePriceCents: number;
+    }>;
+
     const menuItemMap = new Map(
-      menuItems.map((item) => [item.name.toLowerCase(), item] as const)
+      typedMenuItems.map((item) => [item.name.toLowerCase(), item] as const)
     );
 
     // Validate and prepare reorder items

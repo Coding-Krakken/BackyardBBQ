@@ -2,7 +2,6 @@ import { prisma } from '../../lib/prisma';
 import { SiteNavbar } from '../components/SiteNavbar';
 import { SiteFooter } from '../components/HomeSections';
 import { MenuClient } from './MenuClient';
-import { CATEGORIES } from '../config/constants';
 import styles from './menu.module.css';
 
 export const metadata = {
@@ -14,39 +13,70 @@ export const metadata = {
 export const revalidate = 60;
 
 export default async function MenuPage() {
-  // Fetch all available menu items from database
-  const menuItems = await prisma.menuItem.findMany({
-    where: {
-      isAvailable: true
-    },
-    orderBy: [
-      { category: 'asc' },
-      { sortOrder: 'asc' },
-      { name: 'asc' }
-    ],
-    select: {
-      id: true,
-      name: true,
-      description: true,
-      basePriceCents: true,
-      imageUrl: true,
-      category: true,
-      sortOrder: true,
-      customizations: true,
-      location: {
-        select: {
-          name: true
+  type MenuListItem = {
+    id: string;
+    name: string;
+    description: string;
+    basePriceCents: number;
+    imageUrl: string | null;
+    category: string;
+    sortOrder: number;
+    customizations: unknown;
+    location: { name: string };
+  };
+
+  type RawMenuListItem = Omit<MenuListItem, "location"> & {
+    location: { name: string } | null;
+  };
+
+  let menuItems: MenuListItem[] = [];
+
+  try {
+    const rows = (await prisma.menuItem.findMany({
+      where: {
+        isAvailable: true
+      },
+      orderBy: [
+        { category: 'asc' },
+        { sortOrder: 'asc' },
+        { name: 'asc' }
+      ],
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        basePriceCents: true,
+        imageUrl: true,
+        category: true,
+        sortOrder: true,
+        customizations: true,
+        location: {
+          select: {
+            name: true
+          }
         }
       }
-    }
-  });
+    })) as RawMenuListItem[];
 
-  // Group items by category
-  const itemsByCategory = CATEGORIES.map(cat => ({
-    category: cat.value,
-    label: cat.label,
-    items: menuItems.filter((item: any) => item.category === cat.value)
-  })).filter(group => group.items.length > 0);
+    menuItems = rows.map((item) => ({
+      ...item,
+      location: item.location ?? { name: "Backyard BBQ King" }
+    }));
+  } catch {
+    menuItems = [];
+  }
+
+  const uniqueCategories = Array.from(new Set(menuItems.map((item) => String(item.category))));
+
+  // Group items by existing database category for visual sectioning.
+  const itemsByCategory = uniqueCategories.map((category) => ({
+    category,
+    label: String(category)
+      .split('-')
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' '),
+    items: menuItems.filter((item) => item.category === category)
+  }));
 
   return (
     <main id="main-content">

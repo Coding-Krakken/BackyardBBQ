@@ -1,6 +1,6 @@
 import { galleryImages, menuImages } from "./images";
 
-const orderOnlineUrl = process.env.NEXT_PUBLIC_ORDER_ONLINE_URL ?? "/checkout";
+const orderOnlineUrl = process.env.NEXT_PUBLIC_ORDER_ONLINE_URL ?? "/menu";
 const doordashUrl = process.env.NEXT_PUBLIC_DOORDASH_URL ?? "https://www.doordash.com";
 const uberEatsUrl =
   process.env.NEXT_PUBLIC_UBER_EATS_URL ??
@@ -34,12 +34,16 @@ export const heroContent = {
   description:
     "Where we serve mouthwatering smoked meats, premium sides, and warm hospitality in a cinematic atmosphere.",
   primaryCta: {
-    label: "Reserve Now",
-    href: cateringInquiryUrl
-  },
-  secondaryCta: {
     label: "Order Online",
     href: orderOnlineUrl
+  },
+  secondaryCta: {
+    label: "Book Catering",
+    href: cateringInquiryUrl
+  },
+  tertiaryCta: {
+    label: "Reserve A Table",
+    href: "/reserve"
   }
 };
 

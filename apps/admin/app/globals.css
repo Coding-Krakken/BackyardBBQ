@@ -1430,6 +1430,748 @@ input[type="checkbox"] {
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   Onboarding Tour — driver.js Theme Override
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Driver.js Core Overrides ─────────────────────────────── */
+.driver-popover {
+  background: var(--admin-card-bg) !important;
+  backdrop-filter: blur(24px) saturate(170%) !important;
+  border: 1px solid var(--line-strong) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5), var(--shadow-glow-ember) !important;
+  color: var(--admin-text) !important;
+  max-width: 440px !important;
+  padding: 0 !important;
+  font-family: var(--font-body) !important;
+}
+
+.driver-popover.onboarding-popover {
+  max-width: 480px !important;
+}
+
+.driver-popover-title {
+  font-family: var(--font-display) !important;
+  color: var(--cream) !important;
+  font-size: 1.2rem !important;
+  font-weight: 600 !important;
+  padding: 1.25rem 1.5rem 0 !important;
+  line-height: 1.3 !important;
+}
+
+.driver-popover-description {
+  color: var(--warm-gray) !important;
+  font-size: 0.85rem !important;
+  line-height: 1.65 !important;
+  padding: 0.5rem 1.5rem 1rem !important;
+}
+
+.driver-popover-description p {
+  margin-bottom: 0.6rem;
+  color: var(--warm-gray);
+}
+
+.driver-popover-description strong {
+  color: var(--cream);
+  font-weight: 600;
+}
+
+.driver-popover-description ul {
+  list-style: none;
+  padding-left: 0;
+  margin: 0.5rem 0;
+}
+
+.driver-popover-description ul li {
+  padding: 0.2rem 0 0.2rem 1.2rem;
+  position: relative;
+  color: var(--warm-gray);
+}
+
+.driver-popover-description ul li::before {
+  content: '›';
+  position: absolute;
+  left: 0;
+  color: var(--ember-soft);
+  font-weight: 600;
+}
+
+.driver-popover-description code {
+  background: rgba(217, 109, 49, 0.15);
+  color: var(--ember-soft);
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.driver-popover-description table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5rem 0;
+}
+
+.driver-popover-description table td {
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--warm-gray);
+  font-size: 0.82rem;
+}
+
+.driver-popover-description table td:first-child {
+  color: var(--cream);
+  white-space: nowrap;
+  width: 1%;
+}
+
+/* Navigation buttons */
+.driver-popover-navigation-btns {
+  padding: 0 1.5rem 1.25rem !important;
+  gap: 0.5rem !important;
+  display: flex !important;
+}
+
+.driver-popover-prev-btn,
+.driver-popover-next-btn {
+  font-family: var(--font-body) !important;
+  font-weight: 600 !important;
+  font-size: 0.82rem !important;
+  border-radius: var(--radius-pill) !important;
+  padding: 0.45rem 1rem !important;
+  cursor: pointer !important;
+  transition: all var(--duration-normal) var(--ease-spring) !important;
+  border: none !important;
+  text-shadow: none !important;
+}
+
+.driver-popover-next-btn {
+  background: linear-gradient(135deg, #f3b27a 0%, #da6f34 100%) !important;
+  color: var(--bg-charcoal) !important;
+  box-shadow: 0 0 12px rgba(217, 109, 49, 0.3) !important;
+  flex: 1 !important;
+}
+
+.driver-popover-next-btn:hover {
+  box-shadow: 0 0 20px rgba(217, 109, 49, 0.45) !important;
+  transform: translateY(-1px);
+}
+
+.driver-popover-prev-btn {
+  background: var(--bg-smoke) !important;
+  color: var(--cream) !important;
+  border: 1px solid var(--line) !important;
+}
+
+.driver-popover-prev-btn:hover {
+  background: var(--bg-surface-hover) !important;
+  border-color: var(--line-strong) !important;
+}
+
+/* Close button */
+.driver-popover-close-btn {
+  color: var(--warm-gray) !important;
+  font-size: 1.2rem !important;
+  width: 28px !important;
+  height: 28px !important;
+  top: 12px !important;
+  right: 12px !important;
+  transition: color var(--duration-fast) !important;
+}
+
+.driver-popover-close-btn:hover {
+  color: var(--cream) !important;
+}
+
+/* Progress dots */
+.driver-popover-progress-text {
+  display: none !important;
+}
+
+/* Overlay */
+.driver-overlay {
+  background: rgba(4, 12, 20, 0.8) !important;
+}
+
+/* Arrow */
+.driver-popover-arrow {
+  border-color: var(--line-strong) !important;
+}
+
+.driver-popover-arrow-side-left::before,
+.driver-popover-arrow-side-right::before,
+.driver-popover-arrow-side-top::before,
+.driver-popover-arrow-side-bottom::before {
+  background: var(--admin-card-bg) !important;
+  border: 1px solid var(--line-strong) !important;
+}
+
+/* ── Custom Popover Header (progress + group) ─────────────── */
+.onboarding-popover-header {
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.onboarding-popover-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.4rem;
+}
+
+.onboarding-popover-group {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--ember-soft);
+  letter-spacing: 0.02em;
+}
+
+.onboarding-popover-counter {
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.onboarding-popover-progress {
+  height: 3px;
+  background: var(--line-soft);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.onboarding-popover-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--ember) 0%, var(--ember-soft) 100%);
+  border-radius: 2px;
+  transition: width 0.4s var(--ease-out);
+}
+
+/* ── Feature Status Badges ────────────────────────────────── */
+.onboarding-feature-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--radius-pill);
+  letter-spacing: 0.02em;
+}
+
+.onboarding-badge-complete {
+  background: var(--success-dim);
+  color: var(--success);
+}
+
+.onboarding-badge-progress {
+  background: var(--warning-dim);
+  color: var(--warning);
+}
+
+.onboarding-badge-planned {
+  background: var(--info-dim);
+  color: var(--info);
+}
+
+.onboarding-badge-icon {
+  font-size: 0.8rem;
+}
+
+.onboarding-feature-badge.badge-sm {
+  font-size: 0.66rem;
+  padding: 0.12rem 0.45rem;
+}
+
+.onboarding-eta {
+  font-size: 0.68rem;
+  color: var(--muted);
+  font-weight: 500;
+  margin-left: 0.3rem;
+}
+
+/* ── Feature Detail Block (inside popovers) ───────────────── */
+.onboarding-feature-detail {
+  margin-top: 0.5rem;
+}
+
+.onboarding-feature-header {
+  margin-bottom: 0.5rem;
+}
+
+.onboarding-feature-context {
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-style: italic;
+  margin: 0.3rem 0 0.5rem;
+}
+
+.onboarding-checklist {
+  margin: 0.5rem 0;
+  padding: 0.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--radius-xs);
+}
+
+.onboarding-checklist-title {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--cream);
+  margin-bottom: 0.3rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.onboarding-checklist-item {
+  font-size: 0.78rem;
+  padding: 0.15rem 0;
+  padding-left: 0.3rem;
+}
+
+.onboarding-checklist-item.done {
+  color: var(--success);
+}
+
+.onboarding-checklist-item.pending {
+  color: var(--warning);
+}
+
+.onboarding-checklist-item.planned {
+  color: var(--info);
+}
+
+/* ── Order Flow Diagram ───────────────────────────────────── */
+.onboarding-flow {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0.6rem 0;
+  flex-wrap: wrap;
+}
+
+.onboarding-flow-step {
+  background: var(--bg-smoke);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  padding: 0.2rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--cream);
+  white-space: nowrap;
+}
+
+.onboarding-flow-arrow {
+  color: var(--ember-soft);
+  font-size: 0.8rem;
+}
+
+/* ── Platform Cards ───────────────────────────────────────── */
+.onboarding-platforms {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.6rem 0;
+}
+
+.onboarding-platform {
+  background: var(--bg-smoke);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  padding: 0.35rem 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--cream);
+}
+
+/* ── Role Table ───────────────────────────────────────────── */
+.onboarding-role-table {
+  width: 100%;
+  margin: 0.5rem 0;
+}
+
+.onboarding-role-table td {
+  padding: 0.3rem 0.5rem !important;
+  font-size: 0.8rem !important;
+}
+
+/* ── Summary Block ────────────────────────────────────────── */
+.onboarding-summary {
+  background: var(--bg-smoke);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.onboarding-summary ul {
+  margin: 0.3rem 0 0 !important;
+}
+
+/* ── Hint Text ────────────────────────────────────────────── */
+.onboarding-hint {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-style: italic;
+  margin-top: 0.5rem;
+}
+
+/* ── Roadmap (inside popover) ─────────────────────────────── */
+.onboarding-roadmap {
+  max-height: 360px;
+  overflow-y: auto;
+  padding-right: 0.3rem;
+}
+
+.onboarding-roadmap-section {
+  margin-bottom: 0.75rem;
+}
+
+.onboarding-roadmap-header {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.3rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.onboarding-roadmap-header.complete { color: var(--success); }
+.onboarding-roadmap-header.progress { color: var(--warning); }
+.onboarding-roadmap-header.planned { color: var(--info); }
+
+.onboarding-roadmap-item {
+  padding: 0.3rem 0 0.3rem 1rem;
+  border-left: 2px solid var(--line-soft);
+  margin-left: 0.4rem;
+  font-size: 0.78rem;
+}
+
+.onboarding-roadmap-item strong {
+  display: block;
+  color: var(--cream);
+  font-size: 0.8rem;
+}
+
+.onboarding-roadmap-item span {
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.onboarding-roadmap-item.complete { border-left-color: var(--success); }
+.onboarding-roadmap-item.progress { border-left-color: var(--warning); }
+.onboarding-roadmap-item.planned { border-left-color: var(--info); }
+
+/* ── Roadmap Container (standalone) ───────────────────────── */
+.onboarding-roadmap-container {
+  padding: 1rem;
+}
+
+.onboarding-roadmap-title {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  color: var(--cream);
+  margin-bottom: 0.3rem;
+}
+
+.onboarding-roadmap-subtitle {
+  color: var(--warm-gray);
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.onboarding-roadmap-group {
+  margin-bottom: 1rem;
+}
+
+.onboarding-roadmap-group-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.onboarding-roadmap-count {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.onboarding-roadmap-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.onboarding-roadmap-card {
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-xs);
+  border-left: 3px solid;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.onboarding-roadmap-card strong {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--cream);
+}
+
+.onboarding-roadmap-card span {
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.onboarding-roadmap-card.complete { border-left-color: var(--success); }
+.onboarding-roadmap-card.progress { border-left-color: var(--warning); }
+.onboarding-roadmap-card.planned { border-left-color: var(--info); }
+
+/* ═══════════════════════════════════════════════════════════════
+   Welcome Modal
+   ═══════════════════════════════════════════════════════════════ */
+.onboarding-welcome-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 12, 20, 0.88);
+  backdrop-filter: blur(8px);
+  padding: 1rem;
+}
+
+.onboarding-welcome-modal {
+  background: var(--admin-card-bg);
+  backdrop-filter: blur(28px) saturate(180%);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6), var(--shadow-glow-ember);
+  max-width: 600px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 2rem;
+}
+
+.onboarding-welcome-header {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.onboarding-welcome-flame {
+  font-size: 3rem;
+  display: inline-block;
+  margin-bottom: 0.5rem;
+}
+
+.onboarding-welcome-title {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  color: var(--cream);
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.onboarding-welcome-subtitle {
+  color: var(--warm-gray);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+/* Section grid */
+.onboarding-welcome-sections {
+  margin-bottom: 1.25rem;
+}
+
+.onboarding-welcome-sections-title {
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--warm-gray);
+  margin-bottom: 0.6rem;
+}
+
+.onboarding-welcome-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.5rem;
+}
+
+.onboarding-welcome-section-card {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.65rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-xs);
+  transition: border-color var(--duration-fast);
+}
+
+.onboarding-welcome-section-card:hover {
+  border-color: var(--line);
+}
+
+.onboarding-welcome-section-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.onboarding-welcome-section-label {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--cream);
+  flex: 1;
+  line-height: 1.2;
+}
+
+.onboarding-welcome-section-count {
+  font-size: 0.66rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Estimate */
+.onboarding-welcome-estimate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 1.25rem;
+}
+
+.onboarding-welcome-estimate-icon {
+  font-size: 1rem;
+}
+
+/* Actions */
+.onboarding-welcome-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.onboarding-welcome-start {
+  width: 100%;
+  font-size: 0.95rem !important;
+  padding: 0.7rem 1.5rem !important;
+}
+
+.onboarding-welcome-skip,
+.onboarding-welcome-explore {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Completion Celebration
+   ═══════════════════════════════════════════════════════════════ */
+.onboarding-celebration-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 12, 20, 0.85);
+  backdrop-filter: blur(6px);
+}
+
+.onboarding-celebration-confetti {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.onboarding-celebration-card {
+  position: relative;
+  z-index: 1;
+  background: var(--admin-card-bg);
+  backdrop-filter: blur(28px) saturate(180%);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6), 0 0 40px rgba(217, 109, 49, 0.2);
+  max-width: 420px;
+  width: 90%;
+  padding: 2.5rem 2rem;
+  text-align: center;
+}
+
+.onboarding-celebration-emoji {
+  font-size: 3.5rem;
+  display: inline-block;
+  margin-bottom: 0.75rem;
+}
+
+.onboarding-celebration-title {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  color: var(--cream);
+  margin-bottom: 0.5rem;
+}
+
+.onboarding-celebration-text {
+  color: var(--warm-gray);
+  font-size: 0.88rem;
+  line-height: 1.55;
+  margin-bottom: 1.25rem;
+}
+
+.onboarding-celebration-actions {
+  margin-bottom: 0.75rem;
+}
+
+.onboarding-celebration-hint {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Restart Tour Button (sidebar)
+   ═══════════════════════════════════════════════════════════════ */
+.onboarding-restart-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.45rem 0.75rem;
+  margin-top: 0.4rem;
+  background: transparent;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-pill);
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 0.74rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--duration-normal) var(--ease-out);
+}
+
+.onboarding-restart-btn:hover {
+  color: var(--ember-soft);
+  border-color: var(--ember-dim);
+  background: rgba(217, 109, 49, 0.06);
+}
+
+.onboarding-restart-icon {
+  font-size: 0.9rem;
+  transition: transform var(--duration-normal) var(--ease-spring);
+}
+
+.onboarding-restart-btn:hover .onboarding-restart-icon {
+  transform: rotate(-180deg);
+}
+
+.sidebar.collapsed .onboarding-restart-label {
+  display: none;
+}
+
+.sidebar.collapsed .onboarding-restart-btn {
+  justify-content: center;
+  padding: 0.45rem;
+}
+
 /* ── Print ────────────────────────────────────────────────── */
 @media print {
   .sidebar, .topbar, .sidebar-overlay { display: none !important; }
@@ -1437,4 +2179,8 @@ input[type="checkbox"] {
   .admin-content { padding: 0 !important; }
   body { background: white; color: black; }
   .panel, .card { background: white; border: 1px solid #ccc; box-shadow: none; backdrop-filter: none; }
+  .onboarding-welcome-overlay,
+  .onboarding-celebration-overlay,
+  .driver-popover,
+  .driver-overlay { display: none !important; }
 }

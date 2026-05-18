@@ -8,6 +8,7 @@ import { SiteNavbar } from "../../components/SiteNavbar";
 import { SiteFooter } from "../../components/HomeSections";
 import { siteImages } from "../../config/images";
 import { useCart } from "../../components/cart/CartContext";
+import { AnalyticsEvents, trackEvent } from "../../lib/analytics";
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,13 @@ interface PaymentSummary {
   amountSubtotal?: number | null;
   amountTax?: number | null;
   amountTotal?: number | null;
+}
+
+function formatClockTime(date: Date) {
+  return date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit"
+  });
 }
 
 function formatMoney(amountCents: number, currency = "usd") {
@@ -32,6 +40,7 @@ function CheckoutSuccessContent() {
   const { dispatch } = useCart();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummary | null>(null);
+  const [estimatedWindow, setEstimatedWindow] = useState<string | null>(null);
 
   useEffect(() => {
     if (!sessionId) {
@@ -57,12 +66,17 @@ function CheckoutSuccessContent() {
           if (data.status === "complete") {
             // Clear the cart
             dispatch({ type: "CLEAR_CART" });
+            trackEvent(AnalyticsEvents.orderConfirmed, { sessionId });
             setPaymentSummary({
               currency: data.currency,
               amountSubtotal: data.amountSubtotal,
               amountTax: data.amountTax,
               amountTotal: data.amountTotal,
             });
+
+            const windowStart = new Date(Date.now() + 25 * 60 * 1000);
+            const windowEnd = new Date(Date.now() + 40 * 60 * 1000);
+            setEstimatedWindow(`${formatClockTime(windowStart)} - ${formatClockTime(windowEnd)}`);
             setStatus("success");
           } else {
             setStatus("error");
@@ -119,6 +133,11 @@ function CheckoutSuccessContent() {
                 You'll receive an email confirmation shortly with your order details and estimated
                 preparation time. Our pit masters are already getting to work on your order!
               </p>
+              {estimatedWindow ? (
+                <p style={{ marginTop: "0.75rem", fontWeight: 600 }}>
+                  Estimated ready window: {estimatedWindow}
+                </p>
+              ) : null}
               {paymentSummary ? (
                 <div
                   style={{
@@ -165,11 +184,11 @@ function CheckoutSuccessContent() {
                 </div>
               ) : null}
               <div className="cta-row" style={{ marginTop: "2rem" }}>
-                <Link href="/menu" className="btn btn-primary">
-                  Order More BBQ
+                <Link href="/dashboard/orders" className="btn btn-primary">
+                  Track Order
                 </Link>
-                <Link href="/" className="btn btn-secondary">
-                  Back to Home
+                <Link href="/menu" className="btn btn-secondary">
+                  Order Again
                 </Link>
               </div>
             </>

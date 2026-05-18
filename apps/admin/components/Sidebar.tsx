@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSidebar } from '@/app/dashboard/DashboardShell';
+import { RestartTourButton } from '@/components/onboarding/RestartTourButton';
 
 interface NavItem {
   label: string;
@@ -117,6 +118,7 @@ export function Sidebar() {
             Sign Out
           </button>
         )}
+        {(userRole === 'owner' || userRole === 'admin') && <RestartTourButton />}
       </div>
     </nav>
   );

@@ -7,6 +7,7 @@ import { FormEvent, useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SiteNavbar } from "../../components/SiteNavbar";
 import { SiteFooter } from "../../components/HomeSections";
+import { AnalyticsEvents, trackEvent } from "../../lib/analytics";
 
 function SignupForm() {
   const router = useRouter();
@@ -32,6 +33,7 @@ function SignupForm() {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
+    trackEvent(AnalyticsEvents.signupStarted, { source: "auth_signup" });
 
     if (password !== confirmPassword) {
       setError("Passwords do not match");

@@ -18,6 +18,7 @@ import {
   whyUsContent
 } from "../config/content";
 import { siteImages } from "../config/images";
+import { AnalyticsEvents, trackEvent } from "../lib/analytics";
 import { 
   fadeInUp, 
   staggerContainer, 
@@ -28,6 +29,7 @@ import {
 } from "../lib/animations";
 import { MagneticButton } from "./MagneticButton";
 import { EmberParticles } from "./EmberParticles";
+import { useCart } from "./cart/CartContext";
 
 function ExternalLinkCard({ href, title, subtitle }: { href: string; title: string; subtitle: string }) {
   const isExternal = /^https?:\/\//.test(href);
@@ -60,11 +62,13 @@ function ExternalLinkCard({ href, title, subtitle }: { href: string; title: stri
 function SmartLink({
   href,
   className,
-  children
+  children,
+  onClick
 }: {
   href: string;
   className?: string;
   children: ReactNode;
+  onClick?: () => void;
 }) {
   const isExternal = /^https?:\/\//.test(href);
   
@@ -83,6 +87,7 @@ function SmartLink({
               href={href}
               target="_blank"
               rel="noreferrer"
+              onClick={onClick}
               {...hoverTap.liftButton}
             >
               {children}
@@ -96,6 +101,7 @@ function SmartLink({
           href={href}
           target="_blank"
           rel="noreferrer"
+          onClick={onClick}
           {...hoverTap.liftButton}
         >
           {children}
@@ -103,7 +109,7 @@ function SmartLink({
       );
     }
     return (
-      <a className={className} href={href} target="_blank" rel="noreferrer">
+      <a className={className} href={href} target="_blank" rel="noreferrer" onClick={onClick}>
         {children}
       </a>
     );
@@ -115,7 +121,7 @@ function SmartLink({
       return (
         <MagneticButton strength={0.25}>
           <motion.div {...hoverTap.liftButton}>
-            <Link className={className} href={href}>
+            <Link className={className} href={href} onClick={onClick}>
               {children}
             </Link>
           </motion.div>
@@ -124,7 +130,7 @@ function SmartLink({
     }
     return (
       <motion.div {...hoverTap.liftButton}>
-        <Link className={className} href={href}>
+        <Link className={className} href={href} onClick={onClick}>
           {children}
         </Link>
       </motion.div>
@@ -132,7 +138,7 @@ function SmartLink({
   }
 
   return (
-    <Link className={className} href={href}>
+    <Link className={className} href={href} onClick={onClick}>
       {children}
     </Link>
   );
@@ -216,12 +222,29 @@ export function HeroSection() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.8, duration: durations.slow }}
         >
-          <SmartLink className="btn btn-primary" href={heroContent.primaryCta.href}>
+          <SmartLink
+            className="btn btn-primary"
+            href={heroContent.primaryCta.href}
+            onClick={() => trackEvent("cta_clicked_order_online", { source: "home_hero" })}
+          >
             {heroContent.primaryCta.label}
           </SmartLink>
-          <SmartLink className="btn btn-secondary" href={heroContent.secondaryCta.href}>
+          <SmartLink
+            className="btn btn-secondary"
+            href={heroContent.secondaryCta.href}
+            onClick={() => trackEvent("cta_clicked_book_catering", { source: "home_hero" })}
+          >
             {heroContent.secondaryCta.label}
           </SmartLink>
+          {heroContent.tertiaryCta ? (
+            <SmartLink
+              className="btn btn-secondary"
+              href={heroContent.tertiaryCta.href}
+              onClick={() => trackEvent("cta_clicked_reserve_table", { source: "home_hero" })}
+            >
+              {heroContent.tertiaryCta.label}
+            </SmartLink>
+          ) : null}
         </motion.div>
       </motion.div>
     </motion.section>
@@ -360,9 +383,12 @@ interface FeaturedMenuItem {
 }
 
 export function FeaturedMenuSection({ items }: { items: FeaturedMenuItem[] }) {
+  const { dispatch } = useCart();
   const featuredItems = items.map(item => ({
+    id: item.id,
     name: item.name,
     description: item.description || '',
+    basePriceCents: item.basePriceCents,
     price: `$${(item.basePriceCents / 100).toFixed(2)}`,
     image: {
       src: item.imageUrl || '/images/placeholder-food.jpg',
@@ -372,7 +398,7 @@ export function FeaturedMenuSection({ items }: { items: FeaturedMenuItem[] }) {
   
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: "-100px" });
-  const [selectedItem, setSelectedItem] = useState<null | { name: string; description: string; price: string; image: { src: string; alt: string } }>(null);
+  const [selectedItem, setSelectedItem] = useState<null | { id: string; name: string; description: string; price: string; basePriceCents: number; image: { src: string; alt: string } }>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   const lastFocusedRef = useRef<HTMLElement | null>(null);
 
@@ -387,6 +413,27 @@ export function FeaturedMenuSection({ items }: { items: FeaturedMenuItem[] }) {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [selectedItem]);
+
+  const addFeaturedItemToCart = (item: { id: string; name: string; image: { src: string; alt: string }; basePriceCents: number }) => {
+    dispatch({
+      type: "ADD_ITEM",
+      payload: {
+        menuItemId: item.id,
+        name: item.name,
+        imageUrl: item.image.src,
+        unitPriceCents: item.basePriceCents,
+        quantity: 1,
+        customizations: [],
+        notes: ""
+      }
+    });
+
+    trackEvent(AnalyticsEvents.menuItemAddedToCart, {
+      itemId: item.id,
+      itemName: item.name,
+      source: "homepage_featured"
+    });
+  };
 
   // Focus trap and restore focus
   useEffect(() => {
@@ -585,6 +632,13 @@ export function FeaturedMenuSection({ items }: { items: FeaturedMenuItem[] }) {
                       </SmartLink>
                     </div>
                     <button
+                      onClick={() => addFeaturedItemToCart(selectedItem)}
+                      className="btn btn-secondary"
+                      style={{ flex: 1 }}
+                    >
+                      Add to Cart
+                    </button>
+                    <button
                       onClick={() => setSelectedItem(null)}
                       className="btn btn-secondary"
                       style={{ flex: 1 }}
@@ -718,7 +772,7 @@ export function CateringSalesSection() {
           <SmartLink className="btn btn-primary" href={orderingLinks.cateringInquiryUrl}>
             Start Catering Inquiry
           </SmartLink>
-          <SmartLink className="btn btn-secondary" href="/catering">
+          <SmartLink className="btn btn-secondary" href="/catering" onClick={() => trackEvent("cta_clicked_book_catering", { source: "home_catering" })}>
             Check Availability
           </SmartLink>
         </div>
@@ -766,6 +820,49 @@ export function OrderingHubSection() {
         </motion.div>
       </motion.div>
     </motion.section>
+  );
+}
+
+export function HowItWorksSection() {
+  const steps = [
+    {
+      title: "Order Pickup or Delivery",
+      description: "Build your cart, choose pickup or delivery, and checkout in minutes."
+    },
+    {
+      title: "Book Catering",
+      description: "Submit your event details and package preferences for a fast quote workflow."
+    },
+    {
+      title: "Reserve A Table",
+      description: "Pick date, time, and party size with instant reservation request confirmation."
+    }
+  ] as const;
+
+  return (
+    <section className="page-shell section">
+      <div className="section-heading center">
+        <span className="eyebrow">How It Works</span>
+        <h2>Three Fast Paths to Great BBQ</h2>
+      </div>
+      <div className="info-primary-grid">
+        {steps.map((step, index) => (
+          <article className="info-item" key={step.title}>
+            <span className="info-index">0{index + 1}</span>
+            <h4>{step.title}</h4>
+            <p>{step.description}</p>
+          </article>
+        ))}
+      </div>
+      <div className="cta-row" style={{ justifyContent: "center" }}>
+        <SmartLink className="btn btn-primary" href="/menu" onClick={() => trackEvent(AnalyticsEvents.ctaClickedOrderOnline, { source: "how_it_works" })}>
+          Start Ordering
+        </SmartLink>
+        <SmartLink className="btn btn-secondary" href="/catering" onClick={() => trackEvent(AnalyticsEvents.ctaClickedBookCatering, { source: "how_it_works" })}>
+          Get Catering Quote
+        </SmartLink>
+      </div>
+    </section>
   );
 }
 
@@ -834,8 +931,19 @@ export function FinalCtaSection() {
           smoked meats, flavorful sides, and exceptional service.
         </p>
         <div className="cta-row">
-          <SmartLink className="btn btn-primary" href={orderingLinks.cateringInquiryUrl}>
-            Reserve Now
+          <SmartLink
+            className="btn btn-primary"
+            href="/reserve"
+            onClick={() => trackEvent("cta_clicked_reserve_table", { source: "home_final_cta" })}
+          >
+            Reserve A Table
+          </SmartLink>
+          <SmartLink
+            className="btn btn-secondary"
+            href="/menu"
+            onClick={() => trackEvent("cta_clicked_order_online", { source: "home_final_cta" })}
+          >
+            Order Online
           </SmartLink>
         </div>
       </motion.div>
@@ -899,9 +1007,10 @@ export function SiteFooter() {
         </div>
         <div className="footer-nav-links">
           <a href="/">Home</a>
-          <a href="/#story">About</a>
-          <a href="/#menu">Menu</a>
-          <a href="/#catering">Contact</a>
+          <a href="/menu">Menu</a>
+          <a href="/catering">Catering</a>
+          <a href="/reserve">Reserve A Table</a>
+          <a href="/dashboard">Account</a>
         </div>
         <div className="footer-socials" aria-label="Social media links">
           <SmartLink href={socialLinks.instagram}>Instagram</SmartLink>

@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "../../../../lib/auth";
 import { prisma } from "../../../../lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -81,8 +83,15 @@ export async function GET(request: NextRequest) {
       }
     });
 
+    const typedMenuItems = menuItems as Array<{
+      name: string;
+      basePriceCents: number;
+      locationId: string;
+      location: { name: string } | null;
+    }>;
+
     const menuItemMap = new Map(
-      menuItems.map((item) => [item.name, item] as const)
+      typedMenuItems.map((item) => [item.name, item] as const)
     );
 
     // Enrich favorites with current availability and pricing

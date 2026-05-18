@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../../../lib/auth";
 import { prisma } from "../../../../lib/prisma";
-import type { Prisma } from "@prisma/client";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
@@ -20,17 +21,17 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "50");
     const offset = parseInt(searchParams.get("offset") || "0");
 
-    const where: Prisma.CateringBookingWhereInput = {
+    const where = {
       customerId: session.user.id,
       ...(upcoming ? {
         eventDate: { gte: new Date() },
-        status: { in: ["pending_approval", "approved"] }
+        status: { in: ["pending_approval", "approved"] as const }
       } : {})
     };
 
     const [bookings, total] = await Promise.all([
       prisma.cateringBooking.findMany({
-        where,
+        where: where as any,
         include: {
           location: {
             select: {
@@ -46,10 +47,10 @@ export async function GET(request: NextRequest) {
         take: limit,
         skip: offset
       }),
-      prisma.cateringBooking.count({ where })
+      prisma.cateringBooking.count({ where: where as any })
     ]);
 
-    const bookingIds = bookings.map((booking) => booking.id);
+    const bookingIds = bookings.map((booking: { id: string }) => booking.id);
     const successfulPayments = bookingIds.length
       ? await prisma.paymentTransaction.findMany({
           where: {
@@ -73,7 +74,7 @@ export async function GET(request: NextRequest) {
       depositPaidByBookingId.set(payment.bookingId, current + payment.amountCents);
     }
 
-    const enrichedBookings = bookings.map((booking) => {
+    const enrichedBookings = bookings.map((booking: { id: string; depositCents: number | null }) => {
       const depositPaidCents = depositPaidByBookingId.get(booking.id) ?? 0;
       const depositDueCents = Math.max(0, (booking.depositCents ?? 0) - depositPaidCents);
 

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { useCart, CartCustomization } from '../cart/CartContext';
+import { AnalyticsEvents, trackEvent } from '../../lib/analytics';
 
 interface Customization {
   name: string;
@@ -65,6 +66,14 @@ export function MenuItemModal({ item, onClose }: MenuItemModalProps) {
         notes
       }
     });
+
+    trackEvent(AnalyticsEvents.menuItemAddedToCart, {
+      itemId: item.id,
+      itemName: item.name,
+      quantity,
+      source: 'menu_modal'
+    });
+
     onClose();
   };
 

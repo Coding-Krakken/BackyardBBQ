@@ -1,0 +1,155 @@
+{
+  "version": 1,
+  "lastUpdated": "2026-05-17",
+  "features": {
+    "dashboard-overview": {
+      "status": "complete",
+      "label": "Dashboard Overview",
+      "description": "Real-time stats, revenue tracking, recent orders and bookings at a glance."
+    },
+    "order-management": {
+      "status": "complete",
+      "label": "Order Management",
+      "description": "Full order lifecycle: view, filter, update status, track fulfillment."
+    },
+    "catering-bookings": {
+      "status": "complete",
+      "label": "Catering Bookings",
+      "description": "Manage catering requests: approve, decline, track deposits and event details."
+    },
+    "customer-management": {
+      "status": "complete",
+      "label": "Customer Management",
+      "description": "View customer profiles, order history, payment history, and referral activity."
+    },
+    "menu-management": {
+      "status": "complete",
+      "label": "Menu Management",
+      "description": "Add, edit, and organize menu items with pricing, categories, and customizations."
+    },
+    "stripe-payments": {
+      "status": "complete",
+      "label": "Stripe Payments",
+      "description": "Checkout Sessions, Payment Element, Apple/Google Pay, saved cards, refunds."
+    },
+    "payment-disputes": {
+      "status": "complete",
+      "label": "Payment Disputes",
+      "description": "Monitor and respond to Stripe chargebacks and disputes."
+    },
+    "accounting": {
+      "status": "complete",
+      "label": "Accounting & Daily Close",
+      "description": "Daily reconciliation, finalization, and financial reporting."
+    },
+    "analytics": {
+      "status": "complete",
+      "label": "Sales Analytics",
+      "description": "Revenue charts, forecasting, anomaly detection, and trend analysis."
+    },
+    "referral-program": {
+      "status": "complete",
+      "label": "Referral Program",
+      "description": "Customer referral codes, invite tracking, and reward management."
+    },
+    "role-based-access": {
+      "status": "complete",
+      "label": "Role-Based Access",
+      "description": "Five roles (owner, admin, manager, staff, accounting) with granular permissions."
+    },
+    "delivery-integrations": {
+      "status": "in-progress",
+      "label": "Delivery Integrations",
+      "description": "Third-party delivery platform connections for DoorDash, UberEats, and Grubhub.",
+      "eta": "Q3 2026",
+      "details": "Core adapter infrastructure is built. Provider clients, webhook handlers, settlement reconciliation, and health monitoring are implemented. Awaiting live provider API credentials and production testing.",
+      "completedItems": [
+        "Provider client adapters (DoorDash, UberEats, Grubhub)",
+        "Webhook signature verification (HMAC-SHA256)",
+        "Inbound order processing pipeline",
+        "Status synchronization engine",
+        "Settlement reconciliation with CSV export",
+        "Dead letter queue with retry capability",
+        "Correlation contract validation",
+        "Health monitoring dashboard",
+        "Background worker job processing"
+      ],
+      "remainingItems": [
+        "Live provider API credential setup",
+        "Production webhook endpoint registration",
+        "End-to-end order flow testing with real providers",
+        "Menu sync activation with provider portals",
+        "Real-time delivery tracking on customer orders"
+      ]
+    },
+    "delivery-settlements": {
+      "status": "in-progress",
+      "label": "Delivery Settlements",
+      "description": "Automated reconciliation of delivery platform payouts against internal records.",
+      "eta": "Q3 2026",
+      "details": "Settlement batch processing and line-item reconciliation are built. Daily trend analytics and CSV export ready. Pending live provider settlement data feeds.",
+      "completedItems": [
+        "Settlement batch ingestion",
+        "Line-item reconciliation",
+        "Daily gross/fees/net trend analytics",
+        "CSV export for bookkeeping"
+      ],
+      "remainingItems": [
+        "Live settlement data feed activation",
+        "Automated discrepancy alerts",
+        "Monthly settlement summary reports"
+      ]
+    },
+    "email-notifications": {
+      "status": "planned",
+      "label": "Email Notifications",
+      "description": "Automated email delivery for order confirmations, booking updates, referral invites, and support tickets.",
+      "eta": "Q4 2026",
+      "details": "Notification models exist in the database. Email delivery channel will be integrated into the existing delivery-channels package architecture.",
+      "plannedItems": [
+        "SMTP/SendGrid email provider integration",
+        "Order confirmation emails",
+        "Booking approval/decline notifications",
+        "Referral invitation emails",
+        "Support ticket acknowledgments",
+        "Admin alert emails for critical events"
+      ]
+    },
+    "real-time-tracking": {
+      "status": "planned",
+      "label": "Real-Time Delivery Tracking",
+      "description": "Live GPS tracking of delivery orders with ETA updates for customers.",
+      "eta": "Q4 2026",
+      "plannedItems": [
+        "WebSocket-based live order tracking",
+        "Driver GPS position streaming",
+        "Customer-facing tracking map",
+        "ETA prediction and updates"
+      ]
+    },
+    "loyalty-program": {
+      "status": "planned",
+      "label": "Loyalty Points Program",
+      "description": "Points-based rewards system for repeat customers.",
+      "eta": "Q1 2027",
+      "plannedItems": [
+        "Points accrual per dollar spent",
+        "Reward tier system (Bronze, Silver, Gold, Pitmaster)",
+        "Points redemption at checkout",
+        "Admin loyalty dashboard"
+      ]
+    },
+    "multi-location": {
+      "status": "planned",
+      "label": "Multi-Location Management",
+      "description": "Manage multiple restaurant/food truck locations from a single dashboard.",
+      "eta": "Q1 2027",
+      "plannedItems": [
+        "Location switcher in admin dashboard",
+        "Per-location menu management",
+        "Cross-location analytics",
+        "Location-specific staff assignments"
+      ]
+    }
+  }
+}

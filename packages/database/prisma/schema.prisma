@@ -95,6 +95,7 @@ model Customer {
   referralsSent         Referral[]        @relation("ReferrerRelation")
   referralsReceived     Referral[]        @relation("RefereeRelation")
   notifications         Notification[]
+  onboardingProgress    OnboardingProgress?
 }
 
 model SavedPaymentMethod {
@@ -372,4 +373,17 @@ model Notification {
 
   @@index([customerId, read])
   @@index([createdAt])
+}
+
+model OnboardingProgress {
+  id              String    @id @default(cuid())
+  customerId      String    @unique
+  completedSteps  Json      @default("[]")
+  lastStepSeen    String?
+  tourVersion     Int       @default(1)
+  completedAt     DateTime?
+  skippedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  customer        Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
 }

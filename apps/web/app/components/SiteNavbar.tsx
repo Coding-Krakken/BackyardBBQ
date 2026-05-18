@@ -9,22 +9,25 @@ import { orderingLinks } from "../config/content";
 import { MagneticButton } from "./MagneticButton";
 import { springs } from "../lib/animations";
 import { CartIcon } from "./cart/CartIcon";
+import { trackEvent } from "../lib/analytics";
 
 const navLinks = [
   { href: "/", label: "Home" },
-  { href: "/#story", label: "About" },
+  { href: "/menu", label: "Order Online" },
   { href: "/menu", label: "Menu" },
-  { href: "/#catering", label: "Contact" }
+  { href: "/catering", label: "Catering" },
+  { href: "/reserve", label: "Reserve A Table" }
 ] as const;
 
 const primaryDesktopCta = {
-  href: orderingLinks.cateringInquiryUrl,
-  label: "Reserve A Table"
+  href: orderingLinks.orderOnlineUrl,
+  label: "Start Order"
 } as const;
 
 const ctaLinks = [
   { href: orderingLinks.orderOnlineUrl, label: "Order Online", variant: "primary" },
   { href: orderingLinks.cateringInquiryUrl, label: "Catering", variant: "secondary" },
+  { href: "/reserve", label: "Reserve A Table", variant: "secondary" },
   { href: orderingLinks.doordashUrl, label: "DoorDash", variant: "ghost" },
   { href: orderingLinks.uberEatsUrl, label: "Uber Eats", variant: "ghost" }
 ] as const;
@@ -135,6 +138,17 @@ export function SiteNavbar() {
                 key={item.label}
                 href={item.href}
                 className="nav-link"
+                onClick={() => {
+                  if (item.href === "/menu") {
+                    trackEvent("cta_clicked_order_online", { source: "navbar" });
+                  }
+                  if (item.href === "/catering") {
+                    trackEvent("cta_clicked_book_catering", { source: "navbar" });
+                  }
+                  if (item.href === "/reserve") {
+                    trackEvent("cta_clicked_reserve_table", { source: "navbar" });
+                  }
+                }}
                 whileHover="hover"
                 whileTap={{ scale: 0.95 }}
                 initial="idle"
@@ -196,7 +210,11 @@ export function SiteNavbar() {
           <div className="site-nav-ctas">
             <MagneticButton strength={0.25}>
               <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <Link className="btn nav-btn nav-btn-reserve" href={primaryDesktopCta.href}>
+                <Link
+                  className="btn nav-btn nav-btn-reserve"
+                  href={primaryDesktopCta.href}
+                  onClick={() => trackEvent("cta_clicked_order_online", { source: "navbar_primary" })}
+                >
                   {primaryDesktopCta.label}
                 </Link>
               </motion.div>
@@ -280,7 +298,23 @@ export function SiteNavbar() {
                       );
                     }
                     return (
-                      <Link key={item.label} className={className} href={item.href} onClick={() => setMobileOpen(false)}>
+                      <Link
+                        key={item.label}
+                        className={className}
+                        href={item.href}
+                        onClick={() => {
+                          setMobileOpen(false);
+                          if (item.href === "/menu") {
+                            trackEvent("cta_clicked_order_online", { source: "mobile_nav" });
+                          }
+                          if (item.href === "/catering") {
+                            trackEvent("cta_clicked_book_catering", { source: "mobile_nav" });
+                          }
+                          if (item.href === "/reserve") {
+                            trackEvent("cta_clicked_reserve_table", { source: "mobile_nav" });
+                          }
+                        }}
+                      >
                         {item.label}
                       </Link>
                     );

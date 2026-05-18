@@ -5,6 +5,10 @@ import { SessionProvider } from "./components/SessionProvider";
 import { SmoothScrollProvider } from "./components/SmoothScrollProvider";
 import { CartProvider } from "./components/cart/CartContext";
 import { CartDrawer } from "./components/cart/CartDrawer";
+import { MobileBottomBar } from "./components/MobileBottomBar";
+import { MobileCartCTA } from "./components/MobileCartCTA";
+import { JsonLd } from "./components/seo/JsonLd";
+import { businessInfo } from "./config/content";
 
 const displayFont = Cormorant_Garamond({
   subsets: ["latin"],
@@ -54,9 +58,29 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const restaurantSchema = {
+    "@context": "https://schema.org",
+    "@type": ["Restaurant", "LocalBusiness"],
+    name: "Backyard BBQ King",
+    image: `${siteUrl}${defaultOgImage}`,
+    url: siteUrl,
+    telephone: businessInfo.phone,
+    email: businessInfo.email,
+    address: {
+      "@type": "PostalAddress",
+      addressLocality: businessInfo.location,
+      addressRegion: "NY",
+      addressCountry: "US"
+    },
+    servesCuisine: "BBQ",
+    priceRange: "$$",
+    openingHoursSpecification: [{ "@type": "OpeningHoursSpecification", description: businessInfo.hours }]
+  };
+
   return (
     <html lang="en">
       <body className={`${displayFont.variable} ${bodyFont.variable}`}>
+        <JsonLd data={restaurantSchema} />
         <SessionProvider>
           <SmoothScrollProvider>
             <CartProvider>
@@ -65,6 +89,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </a>
               {children}
               <CartDrawer />
+              <MobileCartCTA />
+              <MobileBottomBar />
             </CartProvider>
           </SmoothScrollProvider>
         </SessionProvider>

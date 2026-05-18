@@ -3,26 +3,19 @@
 export const dynamic = 'force-dynamic';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useState } from 'react';
 import { useCart } from '../components/cart/CartContext';
 import { CartItem } from '../components/cart/CartItem';
 import { SiteNavbar } from '../components/SiteNavbar';
 import { SiteFooter } from '../components/HomeSections';
 
 export default function CartPage() {
-  const router = useRouter();
-  const { state, dispatch, subtotalCents, estimatedTaxCents, estimatedTotalCents } = useCart();
+  const { state, dispatch, subtotalCents, estimatedTaxCents } = useCart();
+  const [tipPercent, setTipPercent] = useState(15);
+  const [customTipCents, setCustomTipCents] = useState<number | null>(null);
 
-  useEffect(() => {
-    // Redirect if cart is empty
-    if (state.items.length === 0) {
-      const timer = setTimeout(() => {
-        router.push('/menu');
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [state.items.length, router]);
+  const tipCents = customTipCents ?? Math.round(subtotalCents * (tipPercent / 100));
+  const estimatedTotalCents = subtotalCents + estimatedTaxCents + tipCents;
 
   return (
     <main id="main-content">
@@ -34,7 +27,7 @@ export default function CartPage() {
         {state.items.length === 0 ? (
           <div className="panel cart-empty-state">
             <h2>Your cart is empty</h2>
-            <p>Redirecting to menu...</p>
+            <p>Start with a smoked brisket plate, fall-off-the-bone ribs, or a family tray.</p>
             <Link href="/menu" className="btn btn-primary">
               Browse Menu
             </Link>
@@ -59,11 +52,57 @@ export default function CartPage() {
                   <span>Est. Tax (8%)</span>
                   <span>${(estimatedTaxCents / 100).toFixed(2)}</span>
                 </div>
+                <div className="summary-row">
+                  <span>Tip</span>
+                  <span>${(tipCents / 100).toFixed(2)}</span>
+                </div>
                 <div className="summary-row summary-total">
                   <span>Estimated Total</span>
                   <span>${(estimatedTotalCents / 100).toFixed(2)}</span>
                 </div>
               </div>
+
+              <div className="tip-controls" aria-label="Tip options">
+                {[0, 15, 18, 20].map((percent) => (
+                  <button
+                    key={percent}
+                    type="button"
+                    className={tipPercent === percent && customTipCents === null ? 'tip-btn active' : 'tip-btn'}
+                    onClick={() => {
+                      setTipPercent(percent);
+                      setCustomTipCents(null);
+                    }}
+                  >
+                    {percent}%
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className={customTipCents !== null ? 'tip-btn active' : 'tip-btn'}
+                  onClick={() => {
+                    setTipPercent(0);
+                    setCustomTipCents(Math.round(subtotalCents * 0.2));
+                  }}
+                >
+                  Custom
+                </button>
+              </div>
+
+              {customTipCents !== null ? (
+                <label className="custom-tip-label">
+                  Custom Tip (USD)
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    value={(customTipCents / 100).toFixed(2)}
+                    onChange={(event) => {
+                      const next = Number(event.target.value);
+                      setCustomTipCents(Number.isFinite(next) ? Math.max(0, Math.round(next * 100)) : 0);
+                    }}
+                  />
+                </label>
+              ) : null}
               
               <div className="summary-actions">
                 <Link href="/checkout" className="btn btn-primary btn-full">
@@ -169,6 +208,46 @@ export default function CartPage() {
           flex-direction: column;
           gap: 0.75rem;
           margin-bottom: 1.5rem;
+        }
+
+        .tip-controls {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+          margin-bottom: 1rem;
+        }
+
+        .tip-btn {
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          background: rgba(16, 32, 41, 0.75);
+          color: var(--cream);
+          border-radius: 999px;
+          min-height: 2.2rem;
+          padding: 0.35rem 0.65rem;
+          cursor: pointer;
+        }
+
+        .tip-btn.active {
+          border-color: rgba(217, 109, 49, 0.65);
+          background: rgba(217, 109, 49, 0.22);
+        }
+
+        .custom-tip-label {
+          display: grid;
+          gap: 0.35rem;
+          margin-bottom: 1rem;
+          color: rgba(255, 255, 255, 0.8);
+          font-size: 0.9rem;
+        }
+
+        .custom-tip-label input {
+          width: 100%;
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          border-radius: 8px;
+          min-height: 2.4rem;
+          padding: 0.5rem 0.65rem;
+          background: rgba(16, 32, 41, 0.8);
+          color: var(--cream);
         }
         
         .btn-full {

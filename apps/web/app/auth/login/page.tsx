@@ -8,6 +8,7 @@ import { signIn, getSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { SiteNavbar } from "../../components/SiteNavbar";
 import { SiteFooter } from "../../components/HomeSections";
+import { AnalyticsEvents, trackEvent } from "../../lib/analytics";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -20,6 +21,7 @@ export default function LoginPage() {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
+    trackEvent(AnalyticsEvents.loginSubmitted, { source: "auth_login" });
 
     try {
       const result = await signIn("credentials", {

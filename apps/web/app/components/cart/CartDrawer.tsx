@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useCart } from './CartContext';
 import { CartItem as CartItemComponent } from './CartItem';
 import { useEffect } from 'react';
+import { AnalyticsEvents, trackEvent } from '../../lib/analytics';
 
 export function CartDrawer() {
   const { state, dispatch, subtotalCents, estimatedTaxCents, estimatedTotalCents } = useCart();
@@ -23,6 +24,7 @@ export function CartDrawer() {
   useEffect(() => {
     if (state.isOpen) {
       document.body.style.overflow = 'hidden';
+      trackEvent(AnalyticsEvents.cartOpened, { source: 'cart_drawer' });
     } else {
       document.body.style.overflow = '';
     }

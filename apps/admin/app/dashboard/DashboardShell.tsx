@@ -2,6 +2,10 @@
 
 import { createContext, useContext, useState, ReactNode } from 'react';
 import { ToastProvider } from '@/components/Toast';
+import { OnboardingProvider } from '@/components/onboarding/OnboardingProvider';
+import { WelcomeModal } from '@/components/onboarding/WelcomeModal';
+import { OnboardingTour } from '@/components/onboarding/OnboardingTour';
+import { CompletionCelebration } from '@/components/onboarding/CompletionCelebration';
 
 interface SidebarContextValue {
   mobileOpen: boolean;
@@ -28,9 +32,14 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   return (
     <SidebarContext.Provider value={{ mobileOpen, setMobileOpen, collapsed, setCollapsed }}>
       <ToastProvider>
-        <div className={`admin-shell ${collapsed ? 'collapsed' : ''}`}>
-          {children}
-        </div>
+        <OnboardingProvider>
+          <div className={`admin-shell ${collapsed ? 'collapsed' : ''}`}>
+            {children}
+          </div>
+          <WelcomeModal />
+          <OnboardingTour />
+          <CompletionCelebration />
+        </OnboardingProvider>
       </ToastProvider>
     </SidebarContext.Provider>
   );

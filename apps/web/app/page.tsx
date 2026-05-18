@@ -1,8 +1,11 @@
 import {
+  CateringSalesSection,
   CinematicBreakSection,
   FeaturedMenuSection,
   FinalCtaSection,
   HeroSection,
+  HowItWorksSection,
+  OrderingHubSection,
   QuickInfoSection,
   SiteFooter,
   StorySection,
@@ -14,25 +17,36 @@ import { SmokeTrail } from "./components/SmokeTrail";
 import { prisma } from "../lib/prisma";
 
 export default async function HomePage() {
-  // Fetch featured menu items from database
-  const featuredItems = await prisma.menuItem.findMany({
-    where: {
-      isFeatured: true,
-      isAvailable: true
-    },
-    orderBy: [
-      { sortOrder: 'asc' },
-      { name: 'asc' }
-    ],
-    take: 4,
-    select: {
-      id: true,
-      name: true,
-      description: true,
-      basePriceCents: true,
-      imageUrl: true
-    }
-  });
+  let featuredItems: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    basePriceCents: number;
+    imageUrl: string | null;
+  }> = [];
+
+  try {
+    featuredItems = await prisma.menuItem.findMany({
+      where: {
+        isFeatured: true,
+        isAvailable: true
+      },
+      orderBy: [
+        { sortOrder: 'asc' },
+        { name: 'asc' }
+      ],
+      take: 4,
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        basePriceCents: true,
+        imageUrl: true
+      }
+    });
+  } catch {
+    featuredItems = [];
+  }
 
   return (
     <main id="main-content" className="site-main">
@@ -42,7 +56,10 @@ export default async function HomePage() {
         <HeroSection />
         <StorySection />
         <QuickInfoSection />
+        <HowItWorksSection />
         <FeaturedMenuSection items={featuredItems} />
+        <CateringSalesSection />
+        <OrderingHubSection />
         <CinematicBreakSection />
         <TestimonialsSection />
         <WhyUsSection />

@@ -32,7 +32,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Payment method not found" }, { status: 404 });
     }
 
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: any) => {
       await tx.savedPaymentMethod.updateMany({
         where: { customerId: method.customerId },
         data: { isDefault: false },

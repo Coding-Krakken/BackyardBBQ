@@ -6,9 +6,17 @@ import { authOptions } from "../../../../lib/auth";
 import { prisma } from "../../../../lib/prisma";
 import { checkRateLimit } from "../../../../lib/rate-limit";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
-  apiVersion: "2026-04-22.dahlia",
-});
+function getStripeClient() {
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+
+  if (!secretKey) {
+    throw new Error("Missing STRIPE_SECRET_KEY environment variable");
+  }
+
+  return new Stripe(secretKey, {
+    apiVersion: "2026-04-22.dahlia",
+  });
+}
 
 const DEFAULT_TAX_RATE = 0.08;
 const ALLOWED_DRIFT_CENTS = 1;
@@ -44,6 +52,7 @@ const requestSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    const stripe = getStripeClient();
     // Validate required environment variables
     if (!process.env.NEXT_PUBLIC_SITE_URL) {
       console.error("Missing NEXT_PUBLIC_SITE_URL environment variable");

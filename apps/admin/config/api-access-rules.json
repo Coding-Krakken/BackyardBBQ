@@ -153,6 +153,19 @@
     },
     "/api/admin/referrals/[id]": {
       "PATCH": ["owner", "admin"]
+    },
+    "/api/admin/onboarding": {
+      "GET": ["owner", "admin"],
+      "POST": ["owner", "admin"]
+    },
+    "/api/admin/onboarding/complete": {
+      "POST": ["owner", "admin"]
+    },
+    "/api/admin/onboarding/skip": {
+      "POST": ["owner", "admin"]
+    },
+    "/api/admin/onboarding/reset": {
+      "POST": ["owner", "admin"]
     }
   }
 }

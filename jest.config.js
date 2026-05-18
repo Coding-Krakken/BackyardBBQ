@@ -28,6 +28,7 @@ const config = {
       tsconfig: {
         jsx: "react-jsx",
         esModuleInterop: true,
+        resolveJsonModule: true,
         types: ["jest", "@testing-library/jest-dom"],
       },
     }],

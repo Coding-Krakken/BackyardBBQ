@@ -1,4 +1,7 @@
-import type Stripe from "stripe";
+type StripeEventLike = {
+  id: string;
+  type: string;
+};
 
 type PersistedWebhookEventRow = {
   payload: unknown;
@@ -20,7 +23,7 @@ type IntegrationEventReader = {
 export async function isPersistedDuplicateWebhookEvent(input: {
   hasDatabaseUrl: boolean;
   integrationEvent: IntegrationEventReader;
-  event: Stripe.Event;
+  event: StripeEventLike;
   webhookEventTtlMs: number;
   now?: number;
 }) {

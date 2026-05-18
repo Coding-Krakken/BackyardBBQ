@@ -1,7 +1,12 @@
 /** @jest-environment node */
 
-import type Stripe from "stripe";
 import { getCheckoutSessionIdentifiers, shouldTreatWebhookEventAsDuplicate } from "../webhook/utils";
+
+type CheckoutSessionLike = {
+  customer?: string | null;
+  payment_intent?: string | null;
+  metadata?: Record<string, string>;
+};
 
 describe("shouldTreatWebhookEventAsDuplicate", () => {
   it("returns false for first event and true for immediate duplicate", () => {
@@ -39,7 +44,7 @@ describe("getCheckoutSessionIdentifiers", () => {
       customer: "cus_123",
       payment_intent: "pi_123",
       metadata: { orderId: "ord_123" },
-    } as unknown as Stripe.Checkout.Session;
+    } satisfies CheckoutSessionLike;
 
     expect(getCheckoutSessionIdentifiers(session)).toEqual({
       stripeCustomerId: "cus_123",
@@ -53,7 +58,7 @@ describe("getCheckoutSessionIdentifiers", () => {
       customer: null,
       payment_intent: null,
       metadata: {},
-    } as unknown as Stripe.Checkout.Session;
+    } satisfies CheckoutSessionLike;
 
     expect(getCheckoutSessionIdentifiers(session)).toEqual({
       stripeCustomerId: undefined,

@@ -60,7 +60,7 @@ export async function DELETE(
     const wasDefault =
       method.isDefault || customer?.defaultPaymentMethodId === method.stripePaymentMethodId;
 
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: any) => {
       await tx.savedPaymentMethod.delete({
         where: { id: method.id },
       });

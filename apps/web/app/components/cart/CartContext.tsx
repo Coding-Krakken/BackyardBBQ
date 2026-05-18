@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useReducer, useEffect, useState, ReactNode } from 'react';
-import { TAX_RATE } from '../../config/constants';
+import { calculateSubtotalCents, calculateTaxCents, calculateTotalCents } from '../../lib/cart-calculations';
 
 export interface CartCustomization {
   name: string;
@@ -162,13 +162,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [state.items]);
 
   // Calculate totals
-  const subtotalCents = state.items.reduce((sum, item) => {
-    const customizationTotal = item.customizations.reduce((cSum, c) => cSum + c.priceCents, 0);
-    return sum + (item.unitPriceCents + customizationTotal) * item.quantity;
-  }, 0);
-
-  const estimatedTaxCents = Math.round(subtotalCents * TAX_RATE);
-  const estimatedTotalCents = subtotalCents + estimatedTaxCents;
+  const subtotalCents = calculateSubtotalCents(state.items);
+  const estimatedTaxCents = calculateTaxCents(subtotalCents);
+  const estimatedTotalCents = calculateTotalCents(subtotalCents, estimatedTaxCents);
   const itemCount = state.items.reduce((sum, item) => sum + item.quantity, 0);
 
   return (

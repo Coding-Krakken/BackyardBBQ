@@ -8,6 +8,8 @@
     "start": "next start -p 3001",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "verify:onboarding": "npm run typecheck && npm run verify:api-roles",
+    "test:onboarding:e2e": "cd ../.. && playwright test e2e/onboarding.admin.spec.ts",
     "verify:roles": "node scripts/verify-role-matrix.mjs",
     "verify:api-roles": "node scripts/verify-api-roles.mjs",
     "verify:dashboard-pages": "node scripts/verify-dashboard-pages.mjs"
@@ -17,6 +19,7 @@
     "@types/bcryptjs": "^2.4.6",
     "bcryptjs": "^3.0.3",
     "date-fns": "^3.6.0",
+    "driver.js": "^1.4.0",
     "framer-motion": "^12.38.0",
     "next": "^14.2.5",
     "next-auth": "^4.24.14",

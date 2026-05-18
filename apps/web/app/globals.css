@@ -64,6 +64,7 @@ body {
   font-family: var(--font-body), "Segoe UI", sans-serif;
   background: #020304;
   color: var(--cream);
+  overflow-x: hidden;
 }
 
 a {
@@ -2098,6 +2099,23 @@ textarea:focus-visible {
 
 /* Touch target optimization - minimum 44x44px for accessibility */
 @media (max-width: 768px) {
+  body {
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+
+  .modal-content,
+  .mobile-nav-drawer,
+  .cart-drawer {
+    max-height: 90dvh;
+    overflow-y: auto;
+  }
+
+  input,
+  select,
+  textarea {
+    max-width: 100%;
+  }
+
   .btn,
   .mobile-nav-toggle,
   .site-nav-links a,

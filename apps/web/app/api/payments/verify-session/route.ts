@@ -1,12 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
-  apiVersion: "2026-04-22.dahlia",
-});
+export const dynamic = "force-dynamic";
+
+function getStripeClient() {
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+
+  if (!secretKey) {
+    throw new Error("Missing STRIPE_SECRET_KEY environment variable");
+  }
+
+  return new Stripe(secretKey, {
+    apiVersion: "2026-04-22.dahlia",
+  });
+}
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
+    const stripe = getStripeClient();
     const searchParams = request.nextUrl.searchParams;
     const sessionId = searchParams.get("session_id");
 
