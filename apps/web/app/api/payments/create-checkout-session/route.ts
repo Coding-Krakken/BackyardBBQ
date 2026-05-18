@@ -27,6 +27,7 @@ const CHECKOUT_RATE_WINDOW_MS = 60 * 1000;
 const metadataSchema = z
   .object({
     subtotalCents: z.number().int().min(0).optional(),
+    tipCents: z.number().int().min(0).optional(),
     clientTaxCents: z.number().int().min(0).optional(),
     idempotencyKey: z.string().trim().min(8).max(200).optional(),
   })
@@ -107,20 +108,24 @@ export async function POST(request: NextRequest) {
     }
 
     const subtotalCents = parsedMetadata.data.subtotalCents;
+    const tipCents = parsedMetadata.data.tipCents ?? 0;
     const clientTaxCents = parsedMetadata.data.clientTaxCents;
     const metadataIdempotencyKey = parsedMetadata.data.idempotencyKey;
-    const lineItemAmountCents =
-      typeof subtotalCents === "number" ? subtotalCents : amountCents;
+    const subtotalLineItemCents =
+      typeof subtotalCents === "number"
+        ? subtotalCents
+        : Math.max(amountCents - tipCents, 0);
 
     if (typeof subtotalCents === "number") {
-      const totalDrift = Math.abs(amountCents - subtotalCents);
+      const expectedAmountCents = subtotalCents + tipCents;
+      const totalDrift = Math.abs(amountCents - expectedAmountCents);
 
       if (totalDrift > ALLOWED_DRIFT_CENTS) {
         return NextResponse.json(
           {
             error: "Subtotal validation failed",
             details: {
-              expectedSubtotalCents: subtotalCents,
+              expectedAmountCents,
               providedAmountCents: amountCents,
             },
           },
@@ -198,7 +203,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Compute tax server-side (Syracuse, NY: 8% on prepared food)
-    const taxCents = Math.round(lineItemAmountCents * SERVER_TAX_RATE);
+    const taxCents = Math.round(subtotalLineItemCents * SERVER_TAX_RATE);
 
     // Create Checkout Session with ui_mode: "elements" for PaymentElement / ExpressCheckoutElement
     const checkoutSession = await stripe.checkout.sessions.create(
@@ -210,7 +215,7 @@ export async function POST(request: NextRequest) {
           {
             price_data: {
               currency,
-              unit_amount: lineItemAmountCents,
+              unit_amount: subtotalLineItemCents,
               product_data: {
                 name: "Backyard BBQ Order",
                 description: "Premium BBQ order from Backyard BBQ King",
@@ -218,6 +223,21 @@ export async function POST(request: NextRequest) {
             },
             quantity: 1,
           },
+          ...(tipCents > 0
+            ? [
+                {
+                  price_data: {
+                    currency,
+                    unit_amount: tipCents,
+                    product_data: {
+                      name: "Tip",
+                      description: "Customer gratuity",
+                    },
+                  },
+                  quantity: 1,
+                },
+              ]
+            : []),
           ...(taxCents > 0
             ? [
                 {

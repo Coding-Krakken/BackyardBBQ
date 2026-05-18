@@ -83,8 +83,54 @@ describe("POST /api/payments/create-checkout-session", () => {
 
     expect(response.status).toBe(400);
     expect(payload.error).toBe("Subtotal validation failed");
-    expect(payload.details.expectedSubtotalCents).toBe(1000);
+    expect(payload.details.expectedAmountCents).toBe(1000);
     expect(mockCheckoutSessionsCreate).not.toHaveBeenCalled();
+  });
+
+  it("allows amount to include tip when metadata.tipCents is provided", async () => {
+    (getServerSession as jest.Mock).mockResolvedValue(null);
+    mockCheckoutSessionsCreate.mockResolvedValue({
+      client_secret: "seti_client_secret_tip",
+      id: "cs_test_tip_1",
+    });
+
+    const request = new NextRequest("http://localhost/api/payments/create-checkout-session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        amountCents: 1300,
+        currency: "usd",
+        metadata: { subtotalCents: 1000, tipCents: 300, orderId: "ord_tip_1" },
+      }),
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(200);
+    expect(mockCheckoutSessionsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        line_items: expect.arrayContaining([
+          expect.objectContaining({
+            price_data: expect.objectContaining({
+              unit_amount: 1000,
+              product_data: expect.objectContaining({ name: "Backyard BBQ Order" }),
+            }),
+          }),
+          expect.objectContaining({
+            price_data: expect.objectContaining({
+              unit_amount: 300,
+              product_data: expect.objectContaining({ name: "Tip" }),
+            }),
+          }),
+          expect.objectContaining({
+            price_data: expect.objectContaining({
+              unit_amount: 80,
+              product_data: expect.objectContaining({ name: "Sales Tax" }),
+            }),
+          }),
+        ]),
+      }),
+      undefined
+    );
   });
 
   it("returns 400 for invalid checkout metadata", async () => {

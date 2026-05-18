@@ -27,6 +27,8 @@ export function MenuItemModal({ item, onClose }: MenuItemModalProps) {
   const [quantity, setQuantity] = useState(1);
   const [selectedCustomizations, setSelectedCustomizations] = useState<Set<number>>(new Set());
   const [notes, setNotes] = useState('');
+  const fallbackImage = '/images/marketing/menu-brisket.jpg';
+  const [imageSrc, setImageSrc] = useState(item.imageUrl || fallbackImage);
 
   const customizations: Customization[] = Array.isArray(item.customizations) 
     ? item.customizations as Customization[] 
@@ -95,8 +97,11 @@ export function MenuItemModal({ item, onClose }: MenuItemModalProps) {
       document.body.style.overflow = '';
     };
   }, []);
+  useEffect(() => {
+    setImageSrc(item.imageUrl || fallbackImage);
+  }, [item.imageUrl]);
 
-  const fallbackImage = '/images/marketing/menu-brisket.jpg';
+  const useDirectImageUrl = /^https?:\/\//.test(imageSrc);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -107,10 +112,12 @@ export function MenuItemModal({ item, onClose }: MenuItemModalProps) {
 
         <div className="modal-image">
           <Image
-            src={item.imageUrl || fallbackImage}
+            src={imageSrc}
             alt={item.name}
             fill
             sizes="(max-width: 768px) 100vw, 600px"
+            unoptimized={useDirectImageUrl}
+            onError={() => setImageSrc(fallbackImage)}
             style={{ objectFit: 'cover' }}
             priority
           />

@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import { useEffect, useState } from 'react';
 import { CartItem as CartItemType, useCart } from './CartContext';
 
 interface CartItemProps {
@@ -10,6 +11,14 @@ interface CartItemProps {
 
 export function CartItem({ item, showControls = true }: CartItemProps) {
   const { dispatch } = useCart();
+  const fallbackImage = '/images/marketing/menu-brisket.jpg';
+  const [imageSrc, setImageSrc] = useState(item.imageUrl || fallbackImage);
+
+  useEffect(() => {
+    setImageSrc(item.imageUrl || fallbackImage);
+  }, [item.imageUrl]);
+
+  const useDirectImageUrl = /^https?:\/\//.test(imageSrc);
 
   const customizationTotal = item.customizations.reduce((sum, c) => sum + c.priceCents, 0);
   const itemTotal = (item.unitPriceCents + customizationTotal) * item.quantity;
@@ -24,13 +33,15 @@ export function CartItem({ item, showControls = true }: CartItemProps) {
 
   return (
     <div className="cart-item">
-      {item.imageUrl && (
+      {imageSrc && (
         <div className="cart-item-image">
           <Image
-            src={item.imageUrl}
+            src={imageSrc}
             alt={item.name}
             width={80}
             height={80}
+            unoptimized={useDirectImageUrl}
+            onError={() => setImageSrc(fallbackImage)}
             style={{ objectFit: 'cover', borderRadius: '4px' }}
           />
         </div>

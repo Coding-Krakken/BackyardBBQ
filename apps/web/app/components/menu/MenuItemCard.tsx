@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import { useEffect, useState } from 'react';
 
 interface MenuItemCardProps {
   item: {
@@ -17,6 +18,13 @@ interface MenuItemCardProps {
 
 export function MenuItemCard({ item, badges, onClick, onQuickAdd }: MenuItemCardProps) {
   const fallbackImage = '/images/marketing/menu-brisket.jpg';
+  const [imageSrc, setImageSrc] = useState(item.imageUrl || fallbackImage);
+
+  useEffect(() => {
+    setImageSrc(item.imageUrl || fallbackImage);
+  }, [item.imageUrl]);
+
+  const useDirectImageUrl = /^https?:\/\//.test(imageSrc);
   
   return (
     <article 
@@ -33,10 +41,12 @@ export function MenuItemCard({ item, badges, onClick, onQuickAdd }: MenuItemCard
     >
       <div className="menu-card-image">
         <Image
-          src={item.imageUrl || fallbackImage}
+          src={imageSrc}
           alt={item.name}
           fill
           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+          unoptimized={useDirectImageUrl}
+          onError={() => setImageSrc(fallbackImage)}
           style={{ objectFit: 'cover' }}
         />
       </div>

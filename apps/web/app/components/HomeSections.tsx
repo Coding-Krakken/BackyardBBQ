@@ -382,6 +382,10 @@ interface FeaturedMenuItem {
   imageUrl: string | null;
 }
 
+function isRemoteImageSource(src: string) {
+  return /^https?:\/\//.test(src);
+}
+
 export function FeaturedMenuSection({ items }: { items: FeaturedMenuItem[] }) {
   const { dispatch } = useCart();
   const featuredItems = items.map(item => ({
@@ -503,7 +507,13 @@ export function FeaturedMenuSection({ items }: { items: FeaturedMenuItem[] }) {
             }}
           >
             <div className="menu-image-shell">
-              <Image src={item.image.src} alt={item.image.alt} fill sizes="(max-width: 980px) 100vw, 33vw" />
+              <Image
+                src={item.image.src}
+                alt={item.image.alt}
+                fill
+                sizes="(max-width: 980px) 100vw, 33vw"
+                unoptimized={isRemoteImageSource(item.image.src)}
+              />
             </div>
             <div className="menu-card-copy">
               <div>
@@ -592,11 +602,12 @@ export function FeaturedMenuSection({ items }: { items: FeaturedMenuItem[] }) {
                 onClick={(e) => e.stopPropagation()}
               >
                 <div style={{ position: "relative", height: "300px", width: "100%" }}>
-                  <Image 
-                    src={selectedItem.image.src} 
-                    alt={selectedItem.image.alt} 
-                    fill 
+                  <Image
+                    src={selectedItem.image.src}
+                    alt={selectedItem.image.alt}
+                    fill
                     sizes="600px"
+                    unoptimized={isRemoteImageSource(selectedItem.image.src)}
                     style={{ objectFit: "cover" }}
                   />
                 </div>
