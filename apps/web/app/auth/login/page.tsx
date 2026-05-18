@@ -17,6 +17,19 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const mapAuthError = (code: string | undefined) => {
+    if (!code) {
+      return "Invalid email or password.";
+    }
+    if (code.includes("AUTH_SERVICE_UNAVAILABLE")) {
+      return "Authentication is temporarily unavailable. Please verify database connectivity and try again.";
+    }
+    if (code.includes("CredentialsSignin")) {
+      return "Invalid email or password.";
+    }
+    return "Sign-in failed. Please try again.";
+  };
+
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSubmitting(true);
@@ -31,7 +44,7 @@ export default function LoginPage() {
       });
 
       if (result?.error) {
-        setError(result.error);
+        setError(mapAuthError(result.error));
         setSubmitting(false);
       } else if (result?.ok) {
         const session = await getSession();

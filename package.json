@@ -57,8 +57,12 @@
     "test:e2e:ui": "playwright test --ui",
     "analyze": "cross-env ANALYZE=true turbo run build --filter=@bbq/web"
   },
+  "prisma": {
+    "schema": "packages/database/prisma/schema.prisma"
+  },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
+    "@prisma/extension-accelerate": "^3.0.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/jest": "^30.0.0",
@@ -68,6 +72,7 @@
     "jest": "^30.4.2",
     "jest-environment-jsdom": "^30.4.1",
     "lint-staged": "^17.0.5",
+    "pg": "^8.20.0",
     "ts-jest": "^29.4.9",
     "tsx": "^4.19.1",
     "turbo": "^2.0.12",
@@ -75,5 +80,8 @@
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "prisma": "^5.22.0"
   }
 }

@@ -12,6 +12,16 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
+  const mapAuthError = (code: string | undefined) => {
+    if (!code) {
+      return "Invalid email or password";
+    }
+    if (code.includes("AUTH_SERVICE_UNAVAILABLE")) {
+      return "Authentication service is unavailable. Verify database connectivity and try again.";
+    }
+    return "Invalid email or password";
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -25,7 +35,7 @@ export default function LoginPage() {
       });
 
       if (result?.error) {
-        setError('Invalid email or password');
+        setError(mapAuthError(result.error));
       } else {
         router.push('/dashboard');
       }

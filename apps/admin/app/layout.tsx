@@ -23,6 +23,10 @@ const manrope = Manrope({
 export const metadata: Metadata = {
   title: "Backyard BBQ King Admin",
   description: "Unified operations for orders, catering, payments, and analytics.",
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
+  },
 };
 
 export const viewport: Viewport = {

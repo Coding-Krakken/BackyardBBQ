@@ -54,6 +54,10 @@ export const metadata: Metadata = {
     title: "Backyard BBQ King",
     description: "Slow-smoked Texas-style BBQ with premium catering and modern ordering.",
     images: [defaultOgImage]
+  },
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/icon.svg"
   }
 };
 

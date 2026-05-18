@@ -44,6 +44,7 @@ async function main() {
         name: "Brisket Plate",
         description: "Smoked brisket with two sides",
         basePriceCents: 1899,
+        category: "Plates",
         isAvailable: true
       },
       {
@@ -51,6 +52,7 @@ async function main() {
         name: "Rib Combo",
         description: "Half rack ribs with mac and beans",
         basePriceCents: 2199,
+        category: "Combos",
         isAvailable: true
       }
     ],
