@@ -1,10 +1,11 @@
+
 import {
   checkDataIntegrity,
   getRevenueBySource,
   getRevenueMetrics,
 } from "../financialMetrics";
 
-jest.mock("@/lib/prisma", () => ({
+jest.mock("../prisma", () => ({
   prisma: {
     paymentTransaction: {
       aggregate: jest.fn(),
@@ -21,7 +22,7 @@ jest.mock("@/lib/prisma", () => ({
   },
 }));
 
-const { prisma: mockPrisma } = jest.requireMock("@/lib/prisma") as {
+const { prisma: mockPrisma } = jest.requireMock("../prisma") as {
   prisma: {
     paymentTransaction: {
       aggregate: jest.Mock;
