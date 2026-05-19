@@ -3,11 +3,11 @@ import { NextResponse } from "next/server";
 const mockRequireAdmin = jest.fn();
 const mockCheckDataIntegrity = jest.fn();
 
-jest.mock("@/lib/requireAdmin", () => ({
+jest.mock("../../../../../../lib/requireAdmin", () => ({
   requireAdmin: (...args: unknown[]) => mockRequireAdmin(...args),
 }));
 
-jest.mock("@/lib/financialMetrics", () => ({
+jest.mock("../../../../../../lib/financialMetrics", () => ({
   checkDataIntegrity: (...args: unknown[]) => mockCheckDataIntegrity(...args),
 }));
 
