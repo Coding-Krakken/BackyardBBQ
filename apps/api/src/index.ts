@@ -7,6 +7,7 @@ import Stripe from "stripe";
 import { prisma, Prisma } from "./prisma.js";
 import { getCheckoutSessionIdentifiers, shouldTreatWebhookEventAsDuplicate } from "./webhook/utils.js";
 import { isPersistedDuplicateWebhookEvent } from "./webhook/persisted-dedupe.js";
+import { buildPaymentMetricsSnapshot as buildPaymentMetricsSnapshotQuery } from "./metrics/paymentSnapshot.js";
 import type { PaymentStatus } from "@prisma/client";
 
 declare module "fastify" {
@@ -258,110 +259,11 @@ async function evaluateRiskThresholds(trigger: string) {
 }
 
 async function buildPaymentMetricsSnapshot(days: number) {
-  if (!hasDatabaseUrl) {
-    return {
-      windowDays: days,
-      generatedAt: new Date().toISOString(),
-      kpis: {
-        totalTransactions: 0,
-        successfulTransactions: 0,
-        refundedTransactions: 0,
-        settledVolumeCents: 0,
-        refundedVolumeCents: 0,
-        disputeCount: 0,
-        successRate: 0,
-        refundRate: 0,
-        disputeRate: 0,
-        averagePaymentCents: 0,
-        webhookEvents: 0,
-        averageWebhookLatencyMs: 0,
-        lastWebhookAt: null as string | null
-      }
-    };
-  }
-
-  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-
-  const [payments, stripeEvents] = await Promise.all([
-    prisma.paymentTransaction.findMany({
-      where: { createdAt: { gte: since } },
-      select: {
-        amountCents: true,
-        status: true,
-        createdAt: true
-      }
-    }),
-    prisma.integrationEvent.findMany({
-      where: {
-        channel: "stripe",
-        createdAt: { gte: since }
-      },
-      select: {
-        eventType: true,
-        payload: true,
-        createdAt: true
-      }
-    })
-  ]);
-
-  const totalTransactions = payments.length;
-  const successfulTransactions = payments.filter((payment) => payment.status === "succeeded").length;
-  const refundedTransactions = payments.filter(
-    (payment) => payment.status === "refunded" || payment.status === "partially_refunded"
-  ).length;
-
-  const settledVolumeCents = payments
-    .filter((payment) => ["succeeded", "refunded", "partially_refunded"].includes(payment.status))
-    .reduce((sum, payment) => sum + payment.amountCents, 0);
-
-  const refundedVolumeCents = payments
-    .filter((payment) => payment.status === "refunded" || payment.status === "partially_refunded")
-    .reduce((sum, payment) => sum + payment.amountCents, 0);
-
-  const disputeEvents = stripeEvents.filter((event) => event.eventType.includes("charge.dispute"));
-
-  const webhookWithLatency = stripeEvents
-    .map((event) => {
-      const payload = event.payload as Record<string, unknown>;
-      const updatedAt = typeof payload.updatedAt === "number" ? payload.updatedAt : null;
-      if (!updatedAt) {
-        return null;
-      }
-
-      const latencyMs = event.createdAt.getTime() - updatedAt * 1000;
-      return latencyMs >= 0 ? latencyMs : null;
-    })
-    .filter((value): value is number => typeof value === "number");
-
-  const averageWebhookLatencyMs =
-    webhookWithLatency.length > 0
-      ? Math.round(webhookWithLatency.reduce((sum, latency) => sum + latency, 0) / webhookWithLatency.length)
-      : 0;
-
-  const successRate = totalTransactions > 0 ? (successfulTransactions / totalTransactions) * 100 : 0;
-  const refundRate = settledVolumeCents > 0 ? (refundedVolumeCents / settledVolumeCents) * 100 : 0;
-  const disputeRate = totalTransactions > 0 ? (disputeEvents.length / totalTransactions) * 100 : 0;
-  const averagePaymentCents = totalTransactions > 0 ? Math.round(settledVolumeCents / totalTransactions) : 0;
-
-  return {
-    windowDays: days,
-    generatedAt: new Date().toISOString(),
-    kpis: {
-      totalTransactions,
-      successfulTransactions,
-      refundedTransactions,
-      settledVolumeCents,
-      refundedVolumeCents,
-      disputeCount: disputeEvents.length,
-      successRate,
-      refundRate,
-      disputeRate,
-      averagePaymentCents,
-      webhookEvents: stripeEvents.length,
-      averageWebhookLatencyMs,
-      lastWebhookAt: stripeEvents.length > 0 ? stripeEvents[stripeEvents.length - 1]?.createdAt.toISOString() ?? null : null
-    }
-  };
+  return buildPaymentMetricsSnapshotQuery({
+    days,
+    hasDatabaseUrl,
+    prisma
+  });
 }
 
 function toPrometheusMetrics(snapshot: {
