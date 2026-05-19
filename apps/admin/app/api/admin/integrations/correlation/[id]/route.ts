@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
-import { requireAdmin } from "@/lib/requireAdmin";
-import { prisma } from "@/lib/prisma";
+import { requireAdmin } from "../../../../../../lib/requireAdmin";
+import { prisma } from "../../../../../../lib/prisma";
 
 function extractSettlementId(payload: unknown) {
   if (!payload || typeof payload !== "object") {
@@ -34,10 +34,15 @@ export async function GET(
   const limit = Number.isFinite(limitParam) ? Math.min(Math.max(Math.trunc(limitParam), 1), 1000) : 200;
 
   const where: Prisma.IntegrationEventWhereInput = {
-    payload: {
-      path: ["correlationId"],
-      equals: correlationId
-    }
+    OR: [
+      { correlationId },
+      {
+        payload: {
+          path: ["correlationId"],
+          equals: correlationId
+        }
+      }
+    ]
   };
 
   const events = await prisma.integrationEvent.findMany({
@@ -50,13 +55,67 @@ export async function GET(
       eventType: true,
       status: true,
       orderId: true,
+      correlationId: true,
       createdAt: true,
       payload: true
     }
   });
 
+  const eventOrderIds = events
+    .map((event) => event.orderId)
+    .filter((orderId): orderId is string => typeof orderId === "string" && orderId.length > 0);
+
+  const [payments, orders] = await Promise.all([
+    prisma.paymentTransaction.findMany({
+      where: {
+        OR: [
+          { correlationId },
+          eventOrderIds.length > 0 ? { orderId: { in: eventOrderIds } } : undefined
+        ].filter(Boolean) as Prisma.PaymentTransactionWhereInput[]
+      },
+      take: limit,
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        orderId: true,
+        stripePaymentIntentId: true,
+        amountCents: true,
+        currency: true,
+        status: true,
+        paymentType: true,
+        correlationId: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    }),
+    prisma.order.findMany({
+      where: {
+        OR: [
+          { correlationId },
+          eventOrderIds.length > 0 ? { id: { in: eventOrderIds } } : undefined
+        ].filter(Boolean) as Prisma.OrderWhereInput[]
+      },
+      take: limit,
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        source: true,
+        status: true,
+        externalChannel: true,
+        externalOrderId: true,
+        totalCents: true,
+        correlationId: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    })
+  ]);
+
   const summary = {
-    total: events.length,
+    total: events.length + payments.length + orders.length,
+    events: events.length,
+    payments: payments.length,
+    orders: orders.length,
     channels: {} as Record<string, number>,
     statuses: {} as Record<string, number>,
     eventTypes: {} as Record<string, number>
@@ -74,16 +133,63 @@ export async function GET(
       eventType: event.eventType,
       status: event.status,
       orderId: event.orderId,
+      correlationId: event.correlationId,
       settlementId: extractSettlementId(payload),
       createdAt: event.createdAt.toISOString(),
       payload
     };
   });
 
+  const paymentData = payments.map((payment) => ({
+    id: payment.id,
+    type: "payment",
+    orderId: payment.orderId,
+    paymentIntentId: payment.stripePaymentIntentId,
+    amountCents: payment.amountCents,
+    currency: payment.currency,
+    status: payment.status,
+    paymentType: payment.paymentType,
+    correlationId: payment.correlationId,
+    createdAt: payment.createdAt.toISOString(),
+    updatedAt: payment.updatedAt.toISOString()
+  }));
+
+  const orderData = orders.map((order) => ({
+    id: order.id,
+    type: "order",
+    source: order.source,
+    status: order.status,
+    externalChannel: order.externalChannel,
+    externalOrderId: order.externalOrderId,
+    totalCents: order.totalCents,
+    correlationId: order.correlationId,
+    createdAt: order.createdAt.toISOString(),
+    updatedAt: order.updatedAt.toISOString()
+  }));
+
+  const timeline = [
+    ...data.map((event) => ({
+      id: event.id,
+      type: "event",
+      channel: event.channel,
+      eventType: event.eventType,
+      status: event.status,
+      orderId: event.orderId,
+      correlationId: event.correlationId,
+      settlementId: event.settlementId,
+      createdAt: event.createdAt
+    })),
+    ...paymentData,
+    ...orderData
+  ].sort((left, right) => Date.parse(left.createdAt) - Date.parse(right.createdAt));
+
   return NextResponse.json({
     correlationId,
     limit,
     summary,
-    data
+    data,
+    payments: paymentData,
+    orders: orderData,
+    timeline
   });
 }

@@ -8,6 +8,13 @@ import { prisma, Prisma } from "./prisma.js";
 import { getCheckoutSessionIdentifiers, shouldTreatWebhookEventAsDuplicate } from "./webhook/utils.js";
 import { isPersistedDuplicateWebhookEvent } from "./webhook/persisted-dedupe.js";
 import type { PaymentStatus } from "@prisma/client";
+
+declare module "fastify" {
+  interface FastifyRequest {
+    correlationId: string;
+  }
+}
+
 const deliveryChannels: Record<string, { orders?: string; status?: string; settlements?: string }> = {
   doordash: {
     orders: process.env.DOORDASH_WEBHOOK_ORDERS,
@@ -50,6 +57,33 @@ const webhookAllowedIps = (process.env.STRIPE_WEBHOOK_ALLOWED_IPS ?? "")
   .map((value) => value.trim())
   .filter(Boolean);
 const metricsApiKey = process.env.METRICS_API_KEY?.trim() || "";
+
+function sanitizeCorrelationId(input: unknown) {
+  if (typeof input !== "string") {
+    return null;
+  }
+
+  const value = input.trim();
+  if (!value) {
+    return null;
+  }
+
+  return value.slice(0, 120);
+}
+
+function resolveRequestCorrelationId(headers: Record<string, unknown>) {
+  return (
+    sanitizeCorrelationId(headers["x-correlation-id"]) ??
+    sanitizeCorrelationId(headers["x-request-id"]) ??
+    randomUUID()
+  );
+}
+
+app.addHook("onRequest", async (request, reply) => {
+  const correlationId = resolveRequestCorrelationId(request.headers);
+  request.correlationId = correlationId;
+  reply.header("X-Correlation-ID", correlationId);
+});
 
 function getRequestIps(request: { ip: string; headers: Record<string, unknown> }) {
   const forwarded = request.headers["x-forwarded-for"];
@@ -998,6 +1032,7 @@ async function queueDeliveryWebhookEvent(input: {
   const created = await prisma.integrationEvent.create({
     data: {
       orderId: input.orderId,
+      correlationId: input.correlationId,
       channel: input.channel,
       eventType: input.eventType,
       status: "queued",
@@ -1207,6 +1242,7 @@ app.post("/api/delivery/dispatch", async (request, reply) => {
   await prisma.integrationEvent.create({
     data: {
       orderId: order.id,
+      correlationId,
       channel: parsed.data.channel,
       eventType: "delivery.dispatch.requested",
       status: "queued",
@@ -1328,6 +1364,7 @@ app.post("/api/delivery/orders/:orderId/action", async (request, reply) => {
   const event = await prisma.integrationEvent.create({
     data: {
       orderId: order.id,
+      correlationId,
       channel: parsed.data.channel,
       eventType: "delivery.order.action.requested",
       status: "queued",
@@ -3433,6 +3470,7 @@ app.post(
               data: {
                 customerId,
                 locationId,
+                correlationId,
                 source: parsedDeliveryOrder.value.source,
                 externalChannel: channel,
                 externalOrderId,
@@ -3475,7 +3513,8 @@ app.post(
                   })
             },
             data: {
-              status: parsedStatusUpdate.value.status
+              status: parsedStatusUpdate.value.status,
+              correlationId
             }
           });
 
@@ -3503,6 +3542,7 @@ app.post(
       await prisma.integrationEvent.create({
         data: {
           orderId,
+          correlationId,
           channel,
           eventType: parsedBody.data.eventType,
           status: ingestStatus,
@@ -3547,8 +3587,10 @@ app.post(
     }
   },
   async (request, reply) => {
+    const correlationId = request.correlationId;
+
     if (isWebhookRateLimited(request.ip)) {
-      request.log.warn({ ip: request.ip }, "Stripe webhook rate limit exceeded");
+      request.log.warn({ ip: request.ip, correlationId }, "Stripe webhook rate limit exceeded");
       return reply.status(429).send({ message: "Too many webhook requests" });
     }
 
@@ -3557,6 +3599,7 @@ app.post(
         {
           requestIp: request.ip,
           requestIps: getRequestIps(request),
+          correlationId,
         },
         "Stripe webhook blocked by IP allowlist"
       );
@@ -3567,6 +3610,7 @@ app.post(
         details: {
           requestIp: request.ip,
           requestIps: getRequestIps(request),
+          correlationId,
         }
       });
       return reply.status(403).send({ message: "Webhook IP not allowed" });
@@ -3583,7 +3627,8 @@ app.post(
         details: {
           stripeConfigured: Boolean(stripe),
           hasSignature: Boolean(signature),
-          hasWebhookSecret: Boolean(webhookSecret)
+          hasWebhookSecret: Boolean(webhookSecret),
+          correlationId
         }
       });
       return reply.status(400).send({ message: "Webhook is not configured" });
@@ -3599,21 +3644,25 @@ app.post(
     try {
       event = stripe.webhooks.constructEvent(raw, signature, webhookSecret);
     } catch (error) {
-      request.log.warn({ error }, "Invalid Stripe webhook signature");
+      request.log.warn({ error, correlationId }, "Invalid Stripe webhook signature");
       await sendOperationalAlert({
         type: "webhook_signature_invalid",
         severity: "critical",
         message: "Stripe webhook signature verification failed",
         details: {
-          error: error instanceof Error ? error.message : "Invalid signature"
+          error: error instanceof Error ? error.message : "Invalid signature",
+          correlationId
         }
       });
       return reply.status(400).send({ message: "Invalid signature" });
     }
 
     if (isDuplicateWebhookEvent(event.id)) {
-      request.log.info({ eventId: event.id, eventType: event.type }, "Duplicate Stripe webhook event ignored");
-      return { received: true, duplicate: true };
+      request.log.info(
+        { eventId: event.id, eventType: event.type, correlationId },
+        "Duplicate Stripe webhook event ignored"
+      );
+      return { received: true, duplicate: true, correlationId };
     }
 
     if (hasDatabaseUrl) {
@@ -3621,10 +3670,10 @@ app.post(
         const isPersistedDuplicate = await isDuplicateWebhookEventInDatabase(event);
         if (isPersistedDuplicate) {
           request.log.info(
-            { eventId: event.id, eventType: event.type },
+            { eventId: event.id, eventType: event.type, correlationId },
             "Duplicate Stripe webhook event ignored via persisted lookup"
           );
-          return { received: true, duplicate: true };
+          return { received: true, duplicate: true, correlationId };
         }
       } catch (error) {
         request.log.error(
@@ -3632,6 +3681,7 @@ app.post(
             error, 
             eventId: event.id, 
             eventType: event.type,
+            correlationId,
             alertType: 'duplicate_check_failure',
             severity: 'high',
             impact: 'potential_duplicate_processing'
@@ -3655,11 +3705,13 @@ app.post(
             await prisma.integrationEvent.create({
               data: {
                 orderId,
+                correlationId,
                 channel: "stripe",
                 eventType: event.type,
                 status,
                 payload: {
                   eventId: event.id,
+                  correlationId,
                   sessionId: completedSession.id,
                   stripeCustomerId: stripeCustomerId ?? null,
                   paymentIntentId: paymentIntentId ?? null,
@@ -3673,13 +3725,16 @@ app.post(
             await writeCheckoutEvent("ignored", {
               reason: "missing_payment_intent"
             });
-            return { received: true };
+            return { received: true, correlationId };
           }
 
           if (orderId) {
             await prisma.order.updateMany({
               where: { id: orderId },
-              data: { stripeIntentId: paymentIntentId }
+              data: {
+                stripeIntentId: paymentIntentId,
+                correlationId
+              }
             });
           }
 
@@ -3689,7 +3744,7 @@ app.post(
               linkedOrderId: orderId ?? null,
               paymentIntentId
             });
-            return { received: true };
+            return { received: true, correlationId };
           }
 
           const customer = await prisma.customer.findFirst({
@@ -3704,7 +3759,7 @@ app.post(
             await writeCheckoutEvent("ignored", {
               reason: "customer_not_found"
             });
-            return { received: true };
+            return { received: true, correlationId };
           }
 
           const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId, {
@@ -3721,7 +3776,7 @@ app.post(
               reason: "unsupported_or_missing_payment_method",
               paymentMethodType: paymentMethod?.type ?? null
             });
-            return { received: true };
+            return { received: true, correlationId };
           }
 
           const shouldBeDefault = !customer.defaultPaymentMethodId;
@@ -3730,7 +3785,8 @@ app.post(
             {
               eventType: event.type,
               stripeCustomerId,
-              paymentIntentId
+              paymentIntentId,
+              correlationId
             },
             "Processing completed checkout session"
           );
@@ -3784,7 +3840,8 @@ app.post(
             message: "Checkout session webhook synchronization failed",
             details: {
               eventType: event.type,
-              error: error instanceof Error ? error.message : "Unknown processing error"
+              error: error instanceof Error ? error.message : "Unknown processing error",
+              correlationId
             }
           });
           return reply.status(500).send({ message: "Webhook processing failed" });
@@ -3847,7 +3904,8 @@ app.post(
               orderId: resolvedOrderId,
               metadataOrderId,
               bookingId,
-              paymentType
+              paymentType,
+              correlationId
             },
             "Reconciling payment intent webhook"
           );
@@ -3863,7 +3921,8 @@ app.post(
                 status: mapStripeStatusToPaymentStatus(paymentIntent.status),
                 orderId: resolvedOrderId,
                 bookingId,
-                paymentType
+                paymentType,
+                correlationId
               },
               create: {
                 stripePaymentIntentId: paymentIntent.id,
@@ -3872,27 +3931,33 @@ app.post(
                 status: mapStripeStatusToPaymentStatus(paymentIntent.status),
                 orderId: resolvedOrderId,
                 bookingId,
-                paymentType
+                paymentType,
+                correlationId
               }
             });
 
             if (resolvedOrderId) {
               await tx.order.update({
                 where: { id: resolvedOrderId },
-                data: { stripeIntentId: paymentIntent.id }
+                data: {
+                  stripeIntentId: paymentIntent.id,
+                  correlationId
+                }
               });
             }
 
             await tx.integrationEvent.create({
               data: {
                 orderId: resolvedOrderId,
+                correlationId,
                 channel: "stripe",
                 eventType: event.type,
                 status: "processed",
                 payload: {
                   eventId: event.id,
                   paymentIntentId: paymentIntent.id,
-                  status: paymentIntent.status
+                  status: paymentIntent.status,
+                  correlationId
                 } as Prisma.InputJsonValue
               }
             });
@@ -3906,12 +3971,13 @@ app.post(
               details: {
                 eventType: event.type,
                 paymentIntentId: paymentIntent.id,
-                metadataOrderId: metadataOrderId ?? null
+                metadataOrderId: metadataOrderId ?? null,
+                correlationId
               }
             });
           }
         } catch (error) {
-          request.log.error({ error }, "Failed to reconcile payment intent webhook");
+          request.log.error({ error, correlationId }, "Failed to reconcile payment intent webhook");
           await sendOperationalAlert({
             type: "payment_intent_reconcile_failed",
             severity: "critical",
@@ -3919,7 +3985,8 @@ app.post(
             details: {
               eventType: event.type,
               paymentIntentId: paymentIntent.id,
-              error: error instanceof Error ? error.message : "Unknown processing error"
+              error: error instanceof Error ? error.message : "Unknown processing error",
+              correlationId
             }
           });
           return reply.status(500).send({ message: "Webhook processing failed" });
@@ -3943,7 +4010,8 @@ app.post(
               paymentIntentId,
               disputeStatus,
               amountCents: dispute.amount,
-              reason: dispute.reason
+              reason: dispute.reason,
+              correlationId
             },
             "Reconciling dispute webhook"
           );
@@ -3991,6 +4059,7 @@ app.post(
             disputeStatus,
             evidenceDueBy: dispute.evidence_details?.due_by ?? null,
             updatedAt: event.created,
+            correlationId,
             evidenceDetails: JSON.parse(JSON.stringify(dispute.evidence_details ?? {}))
           } as Prisma.InputJsonValue;
 
@@ -3999,6 +4068,7 @@ app.post(
               where: { id: existing.id },
               data: {
                 orderId: linkedPayment?.orderId,
+                correlationId,
                 eventType: event.type,
                 status: disputeStatus,
                 payload: nextPayload
@@ -4008,6 +4078,7 @@ app.post(
             await prisma.integrationEvent.create({
               data: {
                 orderId: linkedPayment?.orderId,
+                correlationId,
                 channel: "stripe",
                 eventType: event.type,
                 status: disputeStatus,
@@ -4018,7 +4089,7 @@ app.post(
 
           await evaluateRiskThresholds("dispute_webhook_event");
         } catch (error) {
-          request.log.error({ error }, "Failed to persist dispute webhook event");
+          request.log.error({ error, correlationId }, "Failed to persist dispute webhook event");
           await sendOperationalAlert({
             type: "dispute_reconcile_failed",
             severity: "critical",
@@ -4026,7 +4097,8 @@ app.post(
             details: {
               eventType: event.type,
               disputeId: dispute.id,
-              error: error instanceof Error ? error.message : "Unknown processing error"
+              error: error instanceof Error ? error.message : "Unknown processing error",
+              correlationId
             }
           });
           return reply.status(500).send({ message: "Webhook processing failed" });
@@ -4034,7 +4106,7 @@ app.post(
       }
     }
 
-    return { received: true };
+    return { received: true, correlationId };
   }
 );
 
