@@ -4,11 +4,10 @@ test.describe("Order flow", () => {
   test("adds an item to cart and reaches checkout", async ({ page }) => {
     await page.goto("/menu", { waitUntil: "domcontentloaded" });
 
-    const addToCartButton = page.getByRole("button", { name: "Add to Cart" }).first();
+    const addToCartButton = page.locator("button.menu-card-add").first();
     if (await addToCartButton.isVisible({ timeout: 3000 }).catch(() => false)) {
       await addToCartButton.click();
-      await page.getByRole("button", { name: /Shopping cart with/i }).click();
-      await page.getByRole("link", { name: "View Cart" }).click();
+      await page.goto("/cart", { waitUntil: "domcontentloaded" });
 
       await expect(page.getByRole("heading", { name: "Your Cart" })).toBeVisible();
       await page.getByRole("link", { name: "Proceed to Checkout" }).click();

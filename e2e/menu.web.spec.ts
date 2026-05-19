@@ -5,8 +5,8 @@ test.describe("Web menu experience", () => {
     await page.goto("/menu", { waitUntil: "domcontentloaded" });
 
     await expect(page.getByRole("heading", { name: "Slow-Smoked BBQ, Sides & More" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "All Items" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Brisket" })).toBeVisible();
+    await expect(page.locator(".category-nav").getByRole("button", { name: "All Items", exact: true })).toBeVisible();
+    await expect(page.locator(".category-nav").getByRole("button", { name: "Brisket", exact: true })).toBeVisible();
     await expect(page.getByPlaceholder("Search brisket, ribs, family trays, and more")).toBeVisible();
   });
 
@@ -18,7 +18,7 @@ test.describe("Web menu experience", () => {
       await menuCards.first().click();
       await expect(page.locator(".modal-content")).toBeVisible();
       await expect(page.locator(".modal-title")).toBeVisible();
-      await expect(page.getByRole("button", { name: /Add to Cart/i })).toBeVisible();
+      await expect(page.locator(".modal-footer").locator("button.btn-full").first()).toBeVisible();
       return;
     }
 

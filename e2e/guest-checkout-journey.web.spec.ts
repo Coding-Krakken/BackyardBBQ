@@ -4,7 +4,7 @@ test.describe("Guest checkout journey", () => {
   test("adds an item from menu and reaches checkout with cart context", async ({ page }) => {
     await page.goto("/menu", { waitUntil: "domcontentloaded" });
 
-    const addToCartButton = page.getByRole("button", { name: /Add to Cart/i }).first();
+    const addToCartButton = page.locator("button.menu-card-add").first();
     if (await addToCartButton.isVisible({ timeout: 3000 }).catch(() => false)) {
       await addToCartButton.click();
 
