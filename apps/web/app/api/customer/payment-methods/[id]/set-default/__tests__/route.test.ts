@@ -84,4 +84,26 @@ describe("PATCH /api/customer/payment-methods/[id]/set-default", () => {
       data: { defaultPaymentMethodId: "pm_1" },
     });
   });
+
+  it("returns 500 when set-default transaction fails", async () => {
+    (getServerSession as jest.Mock).mockResolvedValue({ user: { id: "cust_1" } });
+
+    jest.spyOn(prisma.savedPaymentMethod, "findFirst").mockResolvedValue({
+      id: "spm_1",
+      customerId: "cust_1",
+      stripePaymentMethodId: "pm_1",
+    } as never);
+
+    jest
+      .spyOn(prisma, "$transaction")
+      .mockRejectedValue(new Error("transaction failed") as never);
+
+    const response = await PATCH(new Request("http://localhost"), {
+      params: Promise.resolve({ id: "spm_1" }),
+    });
+
+    const payload = await response.json();
+    expect(response.status).toBe(500);
+    expect(payload.error).toBe("Failed to update default payment method");
+  });
 });

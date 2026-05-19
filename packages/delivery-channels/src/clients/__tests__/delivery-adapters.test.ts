@@ -76,6 +76,48 @@ describe("createDeliveryChannelAdapters", () => {
       );
       expect(second.status).toBe("duplicate");
     });
+
+    it("can return terminal_failure and retry_exhausted outcomes", async () => {
+      const maxAttempts = 3;
+
+      let terminalResult: { status: string } | null = null;
+      let retryExhaustedResult: { status: string } | null = null;
+
+      for (let index = 0; index < 400; index += 1) {
+        const adapters = createDeliveryChannelAdapters({
+          credentialsByChannel: testCredentials,
+          retryPolicy: {
+            maxAttempts,
+          },
+        });
+
+        const envelope = {
+          channel: "doordash" as const,
+          externalOrderId: `order-outcome-${index}`,
+          idempotencyKey: `doordash:order-outcome-${index}`,
+          totalCents: 3000,
+          placedAt: new Date().toISOString(),
+          items: [],
+        };
+
+        const result = await adapters.doordash.ingestOrder(envelope);
+
+        if (result.status === "terminal_failure") {
+          terminalResult = result;
+        }
+
+        if (result.status === "retry_exhausted") {
+          retryExhaustedResult = result;
+        }
+
+        if (terminalResult && retryExhaustedResult) {
+          break;
+        }
+      }
+
+      expect(terminalResult?.status).toBe("terminal_failure");
+      expect(retryExhaustedResult?.status).toBe("retry_exhausted");
+    });
   });
 
   describe("syncSettlement", () => {
@@ -96,6 +138,41 @@ describe("createDeliveryChannelAdapters", () => {
 
       expect(result).toHaveProperty("latencyMs");
       expect(typeof result.latencyMs).toBe("number");
+    });
+
+    it("proxies provider operations for dispatch/action/status/menu/webhook", async () => {
+      const adapters = createDeliveryChannelAdapters({
+        credentialsByChannel: testCredentials,
+      });
+
+      const webhookValid = await adapters.doordash.verifyWebhookSignature({
+        rawBody: "{}",
+        signature: "invalid-signature",
+      });
+
+      const dispatch = await adapters.doordash.dispatchOrder({
+        externalOrderId: "dispatch-1",
+        internalOrderId: "internal-1",
+      } as any);
+      const action = await adapters.doordash.sendOrderAction({
+        externalOrderId: "dispatch-1",
+        action: "confirm",
+      } as any);
+      const status = await adapters.doordash.syncOrderStatus({
+        externalOrderId: "dispatch-1",
+      } as any);
+      const menu = await adapters.doordash.publishMenuSnapshot({
+        channel: "doordash",
+        snapshotVersion: "v1",
+        updatedAt: new Date().toISOString(),
+        menu: [],
+      } as any);
+
+      expect(typeof webhookValid).toBe("boolean");
+      expect(typeof dispatch.latencyMs).toBe("number");
+      expect(typeof action.latencyMs).toBe("number");
+      expect(typeof status.latencyMs).toBe("number");
+      expect(typeof menu.latencyMs).toBe("number");
     });
   });
 

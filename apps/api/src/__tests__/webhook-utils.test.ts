@@ -36,6 +36,16 @@ describe("shouldTreatWebhookEventAsDuplicate", () => {
     expect(store.has("evt_fresh")).toBe(true);
     expect(store.has("evt_new")).toBe(true);
   });
+
+  it("uses Date.now when now is not provided", () => {
+    const nowSpy = jest.spyOn(Date, "now").mockReturnValue(5000);
+    const store = new Map<string, number>();
+
+    expect(shouldTreatWebhookEventAsDuplicate(store, "evt_default_now", 1000)).toBe(false);
+    expect(store.get("evt_default_now")).toBe(5000);
+
+    nowSpy.mockRestore();
+  });
 });
 
 describe("getCheckoutSessionIdentifiers", () => {
@@ -63,6 +73,48 @@ describe("getCheckoutSessionIdentifiers", () => {
     expect(getCheckoutSessionIdentifiers(session)).toEqual({
       stripeCustomerId: undefined,
       paymentIntentId: undefined,
+      orderId: undefined,
+    });
+  });
+
+  it("treats object and empty metadata identifiers as undefined", () => {
+    const session = {
+      customer: { id: "cus_obj" },
+      payment_intent: { id: "pi_obj" },
+      metadata: { orderId: "" },
+    } as unknown as CheckoutSessionLike;
+
+    expect(getCheckoutSessionIdentifiers(session)).toEqual({
+      stripeCustomerId: undefined,
+      paymentIntentId: undefined,
+      orderId: undefined,
+    });
+  });
+
+  it("treats non-string orderId metadata as undefined", () => {
+    const session = {
+      customer: "cus_123",
+      payment_intent: "pi_123",
+      metadata: { orderId: 12345 },
+    } as unknown as CheckoutSessionLike;
+
+    expect(getCheckoutSessionIdentifiers(session)).toEqual({
+      stripeCustomerId: "cus_123",
+      paymentIntentId: "pi_123",
+      orderId: undefined,
+    });
+  });
+
+  it("treats null metadata as undefined identifiers", () => {
+    const session = {
+      customer: "cus_999",
+      payment_intent: "pi_999",
+      metadata: null,
+    } as unknown as CheckoutSessionLike;
+
+    expect(getCheckoutSessionIdentifiers(session)).toEqual({
+      stripeCustomerId: "cus_999",
+      paymentIntentId: "pi_999",
       orderId: undefined,
     });
   });

@@ -8,6 +8,12 @@ import { prisma, Prisma } from "./prisma.js";
 import { getCheckoutSessionIdentifiers } from "./webhook/utils.js";
 import { isPersistedDuplicateWebhookEvent } from "./webhook/persisted-dedupe.js";
 import { createWebhookSharedState } from "./webhook/shared-state.js";
+import {
+  getRequestIps,
+  isWebhookIpAllowed,
+  resolveRequestCorrelationId,
+  verifyHmacSha256Signature
+} from "./webhook/security.js";
 import { buildPaymentMetricsSnapshot as buildPaymentMetricsSnapshotQuery } from "./metrics/paymentSnapshot.js";
 import type { PaymentStatus } from "@prisma/client";
 
@@ -70,53 +76,11 @@ app.addHook("onClose", async () => {
   await webhookSharedState.close();
 });
 
-function sanitizeCorrelationId(input: unknown) {
-  if (typeof input !== "string") {
-    return null;
-  }
-
-  const value = input.trim();
-  if (!value) {
-    return null;
-  }
-
-  return value.slice(0, 120);
-}
-
-function resolveRequestCorrelationId(headers: Record<string, unknown>) {
-  return (
-    sanitizeCorrelationId(headers["x-correlation-id"]) ??
-    sanitizeCorrelationId(headers["x-request-id"]) ??
-    randomUUID()
-  );
-}
-
 app.addHook("onRequest", async (request, reply) => {
-  const correlationId = resolveRequestCorrelationId(request.headers);
+  const correlationId = resolveRequestCorrelationId(request.headers, randomUUID);
   request.correlationId = correlationId;
   reply.header("X-Correlation-ID", correlationId);
 });
-
-function getRequestIps(request: { ip: string; headers: Record<string, unknown> }) {
-  const forwarded = request.headers["x-forwarded-for"];
-  const fromForwarded = typeof forwarded === "string"
-    ? forwarded
-        .split(",")
-        .map((value) => value.trim())
-        .filter(Boolean)
-    : [];
-
-  return [request.ip, ...fromForwarded].filter(Boolean);
-}
-
-function isWebhookIpAllowed(request: { ip: string; headers: Record<string, unknown> }) {
-  if (webhookAllowedIps.length === 0) {
-    return true;
-  }
-
-  const requestIps = getRequestIps(request);
-  return requestIps.some((ip) => webhookAllowedIps.includes(ip));
-}
 
 async function isWebhookRateLimited(ip: string) {
   const key = ip || "unknown";
@@ -670,32 +634,6 @@ function isSupportedIntegrationChannel(channel: string): channel is (typeof inte
   return integrationChannels.includes(channel as (typeof integrationChannels)[number]);
 }
 
-function stripKnownSignaturePrefixes(signature: string) {
-  const trimmed = signature.trim();
-  return trimmed.replace(/^(sha256=|v1=)/i, "");
-}
-
-function verifyHmacSha256Signature(input: {
-  rawBody: string;
-  signature: string;
-  secret: string;
-}) {
-  const normalizedSignature = stripKnownSignaturePrefixes(input.signature);
-  const computedSignature = createHmac("sha256", input.secret).update(input.rawBody, "utf8").digest("hex");
-
-  const signatureBuffer = Buffer.from(normalizedSignature, "hex");
-  const computedBuffer = Buffer.from(computedSignature, "hex");
-
-  if (signatureBuffer.length === 0 || computedBuffer.length === 0) {
-    return false;
-  }
-
-  if (signatureBuffer.length !== computedBuffer.length) {
-    return false;
-  }
-
-  return timingSafeEqual(signatureBuffer, computedBuffer);
-}
 
 function parseIncomingDeliveryOrder(
   payload: Record<string, unknown>,
@@ -3501,7 +3439,7 @@ app.post(
       return reply.status(429).send({ message: "Too many webhook requests" });
     }
 
-    if (!isWebhookIpAllowed(request)) {
+    if (!isWebhookIpAllowed(request, webhookAllowedIps)) {
       request.log.warn(
         {
           requestIp: request.ip,

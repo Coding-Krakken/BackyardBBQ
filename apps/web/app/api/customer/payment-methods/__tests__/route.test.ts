@@ -76,4 +76,18 @@ describe("GET /api/customer/payment-methods", () => {
     expect(payload.paymentMethods).toEqual([]);
     expect(payload.defaultPaymentMethodId).toBeNull();
   });
+
+  it("returns 500 when payment method query fails", async () => {
+    (getServerSession as jest.Mock).mockResolvedValue({
+      user: { id: "cust_3" },
+    });
+
+    jest.spyOn(prisma.customer, "findUnique").mockRejectedValue(new Error("db down") as never);
+
+    const response = await GET();
+    const payload = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(payload.error).toBe("Failed to fetch payment methods");
+  });
 });

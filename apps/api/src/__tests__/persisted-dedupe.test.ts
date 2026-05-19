@@ -49,6 +49,29 @@ describe("isPersistedDuplicateWebhookEvent", () => {
     });
   });
 
+  it("uses Date.now fallback when now is not provided", async () => {
+    const nowSpy = jest.spyOn(Date, "now").mockReturnValue(90_000);
+    const findMany = jest.fn(async () => []);
+    const event: StripeEventLike = { id: "evt_now_fallback", type: "checkout.session.completed" };
+
+    await isPersistedDuplicateWebhookEvent({
+      hasDatabaseUrl: true,
+      integrationEvent: { findMany },
+      event,
+      webhookEventTtlMs: 30_000
+    });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          createdAt: { gte: new Date(60_000) }
+        })
+      })
+    );
+
+    nowSpy.mockRestore();
+  });
+
   it("returns true when matching eventId exists in persisted payload", async () => {
     const findMany = jest.fn(async () => [
       { payload: { eventId: "evt_a" } },

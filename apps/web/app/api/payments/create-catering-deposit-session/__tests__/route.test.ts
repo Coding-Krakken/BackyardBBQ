@@ -60,6 +60,25 @@ describe("POST /api/payments/create-catering-deposit-session", () => {
     expect(payload.error).toBe("Unauthorized");
   });
 
+  it("returns 500 when STRIPE_SECRET_KEY is missing", async () => {
+    const originalSecretKey = process.env.STRIPE_SECRET_KEY;
+    delete process.env.STRIPE_SECRET_KEY;
+
+    const request = new NextRequest("http://localhost/api/payments/create-catering-deposit-session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ bookingId: "booking_secret_missing" }),
+    });
+
+    const response = await POST(request);
+    const payload = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(payload.error).toBe("Missing STRIPE_SECRET_KEY environment variable");
+
+    process.env.STRIPE_SECRET_KEY = originalSecretKey;
+  });
+
   it("returns 400 for invalid payload", async () => {
     (getServerSession as jest.Mock).mockResolvedValue({ user: { id: "cust_1" } });
 
@@ -137,6 +156,32 @@ describe("POST /api/payments/create-catering-deposit-session", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ bookingId: "booking_1" }),
+    });
+
+    const response = await POST(request);
+    const payload = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(payload.error).toBe("Deposit amount is not configured");
+  });
+
+  it("treats null deposit amount as not configured", async () => {
+    (getServerSession as jest.Mock).mockResolvedValue({ user: { id: "cust_1" } });
+
+    jest.spyOn(prisma.cateringBooking, "findFirst").mockResolvedValue({
+      id: "booking_null_deposit",
+      eventDate: new Date("2026-09-01T12:00:00.000Z"),
+      partySize: 30,
+      packageName: "Classic Smokehouse",
+      status: "approved",
+      depositCents: null,
+      estimatedTotalCents: 40000,
+    } as never);
+
+    const request = new NextRequest("http://localhost/api/payments/create-catering-deposit-session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ bookingId: "booking_null_deposit" }),
     });
 
     const response = await POST(request);
@@ -348,5 +393,41 @@ describe("POST /api/payments/create-catering-deposit-session", () => {
         }),
       })
     );
+  });
+
+  it("returns generic error when checkout session creation throws non-Error", async () => {
+    (getServerSession as jest.Mock).mockResolvedValue({ user: { id: "cust_non_error" } });
+
+    jest.spyOn(prisma.cateringBooking, "findFirst").mockResolvedValue({
+      id: "booking_non_error",
+      eventDate: new Date("2026-10-15T12:00:00.000Z"),
+      partySize: 25,
+      packageName: "Pitmaster Signature",
+      status: "approved",
+      depositCents: 9000,
+      estimatedTotalCents: 30000,
+    } as never);
+
+    jest.spyOn(prisma.customer, "findUnique").mockResolvedValue({
+      id: "cust_non_error",
+      email: "nonerror@example.com",
+      firstName: "Non",
+      lastName: "Error",
+      stripeCustomerId: "cus_non_error",
+    } as never);
+
+    mockCheckoutSessionsCreate.mockRejectedValue("explode");
+
+    const request = new NextRequest("http://localhost/api/payments/create-catering-deposit-session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ bookingId: "booking_non_error" }),
+    });
+
+    const response = await POST(request);
+    const payload = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(payload.error).toBe("Failed to create catering deposit session");
   });
 });

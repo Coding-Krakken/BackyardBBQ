@@ -4,10 +4,14 @@ import Stripe from "stripe";
 import { authOptions } from "../../../../../lib/auth";
 import { prisma } from "../../../../../lib/prisma";
 
-const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim();
-const stripe = stripeSecretKey
-  ? new Stripe(stripeSecretKey, { apiVersion: "2026-04-22.dahlia" })
-  : null;
+function getStripeClient() {
+  const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim();
+  if (!stripeSecretKey) {
+    return null;
+  }
+
+  return new Stripe(stripeSecretKey, { apiVersion: "2026-04-22.dahlia" });
+}
 
 export async function DELETE(
   _request: Request,
@@ -48,6 +52,7 @@ export async function DELETE(
       },
     });
 
+    const stripe = getStripeClient();
     if (stripe && customer?.stripeCustomerId) {
       try {
         await stripe.paymentMethods.detach(method.stripePaymentMethodId);
