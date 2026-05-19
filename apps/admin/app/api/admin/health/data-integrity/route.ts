@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "../../../../../../lib/requireAdmin";
-import { checkDataIntegrity } from "../../../../../../lib/financialMetrics";
+import { requireAdmin } from "../../../../../lib/requireAdmin";
+import { checkDataIntegrity } from "../../../../../lib/financialMetrics";
 
 let lastAlertAt = 0;
 

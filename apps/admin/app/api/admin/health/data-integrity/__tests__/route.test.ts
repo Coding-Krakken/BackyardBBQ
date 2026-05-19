@@ -1,4 +1,24 @@
-import { NextResponse } from "next/server";
+class MockNextResponse {
+  status: number;
+  private readonly body: unknown;
+
+  constructor(body: unknown, init?: { status?: number }) {
+    this.body = body;
+    this.status = init?.status ?? 200;
+  }
+
+  static json(body: unknown, init?: { status?: number }) {
+    return new MockNextResponse(body, init);
+  }
+
+  async json() {
+    return this.body;
+  }
+}
+
+jest.mock("next/server", () => ({
+  NextResponse: MockNextResponse,
+}));
 
 const mockRequireAdmin = jest.fn();
 const mockCheckDataIntegrity = jest.fn();
@@ -34,9 +54,8 @@ describe("GET /api/admin/health/data-integrity", () => {
   });
 
   it("returns auth response when requireAdmin denies access", async () => {
-    const nextServer = await import("next/server");
     mockRequireAdmin.mockResolvedValueOnce(
-      nextServer.NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      MockNextResponse.json({ error: "Unauthorized" }, { status: 401 })
     );
 
     const response = await runGet();
