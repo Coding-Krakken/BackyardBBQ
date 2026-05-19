@@ -49,6 +49,22 @@ Durability and safety controls include:
 - Per-IP rate limiting on webhook ingress
 - Optional Stripe webhook IP allowlisting
 
+### Correlation ID Tracing
+
+Webhook and API requests now carry request-level correlation context:
+- Incoming `X-Correlation-ID` or `X-Request-ID` is reused when present.
+- A new UUID correlation ID is generated when no inbound ID exists.
+- API responses include `X-Correlation-ID` for downstream propagation.
+
+Correlation IDs are persisted for incident reconstruction:
+- `IntegrationEvent.correlationId`
+- `PaymentTransaction.correlationId`
+- `Order.correlationId`
+
+Admin tracing endpoint:
+- `GET /api/admin/integrations/correlation/:id`
+- Returns matched integration events plus related payments and orders in a single timeline.
+
 ## Operational Health Endpoints
 
 Implemented in [apps/api/src/index.ts](apps/api/src/index.ts):

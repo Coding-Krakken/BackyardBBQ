@@ -155,6 +155,7 @@ model Order {
   id                String               @id @default(cuid())
   customerId        String?
   locationId        String
+  correlationId     String?
   source            OrderSource
   status            OrderStatus          @default(pending)
   fulfillmentMode   String               @default("delivery")
@@ -180,6 +181,7 @@ model Order {
   settlementLines   DeliverySettlementLine[]
 
   @@unique([externalChannel, externalOrderId])
+  @@index([correlationId])
 }
 
 model DeliveryChannelCredential {
@@ -296,6 +298,7 @@ model PaymentTransaction {
   customerId         String?
   orderId            String?       @unique
   bookingId          String?
+  correlationId      String?
   paymentType        String        @default("order")
   stripePaymentIntentId String     @unique
   amountCents        Int
@@ -307,11 +310,13 @@ model PaymentTransaction {
   order              Order?        @relation(fields: [orderId], references: [id])
 
   @@index([bookingId])
+  @@index([correlationId])
 }
 
 model IntegrationEvent {
   id            String    @id @default(cuid())
   orderId       String?
+  correlationId String?
   channel       String
   eventType     String
   payload       Json
@@ -320,6 +325,7 @@ model IntegrationEvent {
   order         Order?    @relation(fields: [orderId], references: [id])
 
   @@index([channel, eventType])
+  @@index([correlationId])
 }
 
 model Address {

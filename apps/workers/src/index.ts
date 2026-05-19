@@ -101,6 +101,22 @@ function getPayloadCorrelationId(payload: Prisma.JsonObject, fallback: string) {
   return typeof correlationId === "string" && correlationId.length > 0 ? correlationId : fallback;
 }
 
+function getEventCorrelationId(
+  event: { correlationId?: string | null; payload: Prisma.JsonValue },
+  fallback: string
+) {
+  if (typeof event.correlationId === "string" && event.correlationId.length > 0) {
+    return event.correlationId;
+  }
+
+  const payload = event.payload;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return fallback;
+  }
+
+  return getPayloadCorrelationId(payload as Prisma.JsonObject, fallback);
+}
+
 function parseWebhookOrderPayload(payload: Prisma.JsonObject): IncomingWebhookOrder | null {
   const orderValue = payload.order;
   if (!orderValue || typeof orderValue !== "object" || Array.isArray(orderValue)) {
@@ -212,7 +228,7 @@ async function runWebhookOrderQueueCycle() {
   for (const webhookEvent of queuedEvents) {
     const channel = webhookEvent.channel as DeliveryChannel;
     const payload = webhookEvent.payload as Prisma.JsonObject;
-    const correlationId = getPayloadCorrelationId(payload, `wh-order-${webhookEvent.id}`);
+    const correlationId = getEventCorrelationId(webhookEvent, `wh-order-${webhookEvent.id}`);
     const parsedOrder = parseWebhookOrderPayload(payload);
 
     if (!parsedOrder) {
@@ -280,6 +296,7 @@ async function runWebhookOrderQueueCycle() {
         await prisma.order.create({
           data: {
             locationId,
+            correlationId,
             source: channel,
             status: "pending",
             externalChannel: channel,
@@ -303,6 +320,7 @@ async function runWebhookOrderQueueCycle() {
       await prisma.integrationEvent.update({
         where: { id: webhookEvent.id },
         data: {
+          correlationId,
           status: "processed",
           payload: {
             ...payload,
@@ -316,6 +334,7 @@ async function runWebhookOrderQueueCycle() {
       await prisma.integrationEvent.update({
         where: { id: webhookEvent.id },
         data: {
+          correlationId,
           status: "dead_letter",
           payload: {
             ...payload,
@@ -346,7 +365,7 @@ async function runWebhookStatusQueueCycle() {
   for (const webhookEvent of queuedEvents) {
     const channel = webhookEvent.channel as DeliveryChannel;
     const payload = webhookEvent.payload as Prisma.JsonObject;
-    const correlationId = getPayloadCorrelationId(payload, `wh-status-${webhookEvent.id}`);
+    const correlationId = getEventCorrelationId(webhookEvent, `wh-status-${webhookEvent.id}`);
     const parsedStatus = parseWebhookStatusPayload(payload);
     const orderExternalId = typeof payload.orderExternalId === "string" ? payload.orderExternalId : undefined;
 
@@ -416,13 +435,17 @@ async function runWebhookStatusQueueCycle() {
     try {
       await prisma.order.update({
         where: { id: order.id },
-        data: { status: parsedStatus.status }
+        data: {
+          status: parsedStatus.status,
+          correlationId
+        }
       });
 
       await prisma.integrationEvent.update({
         where: { id: webhookEvent.id },
         data: {
           orderId: order.id,
+          correlationId,
           status: "processed",
           payload: {
             ...payload,
@@ -451,6 +474,7 @@ async function runWebhookStatusQueueCycle() {
       await prisma.integrationEvent.update({
         where: { id: webhookEvent.id },
         data: {
+          correlationId,
           status: "dead_letter",
           payload: {
             ...payload,
@@ -476,12 +500,17 @@ async function persistHealthEvent(input: {
     return;
   }
 
+  const correlationId =
+    typeof input.channel === "string" ? `health-${input.channel}-${Date.now()}` : `health-${Date.now()}`;
+
   await prisma.integrationEvent.create({
     data: {
+      correlationId,
       channel: input.channel,
       eventType: "delivery.sync.health",
       status: input.status,
       payload: {
+        correlationId,
         processedCount: input.processedCount,
         failedCount: input.failedCount,
         deadLetterCount: input.deadLetterCount,
@@ -501,12 +530,16 @@ async function persistDeadLetter(input: {
     return;
   }
 
+  const correlationId = `dead-letter-${input.channel}-${Date.now()}`;
+
   await prisma.integrationEvent.create({
     data: {
+      correlationId,
       channel: input.channel,
       eventType: "delivery.order.sync",
       status: "dead_letter",
       payload: {
+        correlationId,
         reason: input.reason,
         orderExternalId: input.orderExternalId,
         capturedAt: new Date().toISOString()
@@ -525,12 +558,21 @@ async function persistIngestEvent(input: {
     return;
   }
 
+  const correlationId =
+    typeof input.payload.correlationId === "string" && input.payload.correlationId.length > 0
+      ? input.payload.correlationId
+      : `ingest-${input.channel}-${Date.now()}`;
+
   await prisma.integrationEvent.create({
     data: {
+      correlationId,
       channel: input.channel,
       eventType: input.eventType,
       status: input.status,
-      payload: input.payload as Prisma.InputJsonValue
+      payload: {
+        ...input.payload,
+        correlationId
+      } as Prisma.InputJsonValue
     }
   });
 }
@@ -544,12 +586,21 @@ async function persistStatusSyncEvent(input: {
     return;
   }
 
+  const correlationId =
+    typeof input.payload.correlationId === "string" && input.payload.correlationId.length > 0
+      ? input.payload.correlationId
+      : `status-sync-${input.channel}-${Date.now()}`;
+
   await prisma.integrationEvent.create({
     data: {
+      correlationId,
       channel: input.channel,
       eventType: "delivery.order.status.sync",
       status: input.status,
-      payload: input.payload as Prisma.InputJsonValue
+      payload: {
+        ...input.payload,
+        correlationId
+      } as Prisma.InputJsonValue
     }
   });
 }
@@ -563,12 +614,21 @@ async function persistSettlementSyncEvent(input: {
     return;
   }
 
+  const correlationId =
+    typeof input.payload.correlationId === "string" && input.payload.correlationId.length > 0
+      ? input.payload.correlationId
+      : `settlement-sync-${input.channel}-${Date.now()}`;
+
   await prisma.integrationEvent.create({
     data: {
+      correlationId,
       channel: input.channel,
       eventType: "delivery.settlement.sync",
       status: input.status,
-      payload: input.payload as Prisma.InputJsonValue
+      payload: {
+        ...input.payload,
+        correlationId
+      } as Prisma.InputJsonValue
     }
   });
 }
@@ -1010,7 +1070,7 @@ async function runDispatchQueueCycle() {
     }
 
     const payload = dispatchEvent.payload as Prisma.JsonObject;
-    const correlationId = getPayloadCorrelationId(payload, `dispatch-${dispatchEvent.id}`);
+    const correlationId = getEventCorrelationId(dispatchEvent, `dispatch-${dispatchEvent.id}`);
     const orderId = typeof payload.orderId === "string" ? payload.orderId : undefined;
     const attempts = typeof payload.attempts === "number" ? payload.attempts : 0;
     const maxAttempts = 5;
@@ -1080,6 +1140,7 @@ async function runDispatchQueueCycle() {
       await prisma.integrationEvent.update({
         where: { id: dispatchEvent.id },
         data: {
+          correlationId,
           status: "processed",
           payload: {
             ...payload,
@@ -1112,6 +1173,7 @@ async function runDispatchQueueCycle() {
       await prisma.integrationEvent.update({
         where: { id: dispatchEvent.id },
         data: {
+          correlationId,
           status: shouldDeadLetter ? "dead_letter" : "queued",
           payload: {
             ...payload,
@@ -1163,7 +1225,7 @@ async function runOrderActionQueueCycle() {
     }
 
     const payload = actionEvent.payload as Prisma.JsonObject;
-    const correlationId = getPayloadCorrelationId(payload, `action-${actionEvent.id}`);
+    const correlationId = getEventCorrelationId(actionEvent, `action-${actionEvent.id}`);
     const mappedStatus =
       typeof payload.mappedStatus === "string"
         ? (payload.mappedStatus as ProviderStatusSyncInput["status"])
@@ -1215,6 +1277,7 @@ async function runOrderActionQueueCycle() {
       await prisma.integrationEvent.update({
         where: { id: actionEvent.id },
         data: {
+          correlationId,
           status: "processed",
           payload: {
             ...payload,
@@ -1245,6 +1308,7 @@ async function runOrderActionQueueCycle() {
       await prisma.integrationEvent.update({
         where: { id: actionEvent.id },
         data: {
+          correlationId,
           status: deadLetter ? "dead_letter" : "queued",
           payload: {
             ...payload,
@@ -1352,7 +1416,7 @@ async function runSettlementQueueCycle() {
     }
 
     const payload = settlementEvent.payload as Prisma.JsonObject;
-    const correlationId = getPayloadCorrelationId(payload, `settlement-${settlementEvent.id}`);
+    const correlationId = getEventCorrelationId(settlementEvent, `settlement-${settlementEvent.id}`);
     const attempts = typeof payload.attempts === "number" ? payload.attempts : 0;
     const maxAttempts = 5;
     const normalized = extractSettlementPayload(payload);
@@ -1485,6 +1549,7 @@ async function runSettlementQueueCycle() {
       await prisma.integrationEvent.update({
         where: { id: settlementEvent.id },
         data: {
+          correlationId,
           orderId: ledgerRecord?.orderId ?? undefined,
           status: "processed",
           payload: {
@@ -1537,6 +1602,7 @@ async function runSettlementQueueCycle() {
       await prisma.integrationEvent.update({
         where: { id: settlementEvent.id },
         data: {
+          correlationId,
           status: deadLetter ? "dead_letter" : "queued",
           payload: {
             ...payload,
