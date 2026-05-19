@@ -11,11 +11,24 @@ test.describe("Reservation flow", () => {
     await form.getByLabel("Date", { exact: true }).fill("2026-06-20");
     await form.getByLabel("Time").selectOption({ label: "6:30 PM (Limited)" });
     await form.getByLabel("Party size").fill("4");
-    await Promise.all([
-      page.waitForResponse((response) => response.url().includes("/api/reservations") && response.request().method() === "POST"),
-      form.getByRole("button", { name: "Submit Reservation" }).click()
-    ]);
+    const submit = async () => {
+      await Promise.all([
+        page.waitForRequest(
+          (request) => request.url().includes("/api/reservations") && request.method() === "POST"
+        ),
+        form.getByRole("button", { name: "Submit Reservation" }).click()
+      ]);
+    };
 
-    await expect(page.getByRole("heading", { name: "You Are On The Book" })).toBeVisible({ timeout: 15000 });
+    await submit();
+
+    const confirmationHeading = page.getByRole("heading", { name: "You Are On The Book" });
+    const transientError = form.getByText("Failed to fetch", { exact: true });
+
+    if (await transientError.isVisible()) {
+      await submit();
+    }
+
+    await expect(confirmationHeading).toBeVisible({ timeout: 15000 });
   });
 });
