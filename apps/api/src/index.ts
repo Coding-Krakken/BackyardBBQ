@@ -5,8 +5,9 @@ import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import Stripe from "stripe";
 import { prisma, Prisma } from "./prisma.js";
-import { getCheckoutSessionIdentifiers, shouldTreatWebhookEventAsDuplicate } from "./webhook/utils.js";
+import { getCheckoutSessionIdentifiers } from "./webhook/utils.js";
 import { isPersistedDuplicateWebhookEvent } from "./webhook/persisted-dedupe.js";
+import { createWebhookSharedState } from "./webhook/shared-state.js";
 import { buildPaymentMetricsSnapshot as buildPaymentMetricsSnapshotQuery } from "./metrics/paymentSnapshot.js";
 import type { PaymentStatus } from "@prisma/client";
 
@@ -45,10 +46,8 @@ const disputeRateThresholdPercent = Number(process.env.DISPUTE_RATE_ALERT_THRESH
 const refundRateThresholdPercent = Number(process.env.REFUND_RATE_ALERT_THRESHOLD ?? "5");
 const alertCooldownMs = Number(process.env.PAYMENT_ALERT_COOLDOWN_MS ?? String(1000 * 60 * 30));
 const lastAlertByType = new Map<string, number>();
-const webhookRateLimitStore = new Map<string, { count: number; resetAt: number }>();
 const webhookRateLimit = Number(process.env.WEBHOOK_RATE_LIMIT_PER_MINUTE ?? "100");
 const webhookRateWindowMs = 60 * 1000;
-const processedWebhookEvents = new Map<string, number>();
 const webhookEventTtlMs = Number(process.env.WEBHOOK_EVENT_TTL_MS ?? String(24 * 60 * 60 * 1000));
 const settlementIdempotencyWindowMs = Number(
   process.env.DELIVERY_SETTLEMENT_IDEMPOTENCY_WINDOW_MS ?? String(7 * 24 * 60 * 60 * 1000)
@@ -58,6 +57,18 @@ const webhookAllowedIps = (process.env.STRIPE_WEBHOOK_ALLOWED_IPS ?? "")
   .map((value) => value.trim())
   .filter(Boolean);
 const metricsApiKey = process.env.METRICS_API_KEY?.trim() || "";
+const webhookSharedState = createWebhookSharedState({
+  onFallbackError: ({ op, error }) => {
+    app.log.error(
+      { error, op },
+      "Webhook shared-state backend failed; falling back to in-memory behavior"
+    );
+  }
+});
+
+app.addHook("onClose", async () => {
+  await webhookSharedState.close();
+});
 
 function sanitizeCorrelationId(input: unknown) {
   if (typeof input !== "string") {
@@ -107,29 +118,13 @@ function isWebhookIpAllowed(request: { ip: string; headers: Record<string, unkno
   return requestIps.some((ip) => webhookAllowedIps.includes(ip));
 }
 
-function isWebhookRateLimited(ip: string, now = Date.now()) {
+async function isWebhookRateLimited(ip: string) {
   const key = ip || "unknown";
-  const current = webhookRateLimitStore.get(key);
-
-  if (!current || current.resetAt <= now) {
-    webhookRateLimitStore.set(key, {
-      count: 1,
-      resetAt: now + webhookRateWindowMs
-    });
-    return false;
-  }
-
-  if (current.count >= webhookRateLimit) {
-    return true;
-  }
-
-  current.count += 1;
-  webhookRateLimitStore.set(key, current);
-  return false;
+  return webhookSharedState.isRateLimited(key, webhookRateLimit, webhookRateWindowMs);
 }
 
-function isDuplicateWebhookEvent(eventId: string, now = Date.now()) {
-  return shouldTreatWebhookEventAsDuplicate(processedWebhookEvents, eventId, webhookEventTtlMs, now);
+async function isDuplicateWebhookEvent(eventId: string, now = Date.now()) {
+  return webhookSharedState.checkDuplicate(eventId, webhookEventTtlMs, now);
 }
 
 async function isDuplicateWebhookEventInDatabase(event: Stripe.Event) {
@@ -346,11 +341,17 @@ app.get("/api/health/stripe", async (_request, reply) => {
 });
 
 app.get("/api/health/webhook", async () => {
+  const sharedStateHealth = await webhookSharedState.health();
+
   if (!hasDatabaseUrl) {
     return {
       status: "unknown",
       databaseConfigured: false,
-      lastWebhookAt: null
+      lastWebhookAt: null,
+      dedupeBackend: sharedStateHealth.backend,
+      rateLimitBackend: sharedStateHealth.backend,
+      sharedStateFallbackActive: sharedStateHealth.fallbackActive,
+      redisConnected: sharedStateHealth.redisConnected
     };
   }
 
@@ -367,6 +368,10 @@ app.get("/api/health/webhook", async () => {
   return {
     status: latestWebhook ? "ok" : "idle",
     databaseConfigured: true,
+    dedupeBackend: sharedStateHealth.backend,
+    rateLimitBackend: sharedStateHealth.backend,
+    sharedStateFallbackActive: sharedStateHealth.fallbackActive,
+    redisConnected: sharedStateHealth.redisConnected,
     lastWebhookAt: latestWebhook?.createdAt.toISOString() ?? null,
     lastEventType: latestWebhook?.eventType ?? null,
     lastEventStatus: latestWebhook?.status ?? null
@@ -3186,7 +3191,7 @@ app.post(
       return reply.status(400).send({ message: "Unsupported delivery webhook channel" });
     }
 
-    if (isWebhookRateLimited(request.ip)) {
+    if (await isWebhookRateLimited(request.ip)) {
       return reply.status(429).send({ message: "Too many webhook requests" });
     }
 
@@ -3228,7 +3233,7 @@ app.post(
       });
 
     const dedupeKey = `${channel}:${parsedBody.data.eventId}`;
-    if (isDuplicateWebhookEvent(dedupeKey)) {
+    if (await isDuplicateWebhookEvent(dedupeKey)) {
       return { received: true, duplicate: true, correlationId };
     }
 
@@ -3491,7 +3496,7 @@ app.post(
   async (request, reply) => {
     const correlationId = request.correlationId;
 
-    if (isWebhookRateLimited(request.ip)) {
+    if (await isWebhookRateLimited(request.ip)) {
       request.log.warn({ ip: request.ip, correlationId }, "Stripe webhook rate limit exceeded");
       return reply.status(429).send({ message: "Too many webhook requests" });
     }
@@ -3559,7 +3564,7 @@ app.post(
       return reply.status(400).send({ message: "Invalid signature" });
     }
 
-    if (isDuplicateWebhookEvent(event.id)) {
+    if (await isDuplicateWebhookEvent(event.id)) {
       request.log.info(
         { eventId: event.id, eventType: event.type, correlationId },
         "Duplicate Stripe webhook event ignored"
