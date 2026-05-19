@@ -29,6 +29,22 @@ export async function GET(
             type: true,
           },
         },
+        payments: {
+          where: {
+            status: "succeeded",
+          },
+          select: {
+            id: true,
+            amountCents: true,
+            currency: true,
+            status: true,
+            paymentType: true,
+            createdAt: true,
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        },
       },
     });
 
@@ -36,30 +52,14 @@ export async function GET(
       return NextResponse.json({ error: "Booking not found" }, { status: 404 });
     }
 
-    const successfulPayments = await prisma.paymentTransaction.findMany({
-      where: {
-        bookingId: booking.id,
-        status: "succeeded",
-      },
-      select: {
-        id: true,
-        amountCents: true,
-        currency: true,
-        status: true,
-        paymentType: true,
-        createdAt: true,
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
+    const { payments: successfulPayments, ...bookingWithoutPayments } = booking;
 
     const depositPaidCents = successfulPayments
       .filter((payment: { paymentType: string | null }) => payment.paymentType === "deposit")
       .reduce((sum: number, payment: { amountCents: number }) => sum + payment.amountCents, 0);
 
     return NextResponse.json({
-      booking,
+      booking: bookingWithoutPayments,
       payments: successfulPayments,
       depositPaidCents,
       depositDueCents: Math.max(0, (booking.depositCents ?? 0) - depositPaidCents),

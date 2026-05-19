@@ -64,6 +64,13 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => b.count - a.count)
       .slice(0, 8); // Top 8 favorites
 
+    if (favorites.length === 0) {
+      return NextResponse.json({
+        favorites: [],
+        totalOrders: orders.length,
+      });
+    }
+
     // Get current menu items to check availability
     const menuItems = await prisma.menuItem.findMany({
       where: {

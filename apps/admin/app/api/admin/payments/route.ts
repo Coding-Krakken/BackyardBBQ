@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
   });
 
   const paymentIds = payments.map((payment) => payment.id);
+  const paymentIdSet = new Set(paymentIds);
   const refundEvents = paymentIds.length
     ? await prisma.integrationEvent.findMany({
         where: {
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
   for (const event of refundEvents) {
     const payload = event.payload as Record<string, unknown>;
     const transactionId = typeof payload.transactionId === 'string' ? payload.transactionId : null;
-    if (!transactionId || !paymentIds.includes(transactionId)) {
+    if (!transactionId || !paymentIdSet.has(transactionId)) {
       continue;
     }
 

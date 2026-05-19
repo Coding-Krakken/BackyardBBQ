@@ -6,6 +6,8 @@ import { prisma } from "../../../../lib/prisma";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  const startedAt = Date.now();
+
   try {
     const session = await getServerSession(authOptions);
 
@@ -18,8 +20,10 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const upcoming = searchParams.get("upcoming") === "true";
-    const limit = parseInt(searchParams.get("limit") || "50");
-    const offset = parseInt(searchParams.get("offset") || "0");
+    const parsedLimit = parseInt(searchParams.get("limit") || "50", 10);
+    const parsedOffset = parseInt(searchParams.get("offset") || "0", 10);
+    const limit = Number.isFinite(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 100) : 50;
+    const offset = Number.isFinite(parsedOffset) ? Math.max(parsedOffset, 0) : 0;
 
     const where = {
       customerId: session.user.id,
@@ -39,7 +43,16 @@ export async function GET(request: NextRequest) {
               name: true,
               type: true
             }
-          }
+          },
+          payments: {
+            where: {
+              status: "succeeded"
+            },
+            select: {
+              amountCents: true,
+              paymentType: true
+            }
+          },
         },
         orderBy: {
           eventDate: upcoming ? "asc" : "desc"
@@ -50,42 +63,25 @@ export async function GET(request: NextRequest) {
       prisma.cateringBooking.count({ where: where as any })
     ]);
 
-    const bookingIds = bookings.map((booking: { id: string }) => booking.id);
-    const successfulPayments = bookingIds.length
-      ? await prisma.paymentTransaction.findMany({
-          where: {
-            bookingId: { in: bookingIds },
-            status: "succeeded",
-          },
-          select: {
-            bookingId: true,
-            amountCents: true,
-            paymentType: true,
-          },
-        })
-      : [];
-
-    const depositPaidByBookingId = new Map<string, number>();
-    for (const payment of successfulPayments) {
-      if (!payment.bookingId || payment.paymentType !== "deposit") {
-        continue;
-      }
-      const current = depositPaidByBookingId.get(payment.bookingId) ?? 0;
-      depositPaidByBookingId.set(payment.bookingId, current + payment.amountCents);
-    }
-
-    const enrichedBookings = bookings.map((booking: { id: string; depositCents: number | null }) => {
-      const depositPaidCents = depositPaidByBookingId.get(booking.id) ?? 0;
+    const enrichedBookings = bookings.map((booking: {
+      depositCents: number | null;
+      payments: Array<{ amountCents: number; paymentType: string | null }>;
+    }) => {
+      const depositPaidCents = booking.payments
+        .filter((payment) => payment.paymentType === "deposit")
+        .reduce((sum, payment) => sum + payment.amountCents, 0);
       const depositDueCents = Math.max(0, (booking.depositCents ?? 0) - depositPaidCents);
 
+      const { payments, ...bookingWithoutPayments } = booking;
+
       return {
-        ...booking,
+        ...bookingWithoutPayments,
         depositPaidCents,
         depositDueCents,
       };
     });
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       bookings: enrichedBookings,
       pagination: {
         total,
@@ -94,6 +90,20 @@ export async function GET(request: NextRequest) {
         hasMore: offset + limit < total
       }
     });
+
+    const elapsedMs = Date.now() - startedAt;
+    if (elapsedMs > 200) {
+      console.warn("Get bookings latency threshold exceeded", {
+        customerId: session.user.id,
+        elapsedMs,
+        bookingCount: bookings.length,
+        limit,
+        offset,
+        upcoming,
+      });
+    }
+
+    return response;
   } catch (error) {
     console.error("Get bookings error:", error);
     return NextResponse.json(
