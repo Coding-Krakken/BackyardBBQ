@@ -78,6 +78,9 @@
     "/api/admin/analytics/anomalies": {
       "GET": ["owner", "admin", "manager"]
     },
+    "/api/admin/health/data-integrity": {
+      "GET": ["owner", "admin", "manager", "accounting"]
+    },
     "/api/admin/integrations/health": {
       "GET": ["owner", "admin"]
     },
