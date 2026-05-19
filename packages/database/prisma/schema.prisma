@@ -287,6 +287,7 @@ model CateringBooking {
   updatedAt          DateTime      @updatedAt
   customer           Customer?     @relation(fields: [customerId], references: [id])
   location           Location      @relation(fields: [locationId], references: [id])
+  payments           PaymentTransaction[]
 
   @@index([eventDate, locationId])
 }
@@ -304,6 +305,7 @@ model PaymentTransaction {
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
   customer           Customer?     @relation(fields: [customerId], references: [id])
+  booking            CateringBooking? @relation(fields: [bookingId], references: [id])
   order              Order?        @relation(fields: [orderId], references: [id])
 
   @@index([bookingId])
