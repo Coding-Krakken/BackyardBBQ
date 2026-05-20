@@ -2,28 +2,79 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { prisma } from "@/lib/prisma";
-import { stripe } from "@/lib/stripe";
-
-const STRIPE_REFUND_REASONS = new Set([
-  "duplicate",
-  "fraudulent",
-  "requested_by_customer"
-]);
-
-function toStripeRefundReason(
-  reason: string
-): "duplicate" | "fraudulent" | "requested_by_customer" {
-  if (STRIPE_REFUND_REASONS.has(reason)) {
-    return reason as "duplicate" | "fraudulent" | "requested_by_customer";
-  }
-
-  return "requested_by_customer";
-}
+import { getPaymentProvider, unsupportedProviderMessage } from "@/lib/payment-provider";
 
 const refundSchema = z.object({
-  amountCents: z.number().int().min(1).optional(),
+  amountCents: z
+    .preprocess((value) => {
+      if (typeof value === "string") {
+        return Number(value);
+      }
+
+      return value;
+    }, z.number().int().min(1))
+    .optional(),
   reason: z.string().trim().min(1).max(200).default("requested_by_customer"),
 });
+
+const REFUND_EVENT_TYPES = new Set([
+  "admin.refund.issued",
+  "admin.refund.manual_requested",
+  "admin.payment_refund_created",
+  "admin.payment_refund_requested"
+]);
+
+function getRefundAmountCents(payload: Record<string, unknown>): number {
+  const candidateKeys = [
+    "requestedAmountCents",
+    "amountCents",
+    "refundAmountCents"
+  ] as const;
+
+  for (const key of candidateKeys) {
+    const value = payload[key];
+    if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+      return Math.floor(value);
+    }
+
+    if (typeof value === "string") {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return Math.floor(parsed);
+      }
+    }
+  }
+
+  return 0;
+}
+
+function getEposTransactionId(paymentReference: string): string | null {
+  const trimmed = paymentReference.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (trimmed.startsWith("epos_txn_")) {
+    const unprefixed = trimmed.slice("epos_txn_".length).trim();
+    return unprefixed || null;
+  }
+
+  return trimmed;
+}
+
+function getEposPaymentReferenceCandidates(paymentReference: string): Set<string> {
+  const trimmed = paymentReference.trim();
+  if (!trimmed) {
+    return new Set();
+  }
+
+  if (trimmed.startsWith("epos_txn_")) {
+    const raw = trimmed.slice("epos_txn_".length).trim();
+    return new Set(raw ? [trimmed, raw] : [trimmed]);
+  }
+
+  return new Set([trimmed, `epos_txn_${trimmed}`]);
+}
 
 export async function POST(
   request: NextRequest,
@@ -32,9 +83,7 @@ export async function POST(
   const auth = await requireAdmin(["owner", "admin", "accounting"]);
   if (auth instanceof NextResponse) return auth;
 
-  if (!stripe) {
-    return NextResponse.json({ message: "Stripe is not configured" }, { status: 500 });
-  }
+  const provider = getPaymentProvider();
 
   const parsed = refundSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) {
@@ -66,105 +115,105 @@ export async function POST(
   }
 
   if (!payment.stripePaymentIntentId) {
-    return NextResponse.json({ message: "Transaction has no Stripe payment intent" }, { status: 400 });
+    return NextResponse.json({ message: "Transaction has no payment transaction reference" }, { status: 400 });
   }
 
-  let maxRefundableCents = payment.amountCents;
-  let alreadyRefundedCents = 0;
+  if (provider === "epos") {
+    const paymentReferenceCandidates = getEposPaymentReferenceCandidates(payment.stripePaymentIntentId);
 
-  try {
-    const paymentIntent = await stripe.paymentIntents.retrieve(payment.stripePaymentIntentId, {
-      expand: ["latest_charge"]
-    });
-
-    if (paymentIntent.latest_charge && typeof paymentIntent.latest_charge !== "string") {
-      alreadyRefundedCents = paymentIntent.latest_charge.amount_refunded ?? 0;
-      maxRefundableCents = Math.max(
-        0,
-        (paymentIntent.latest_charge.amount ?? payment.amountCents) - alreadyRefundedCents
-      );
-    } else {
-      const refunds = await stripe.refunds.list({
-        payment_intent: payment.stripePaymentIntentId,
-        limit: 100
-      });
-
-      alreadyRefundedCents = refunds.data.reduce((sum, refund) => sum + (refund.amount ?? 0), 0);
-      maxRefundableCents = Math.max(0, payment.amountCents - alreadyRefundedCents);
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to verify Stripe refund balance";
-    return NextResponse.json({ message }, { status: 502 });
-  }
-
-  if (maxRefundableCents <= 0) {
-    return NextResponse.json({ message: "No refundable balance remains" }, { status: 400 });
-  }
-
-  const requestedAmountCents = parsed.data.amountCents ?? maxRefundableCents;
-  if (requestedAmountCents > maxRefundableCents) {
-    return NextResponse.json({ message: "Refund amount exceeds transaction amount" }, { status: 400 });
-  }
-
-  let stripeRefundId: string;
-
-  try {
-    const refund = await stripe.refunds.create({
-      payment_intent: payment.stripePaymentIntentId,
-      amount: requestedAmountCents,
-      reason: toStripeRefundReason(parsed.data.reason),
-      metadata: {
-        adminRefundReason: parsed.data.reason,
-        paymentTransactionId: payment.id
+    const candidateRefundEvents = await prisma.integrationEvent.findMany({
+      where: {
+        channel: "admin",
+        eventType: { in: Array.from(REFUND_EVENT_TYPES) }
+      },
+      orderBy: { createdAt: "desc" },
+      take: 250,
+      select: {
+        eventType: true,
+        payload: true
       }
     });
 
-    stripeRefundId = refund.id;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Stripe refund failed";
-    return NextResponse.json({ message }, { status: 502 });
-  }
+    const alreadyRequestedCents = candidateRefundEvents.reduce((total, event) => {
+      if (!REFUND_EVENT_TYPES.has(event.eventType)) {
+        return total;
+      }
 
-  const totalRefundedCents = alreadyRefundedCents + requestedAmountCents;
-  const nextStatus = totalRefundedCents >= payment.amountCents ? "refunded" : "partially_refunded";
+      const payload =
+        event.payload && typeof event.payload === "object"
+          ? (event.payload as Record<string, unknown>)
+          : {};
 
-  const updated = await prisma.$transaction(async (tx) => {
-    const updatedPayment = await tx.paymentTransaction.update({
-      where: { id: payment.id },
-      data: {
-        status: nextStatus,
-      },
-    });
+      const payloadPaymentReference =
+        typeof payload.paymentIntentId === "string"
+          ? payload.paymentIntentId
+          : typeof payload.stripePaymentIntentId === "string"
+            ? payload.stripePaymentIntentId
+            : null;
 
-    await tx.integrationEvent.create({
+      const matchesTransaction = payload.transactionId === payment.id;
+      const matchesPaymentReference =
+        typeof payloadPaymentReference === "string" &&
+        paymentReferenceCandidates.has(payloadPaymentReference.trim());
+
+      if (!matchesTransaction && !matchesPaymentReference) {
+        return total;
+      }
+
+      return total + getRefundAmountCents(payload);
+    }, 0);
+
+    const maxRefundableCents = Math.max(0, payment.amountCents - alreadyRequestedCents);
+    if (maxRefundableCents <= 0) {
+      return NextResponse.json({ message: "No refundable balance remains" }, { status: 400 });
+    }
+
+    const requestedAmountCents = parsed.data.amountCents ?? maxRefundableCents;
+    if (requestedAmountCents > maxRefundableCents) {
+      return NextResponse.json({ message: "Refund amount exceeds transaction amount" }, { status: 400 });
+    }
+
+    const manualRequest = await prisma.integrationEvent.create({
       data: {
         orderId: payment.orderId,
         channel: "admin",
-        eventType: "admin.refund.issued",
-        status: "recorded",
+        eventType: "admin.refund.manual_requested",
+        status: "pending_manual",
         payload: {
+          provider,
           transactionId: payment.id,
-          paymentIntentId: payment.stripePaymentIntentId,
-          stripeRefundId,
-          previouslyRefundedCents: alreadyRefundedCents,
+          stripePaymentIntentId: payment.stripePaymentIntentId,
+          eposTransactionId: getEposTransactionId(payment.stripePaymentIntentId),
+          paymentAmountCents: payment.amountCents,
+          previouslyRequestedCents: alreadyRequestedCents,
           requestedAmountCents,
-          totalRefundedCents,
           reason: parsed.data.reason,
-          refundedAt: new Date().toISOString(),
-          mode: nextStatus,
+          requestedAt: new Date().toISOString(),
+          instructions:
+            "Complete refund in EPOS Back Office using RefundReason and Transaction records, then reconcile this request.",
         },
       },
     });
 
-    return updatedPayment;
-  });
+    return NextResponse.json(
+      {
+        data: payment,
+        refund: {
+          amountCents: requestedAmountCents,
+          reason: parsed.data.reason,
+          status: "pending_manual",
+          requestId: manualRequest.id,
+          provider,
+        },
+        message:
+          "EPOS refund request has been queued for manual processing and reconciliation.",
+      },
+      { status: 202 }
+    );
+  }
 
-  return NextResponse.json({
-    data: updated,
-    refund: {
-      amountCents: requestedAmountCents,
-      reason: parsed.data.reason,
-      status: nextStatus,
-    },
-  });
+  return NextResponse.json(
+    { message: unsupportedProviderMessage("/api/admin/payments/[transactionId]/refund") },
+    { status: 501 }
+  );
 }

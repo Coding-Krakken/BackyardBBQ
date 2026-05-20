@@ -265,7 +265,7 @@ export default function DisputeDetailPage() {
 
               <div className="modal-actions">
                 <button className="btn btn-primary btn-sm" onClick={submitEvidence} disabled={isSaving}>
-                  {isSaving ? "Submitting..." : "Submit Evidence to Stripe"}
+                  {isSaving ? "Submitting..." : "Submit Evidence Package"}
                 </button>
               </div>
             </div>

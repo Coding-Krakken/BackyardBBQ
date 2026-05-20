@@ -1,21 +1,17 @@
 /** @jest-environment node */
 
-import { isPersistedDuplicateWebhookEvent } from "../webhook/persisted-dedupe";
+import { isPersistedDuplicateIntegrationEvent } from "../webhook/persisted-dedupe";
 
-type StripeEventLike = {
-  id: string;
-  type: string;
-};
-
-describe("isPersistedDuplicateWebhookEvent", () => {
+describe("isPersistedDuplicateIntegrationEvent", () => {
   it("returns false when database is disabled", async () => {
     const findMany = jest.fn(async () => []);
-    const event: StripeEventLike = { id: "evt_1", type: "payment_intent.succeeded" };
 
-    const result = await isPersistedDuplicateWebhookEvent({
+    const result = await isPersistedDuplicateIntegrationEvent({
       hasDatabaseUrl: false,
       integrationEvent: { findMany },
-      event,
+      channel: "epos",
+      eventType: "epos.webhook.CompleteTransaction",
+      eventId: "epos_evt_1",
       webhookEventTtlMs: 60000,
       now: 1000
     });
@@ -24,14 +20,15 @@ describe("isPersistedDuplicateWebhookEvent", () => {
     expect(findMany).not.toHaveBeenCalled();
   });
 
-  it("queries recent stripe events using event type and ttl window", async () => {
+  it("queries epos channel events using event type and ttl window", async () => {
     const findMany = jest.fn(async () => []);
-    const event: StripeEventLike = { id: "evt_2", type: "checkout.session.completed" };
 
-    await isPersistedDuplicateWebhookEvent({
+    await isPersistedDuplicateIntegrationEvent({
       hasDatabaseUrl: true,
       integrationEvent: { findMany },
-      event,
+      channel: "epos",
+      eventType: "epos.webhook.CompleteTransaction",
+      eventId: "epos_evt_2",
       webhookEventTtlMs: 30000,
       now: 50000
     });
@@ -39,8 +36,8 @@ describe("isPersistedDuplicateWebhookEvent", () => {
     expect(findMany).toHaveBeenCalledTimes(1);
     expect(findMany).toHaveBeenCalledWith({
       where: {
-        channel: "stripe",
-        eventType: "checkout.session.completed",
+        channel: "epos",
+        eventType: "epos.webhook.CompleteTransaction",
         createdAt: { gte: new Date(20000) }
       },
       orderBy: { createdAt: "desc" },
@@ -52,12 +49,13 @@ describe("isPersistedDuplicateWebhookEvent", () => {
   it("uses Date.now fallback when now is not provided", async () => {
     const nowSpy = jest.spyOn(Date, "now").mockReturnValue(90_000);
     const findMany = jest.fn(async () => []);
-    const event: StripeEventLike = { id: "evt_now_fallback", type: "checkout.session.completed" };
 
-    await isPersistedDuplicateWebhookEvent({
+    await isPersistedDuplicateIntegrationEvent({
       hasDatabaseUrl: true,
       integrationEvent: { findMany },
-      event,
+      channel: "epos",
+      eventType: "epos.webhook.CompleteTransaction",
+      eventId: "epos_now_fallback",
       webhookEventTtlMs: 30_000
     });
 
@@ -74,15 +72,16 @@ describe("isPersistedDuplicateWebhookEvent", () => {
 
   it("returns true when matching eventId exists in persisted payload", async () => {
     const findMany = jest.fn(async () => [
-      { payload: { eventId: "evt_a" } },
-      { payload: { eventId: "evt_match" } }
+      { payload: { eventId: "epos_evt_a" } },
+      { payload: { eventId: "epos_evt_match" } }
     ]);
-    const event: StripeEventLike = { id: "evt_match", type: "charge.dispute.created" };
 
-    const result = await isPersistedDuplicateWebhookEvent({
+    const result = await isPersistedDuplicateIntegrationEvent({
       hasDatabaseUrl: true,
       integrationEvent: { findMany },
-      event,
+      channel: "epos",
+      eventType: "epos.webhook.RefundTransaction",
+      eventId: "epos_evt_match",
       webhookEventTtlMs: 86400000,
       now: 100000
     });
@@ -94,16 +93,63 @@ describe("isPersistedDuplicateWebhookEvent", () => {
     const findMany = jest.fn(async () => [
       { payload: null },
       { payload: "not-object" },
-      { payload: { eventId: "evt_other" } }
+      { payload: { eventId: "epos_evt_other" } }
     ]);
-    const event: StripeEventLike = { id: "evt_target", type: "payment_intent.failed" };
 
-    const result = await isPersistedDuplicateWebhookEvent({
+    const result = await isPersistedDuplicateIntegrationEvent({
       hasDatabaseUrl: true,
       integrationEvent: { findMany },
-      event,
+      channel: "epos",
+      eventType: "epos.webhook.VoidTransaction",
+      eventId: "epos_evt_target",
       webhookEventTtlMs: 86400000,
       now: 100000
+    });
+
+    expect(result).toBe(false);
+  });
+
+  it("queries EPOS channel event window and detects duplicate event id", async () => {
+    const findMany = jest.fn(async () => [{ payload: { eventId: "epos_evt_1" } }]);
+
+    const result = await isPersistedDuplicateIntegrationEvent({
+      hasDatabaseUrl: true,
+      integrationEvent: { findMany },
+      channel: "epos",
+      eventType: "epos.webhook.CompleteTransaction",
+      eventId: "epos_evt_1",
+      webhookEventTtlMs: 30_000,
+      now: 50_000
+    });
+
+    expect(result).toBe(true);
+    expect(findMany).toHaveBeenCalledWith({
+      where: {
+        channel: "epos",
+        eventType: "epos.webhook.CompleteTransaction",
+        createdAt: { gte: new Date(20_000) }
+      },
+      orderBy: { createdAt: "desc" },
+      take: 300,
+      select: { payload: true }
+    });
+  });
+
+  it("returns false for malformed payloads without matching event id", async () => {
+    const findMany = jest.fn(async () => [
+      { payload: null },
+      { payload: "invalid" },
+      { payload: { eventId: "epos_evt_other" } }
+    ]);
+
+    const result = await isPersistedDuplicateIntegrationEvent({
+      hasDatabaseUrl: true,
+      integrationEvent: { findMany },
+      channel: "epos",
+      eventType: "epos.webhook.Unknown-999",
+      eventId: "epos_evt_target",
+      webhookEventTtlMs: 60_000,
+      now: 100_000
     });
 
     expect(result).toBe(false);

@@ -9,8 +9,7 @@
     "start": "node dist/index.js",
     "lint": "echo \"No lint configured yet\"",
     "typecheck": "tsc --noEmit",
-    "test:stripe:webhook-replay": "node scripts/stripe-webhook-replay.mjs",
-    "test:stripe:dispute-replay": "node scripts/stripe-dispute-replay-check.mjs",
+    "test:epos:webhook-replay": "node scripts/epos-webhook-replay.mjs",
     "test:delivery:webhook-replay": "node scripts/delivery-webhook-replay.mjs",
     "test:delivery:status-replay": "node scripts/delivery-status-webhook-replay-check.mjs",
     "test:delivery:dispatch-replay": "node scripts/delivery-dispatch-replay-check.mjs",
@@ -25,7 +24,6 @@
     "fastify": "^4.28.1",
     "fastify-raw-body": "^4.3.0",
     "ioredis": "^5.10.1",
-    "stripe": "^22.1.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {

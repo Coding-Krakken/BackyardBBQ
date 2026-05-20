@@ -32,6 +32,7 @@ interface Transaction {
     reason: string;
     refundedAt: string;
     stripeRefundId: string | null;
+    provider?: string | null;
   }>;
 }
 
@@ -432,14 +433,14 @@ export default function PaymentsPage() {
                         <span className="text-muted" style={{ fontSize: '0.8rem' }}>
                           {totalEvents > 1 ? `${totalEvents} refunds` : '1 refund'} • Total {formatCurrency(latest.totalRefundedCents)}
                         </span>
-                        {latest.stripeRefundId ? (
+                        {latest.stripeRefundId && (latest.provider ?? row.provider) === 'stripe' ? (
                           <a
                             href={`${stripeRefundsBaseUrl}/${latest.stripeRefundId}`}
                             target="_blank"
                             rel="noreferrer"
                             style={{ fontSize: '0.8rem' }}
                           >
-                            View refund in Stripe
+                            View gateway refund
                           </a>
                         ) : null}
                       </div>
@@ -454,14 +455,14 @@ export default function PaymentsPage() {
                         Refund
                       </button>
                     ) : null}
-                    {row.stripePaymentIntentId ? (
+                    {row.stripePaymentIntentId && row.provider === 'stripe' ? (
                       <a
                         className="btn btn-ghost btn-xs"
                         href={`${stripePaymentsBaseUrl}/${row.stripePaymentIntentId}`}
                         target="_blank"
                         rel="noreferrer"
                       >
-                        Stripe
+                        Gateway
                       </a>
                     ) : null}
                   </div>

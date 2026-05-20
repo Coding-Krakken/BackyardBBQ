@@ -241,7 +241,7 @@ export function getTourSteps(): TourStep[] {
           <ul>
             <li><strong>Update status</strong> — Move through the order lifecycle</li>
             <li><strong>View items</strong> — See exactly what was ordered</li>
-            <li><strong>Track payment</strong> — Link to the Stripe payment record</li>
+            <li><strong>Track payment</strong> — Link to the payment record</li>
             <li><strong>Issue refund</strong> — Full or partial refund with reason</li>
           </ul>
           <p>Status changes are confirmed with a dialog to prevent accidental updates.</p>
@@ -289,7 +289,7 @@ export function getTourSteps(): TourStep[] {
             <li><strong>Pitmaster Signature</strong> — Premium selection</li>
             <li><strong>Premium</strong> — Full-service catering experience</li>
           </ul>
-          <p>A <strong>deposit payment</strong> via Stripe is collected when booking. You approve or decline based on capacity and date availability.</p>
+          <p>A <strong>deposit payment</strong> is collected when booking. You approve or decline based on capacity and date availability.</p>
           ${badge('catering-bookings')}
         `,
       },
@@ -345,7 +345,7 @@ export function getTourSteps(): TourStep[] {
           <ul>
             <li><strong>Contact info</strong> — Name, email, phone</li>
             <li><strong>Order history</strong> — All past orders with totals</li>
-            <li><strong>Payment history</strong> — Stripe transactions and saved cards</li>
+            <li><strong>Payment history</strong> — Transaction history and saved payment methods</li>
             <li><strong>Referral activity</strong> — Referrals sent and rewards earned</li>
             <li><strong>Dietary preferences</strong> — Stored for personalization</li>
           </ul>
@@ -402,11 +402,11 @@ export function getTourSteps(): TourStep[] {
       element: 'a[href="/dashboard/payments"]',
       page: '/dashboard/menu',
       group: 'payments',
-      featureKey: 'stripe-payments',
+      featureKey: 'payments',
       popover: {
         title: '💳 Payments & Finance',
         description: `
-          <p>Now let's explore your financial operations — powered entirely by <strong>Stripe</strong>.</p>
+          <p>Now let's explore your financial operations and payment workflows.</p>
         `,
         side: 'right',
       },
@@ -415,23 +415,23 @@ export function getTourSteps(): TourStep[] {
       id: 'payments-overview',
       page: '/dashboard/payments',
       group: 'payments',
-      featureKey: 'stripe-payments',
+      featureKey: 'payments',
       popover: {
         title: '💰 Payment Transactions',
         description: `
-          <p>Every payment flows through <strong>Stripe</strong>:</p>
+          <p>Payments are processed through your configured payment provider:</p>
           <ul>
             <li><strong>Checkout Sessions</strong> — Embedded payment form on your website</li>
-            <li><strong>Payment Element</strong> — Cards, Apple Pay, Google Pay</li>
-            <li><strong>Saved cards</strong> — Customers can save payment methods for faster checkout</li>
+            <li><strong>Provider capabilities</strong> — Card and wallet options depend on provider setup</li>
+            <li><strong>Saved methods</strong> — Availability depends on provider support and account configuration</li>
           </ul>
           <p>This page shows all transactions with:</p>
           <ul>
             <li>Status tracking (processing → succeeded → refunded)</li>
             <li>Amount breakdown (subtotal, tax, tip, total)</li>
-            <li>Direct links to Stripe Dashboard</li>
+            <li>Gateway references when available</li>
           </ul>
-          ${badge('stripe-payments')}
+          ${badge('payments')}
         `,
       },
     },
@@ -440,7 +440,7 @@ export function getTourSteps(): TourStep[] {
       element: '.data-table, table',
       page: '/dashboard/payments',
       group: 'payments',
-      featureKey: 'stripe-payments',
+      featureKey: 'payments',
       popover: {
         title: '↩ Refunds',
         description: `
@@ -449,7 +449,7 @@ export function getTourSteps(): TourStep[] {
             <li><strong>Full refund</strong> — Returns the entire amount</li>
             <li><strong>Partial refund</strong> — Enter a specific amount in cents</li>
           </ul>
-          <p>Refunds require a <strong>reason</strong> and are confirmed with a modal dialog. Stripe processes refunds to the original payment method.</p>
+          <p>Refunds require a <strong>reason</strong> and are confirmed with a modal dialog. Processing follows your active provider workflow.</p>
         `,
         side: 'top',
       },
@@ -462,9 +462,9 @@ export function getTourSteps(): TourStep[] {
       popover: {
         title: '⚖ Disputes & Chargebacks',
         description: `
-          <p>The <strong>Disputes</strong> sub-page monitors Stripe chargebacks:</p>
+          <p>The <strong>Disputes</strong> sub-page monitors payment disputes:</p>
           <ul>
-            <li>Automatic detection via webhooks (<code>charge.dispute.*</code> events)</li>
+            <li>Detection through gateway events and operational reconciliation</li>
             <li>Status tracking: needs response → under review → won/lost</li>
             <li>Evidence submission timeline</li>
           </ul>
@@ -727,7 +727,7 @@ export function getTourSteps(): TourStep[] {
           <ul>
             <li><strong>Homepage</strong> — Hero section, story, featured items, testimonials</li>
             <li><strong>Menu</strong> — Browse categories, view details, add to cart</li>
-            <li><strong>Cart & Checkout</strong> — Stripe-powered payment with Apple/Google Pay</li>
+            <li><strong>Cart & Checkout</strong> — Provider-backed payment with wallet support when configured</li>
             <li><strong>Catering</strong> — Package selection, availability check, deposit payment</li>
             <li><strong>Customer Dashboard</strong> — Order history, saved cards, analytics, referrals</li>
             <li><strong>SEO Landing Pages</strong> — Location-specific pages for search visibility</li>

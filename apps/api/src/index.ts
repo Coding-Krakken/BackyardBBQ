@@ -1,13 +1,15 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import rawBody from "fastify-raw-body";
-import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import Stripe from "stripe";
 import { prisma, Prisma } from "./prisma.js";
-import { getCheckoutSessionIdentifiers } from "./webhook/utils.js";
-import { isPersistedDuplicateWebhookEvent } from "./webhook/persisted-dedupe.js";
+import {
+  isPersistedDuplicateIntegrationEvent
+} from "./webhook/persisted-dedupe.js";
 import { createWebhookSharedState } from "./webhook/shared-state.js";
+import { handleEposWebhook } from "./webhook/epos-handler.js";
+import { buildRefundEventFilter, parseRefundAmountCents } from "./accounting/refunds.js";
 import {
   getRequestIps,
   isWebhookIpAllowed,
@@ -15,6 +17,7 @@ import {
   verifyHmacSha256Signature
 } from "./webhook/security.js";
 import { buildPaymentMetricsSnapshot as buildPaymentMetricsSnapshotQuery } from "./metrics/paymentSnapshot.js";
+import { getPaymentProvider, unsupportedProviderMessage } from "./payment-provider.js";
 import type { PaymentStatus } from "@prisma/client";
 
 declare module "fastify" {
@@ -44,8 +47,7 @@ const deliveryChannels: Record<string, { orders?: string; status?: string; settl
 export async function buildApp() {
 
 const app = Fastify({ logger: true });
-const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
-const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
+const paymentProvider = getPaymentProvider();
 const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
 const paymentAlertWebhookUrl = process.env.PAYMENT_ALERT_WEBHOOK_URL?.trim() || undefined;
 const disputeRateThresholdPercent = Number(process.env.DISPUTE_RATE_ALERT_THRESHOLD ?? "2");
@@ -58,10 +60,15 @@ const webhookEventTtlMs = Number(process.env.WEBHOOK_EVENT_TTL_MS ?? String(24 *
 const settlementIdempotencyWindowMs = Number(
   process.env.DELIVERY_SETTLEMENT_IDEMPOTENCY_WINDOW_MS ?? String(7 * 24 * 60 * 60 * 1000)
 );
-const webhookAllowedIps = (process.env.STRIPE_WEBHOOK_ALLOWED_IPS ?? "")
+const eposWebhookAllowedIps = (process.env.EPOS_NOW_WEBHOOK_ALLOWED_IPS ?? "")
   .split(",")
   .map((value) => value.trim())
   .filter(Boolean);
+const eposWebhookSecret = process.env.EPOS_NOW_WEBHOOK_SECRET?.trim();
+const eposWebhookSignatureHeader =
+  process.env.EPOS_NOW_WEBHOOK_SIGNATURE_HEADER?.trim().toLowerCase() || "x-epos-signature";
+const eposWebhookRequireSignature =
+  (process.env.EPOS_NOW_WEBHOOK_REQUIRE_SIGNATURE ?? "true").trim().toLowerCase() !== "false";
 const metricsApiKey = process.env.METRICS_API_KEY?.trim() || "";
 const webhookSharedState = createWebhookSharedState({
   onFallbackError: ({ op, error }) => {
@@ -91,11 +98,16 @@ async function isDuplicateWebhookEvent(eventId: string, now = Date.now()) {
   return webhookSharedState.checkDuplicate(eventId, webhookEventTtlMs, now);
 }
 
-async function isDuplicateWebhookEventInDatabase(event: Stripe.Event) {
-  return isPersistedDuplicateWebhookEvent({
+async function isDuplicateEposWebhookEventInDatabase(input: {
+  eventId: string;
+  eventTypeName: string;
+}) {
+  return isPersistedDuplicateIntegrationEvent({
     hasDatabaseUrl,
     integrationEvent: prisma.integrationEvent,
-    event,
+    channel: "epos",
+    eventType: `epos.webhook.${input.eventTypeName}`,
+    eventId: input.eventId,
     webhookEventTtlMs
   });
 }
@@ -158,8 +170,16 @@ async function evaluateRiskThresholds(trigger: string) {
     prisma.paymentTransaction.count({ where: { createdAt: { gte: windowStart } } }),
     prisma.integrationEvent.count({
       where: {
-        channel: "stripe",
-        eventType: { contains: "charge.dispute" },
+        OR: [
+          {
+            channel: "stripe",
+            eventType: { contains: "charge.dispute" },
+          },
+          {
+            channel: "epos",
+            eventType: { contains: "dispute" },
+          },
+        ],
         createdAt: { gte: windowStart }
       }
     }),
@@ -274,35 +294,9 @@ await app.register(rawBody, {
 app.get("/health", async () => ({ status: "ok", service: "api" }));
 
 app.get("/api/payments/health", async () => ({
-  stripeConfigured: Boolean(stripe),
+  paymentProvider,
   databaseConfigured: hasDatabaseUrl
 }));
-
-app.get("/api/health/stripe", async (_request, reply) => {
-  if (!stripe) {
-    return reply.status(503).send({
-      status: "degraded",
-      stripeConfigured: false,
-      message: "Stripe is not configured"
-    });
-  }
-
-  try {
-    await stripe.balance.retrieve();
-    return {
-      status: "ok",
-      stripeConfigured: true,
-      checkedAt: new Date().toISOString()
-    };
-  } catch (error) {
-    return reply.status(502).send({
-      status: "degraded",
-      stripeConfigured: true,
-      checkedAt: new Date().toISOString(),
-      message: error instanceof Error ? error.message : "Stripe connectivity check failed"
-    });
-  }
-});
 
 app.get("/api/health/webhook", async () => {
   const sharedStateHealth = await webhookSharedState.health();
@@ -320,7 +314,7 @@ app.get("/api/health/webhook", async () => {
   }
 
   const latestWebhook = await prisma.integrationEvent.findFirst({
-    where: { channel: "stripe" },
+    where: { channel: paymentProvider },
     orderBy: { createdAt: "desc" },
     select: {
       createdAt: true,
@@ -529,24 +523,6 @@ async function writeAdminAuditEvent(input: {
       }
     }
   });
-}
-
-function mapStripeStatusToPaymentStatus(status: Stripe.PaymentIntent.Status): PaymentStatus {
-  const map: Record<Stripe.PaymentIntent.Status, PaymentStatus> = {
-    requires_payment_method: "requires_payment_method",
-    requires_confirmation: "requires_confirmation",
-    requires_action: "requires_action",
-    processing: "processing",
-    requires_capture: "requires_capture",
-    canceled: "canceled",
-    succeeded: "succeeded"
-  };
-
-  return map[status] ?? "failed";
-}
-
-function normalizeDisputeStatus(status: Stripe.Dispute.Status): string {
-  return status;
 }
 
 function getDayRange(dateInput?: string) {
@@ -1785,7 +1761,9 @@ app.post("/api/admin/payments/refunds", async (request, reply) => {
 
   const bodySchema = z.object({
     paymentIntentId: z.string(),
-    amountCents: z.number().int().min(1).optional()
+    amountCents: z
+      .preprocess((value) => (typeof value === "string" ? Number(value) : value), z.number().int().min(1))
+      .optional()
   });
 
   const parsed = bodySchema.safeParse(request.body);
@@ -1793,76 +1771,169 @@ app.post("/api/admin/payments/refunds", async (request, reply) => {
     return reply.status(400).send({ message: "Invalid refund payload" });
   }
 
-  if (!stripe) {
-    return reply.status(500).send({ message: "Stripe is not configured" });
-  }
+  if (paymentProvider === "epos") {
+    if (!hasDatabaseUrl) {
+      return reply.status(202).send({
+        status: "pending_manual",
+        provider: paymentProvider,
+        message: "EPOS refund request captured for manual processing."
+      });
+    }
 
-  let refund: Stripe.Response<Stripe.Refund>;
-  try {
-    refund = await stripe.refunds.create({
-      payment_intent: parsed.data.paymentIntentId,
-      amount: parsed.data.amountCents
+    const eposPaymentReferences = parsed.data.paymentIntentId.startsWith("epos_txn_")
+      ? [parsed.data.paymentIntentId, parsed.data.paymentIntentId.slice("epos_txn_".length)]
+      : [parsed.data.paymentIntentId, `epos_txn_${parsed.data.paymentIntentId}`];
+    const eposPaymentReferenceCandidates = new Set(eposPaymentReferences.map((reference) => reference.trim()));
+
+    const refundEventTypes = [
+      "admin.refund.issued",
+      "admin.refund.manual_requested",
+      "admin.payment_refund_created",
+      "admin.payment_refund_requested"
+    ] as const;
+
+    const payment = await prisma.paymentTransaction.findFirst({
+      where: {
+        stripePaymentIntentId: {
+          in: eposPaymentReferences,
+        },
+      },
+      select: {
+        id: true,
+        orderId: true,
+        amountCents: true,
+        status: true,
+        stripePaymentIntentId: true
+      }
     });
-  } catch (error) {
+
+    if (!payment) {
+      return reply.status(404).send({ message: "Payment transaction not found" });
+    }
+
+    if (![
+      "succeeded",
+      "partially_refunded"
+    ].includes(payment.status)) {
+      return reply.status(400).send({ message: "Transaction is not refundable" });
+    }
+
+    const historicalRefundEvents = await prisma.integrationEvent.findMany({
+      where: {
+        channel: "admin",
+        eventType: { in: refundEventTypes as unknown as string[] }
+      },
+      orderBy: { createdAt: "desc" },
+      take: 250,
+      select: {
+        eventType: true,
+        payload: true
+      }
+    });
+
+    const alreadyRequestedCents = historicalRefundEvents.reduce((total, event) => {
+      if (!refundEventTypes.includes(event.eventType as (typeof refundEventTypes)[number])) {
+        return total;
+      }
+
+      const payload =
+        event.payload && typeof event.payload === "object"
+          ? (event.payload as Record<string, unknown>)
+          : {};
+
+      const payloadPaymentReference =
+        typeof payload.paymentIntentId === "string"
+          ? payload.paymentIntentId
+          : typeof payload.stripePaymentIntentId === "string"
+            ? payload.stripePaymentIntentId
+            : null;
+
+      const matchesTransaction = payload.transactionId === payment.id;
+      const matchesPaymentReference =
+        typeof payloadPaymentReference === "string" &&
+        eposPaymentReferenceCandidates.has(payloadPaymentReference.trim());
+
+      if (!matchesTransaction && !matchesPaymentReference) {
+        return total;
+      }
+
+      const amount =
+        typeof payload.requestedAmountCents === "number"
+          ? payload.requestedAmountCents
+          : typeof payload.requestedAmountCents === "string"
+            ? Number(payload.requestedAmountCents)
+          : typeof payload.amountCents === "number"
+            ? payload.amountCents
+            : typeof payload.amountCents === "string"
+              ? Number(payload.amountCents)
+            : typeof payload.refundAmountCents === "number"
+              ? payload.refundAmountCents
+              : typeof payload.refundAmountCents === "string"
+                ? Number(payload.refundAmountCents)
+              : 0;
+
+      return total + Math.max(0, Math.floor(amount));
+    }, 0);
+
+    const maxRefundableCents = Math.max(0, payment.amountCents - alreadyRequestedCents);
+    if (maxRefundableCents <= 0) {
+      return reply.status(400).send({ message: "No refundable balance remains" });
+    }
+
+    const requestedAmountCents = parsed.data.amountCents ?? maxRefundableCents;
+    if (requestedAmountCents > maxRefundableCents) {
+      return reply.status(400).send({ message: "Refund amount exceeds transaction amount" });
+    }
+
+    const refundRequest = await prisma.integrationEvent.create({
+      data: {
+        orderId: payment.orderId,
+        channel: "admin",
+        eventType: "admin.payment_refund_requested",
+        status: "pending_manual",
+        payload: {
+          role,
+          provider: paymentProvider,
+          transactionId: payment.id,
+          paymentIntentId: payment.stripePaymentIntentId,
+          eposTransactionId: payment.stripePaymentIntentId.startsWith("epos_txn_")
+            ? payment.stripePaymentIntentId.slice("epos_txn_".length)
+            : payment.stripePaymentIntentId,
+          paymentAmountCents: payment.amountCents,
+          previouslyRequestedCents: alreadyRequestedCents,
+          requestedAmountCents,
+          requestedAt: new Date().toISOString(),
+          instructions:
+            "Complete refund in EPOS Back Office and reconcile this pending request."
+        }
+      }
+    });
+
     await sendOperationalAlert({
-      type: "refund_creation_failed",
-      severity: "critical",
-      message: "Stripe refund creation failed",
+      type: "epos_refund_manual_action_required",
+      severity: "warning",
+      message: "Manual EPOS refund requested",
       details: {
+        requestId: refundRequest.id,
         paymentIntentId: parsed.data.paymentIntentId,
-        amountCents: parsed.data.amountCents,
-        error: error instanceof Error ? error.message : "Unknown Stripe error"
+        requestedAmountCents,
+        orderId: payment.orderId
       }
     });
-    return reply.status(502).send({ message: "Stripe refund failed" });
-  }
 
-  request.log.info(
-    {
+    return reply.status(202).send({
+      requestId: refundRequest.id,
       paymentIntentId: parsed.data.paymentIntentId,
-      refundId: refund.id,
-      amountCents: refund.amount,
-      status: refund.status
-    },
-    "Refund processed"
-  );
-
-  if (hasDatabaseUrl) {
-    const payment = await prisma.paymentTransaction.findUnique({
-      where: { stripePaymentIntentId: parsed.data.paymentIntentId },
-      select: { amountCents: true, orderId: true }
+      amountCents: requestedAmountCents,
+      status: "pending_manual",
+      provider: paymentProvider,
+      message: "EPOS refund request queued for manual processing"
     });
-
-    const targetAmount = payment?.amountCents ?? refund.amount;
-    const nextStatus = refund.amount >= targetAmount ? "refunded" : "partially_refunded";
-
-    await prisma.paymentTransaction.updateMany({
-      where: { stripePaymentIntentId: parsed.data.paymentIntentId },
-      data: { status: nextStatus }
-    });
-
-    await writeAdminAuditEvent({
-      role,
-      action: "payment_refund_created",
-      entityId: parsed.data.paymentIntentId,
-      entityType: "payment",
-      orderId: payment?.orderId ?? undefined,
-      payload: {
-        refundId: refund.id,
-        amountCents: refund.amount,
-        status: refund.status
-      }
-    });
-
-    await evaluateRiskThresholds("admin_refund_created");
   }
 
-  return {
-    refundId: refund.id,
-    paymentIntentId: parsed.data.paymentIntentId,
-    amountCents: refund.amount,
-    status: refund.status
-  };
+  return reply
+    .status(501)
+    .send({ message: unsupportedProviderMessage("/api/admin/payments/refunds") });
 });
 
 app.get("/api/admin/payments/disputes", async (request, reply) => {
@@ -1877,6 +1948,25 @@ app.get("/api/admin/payments/disputes", async (request, reply) => {
   const query = querySchema.parse(request.query);
 
   if (!hasDatabaseUrl) {
+    if (paymentProvider === "epos") {
+      return {
+        data: [
+          {
+            id: "sample-epos-dispute-001",
+            disputeId: "epos-case-001",
+            paymentIntentId: "epos_txn_demo_001",
+            amountCents: 4200,
+            currency: "usd",
+            reason: "manual_review_required",
+            status: "pending_manual",
+            createdAt: new Date().toISOString()
+          }
+        ],
+        paymentProvider,
+        message: "EPOS disputes are tracked as manual-operational events."
+      };
+    }
+
     return {
       data: [
         {
@@ -1893,15 +1983,93 @@ app.get("/api/admin/payments/disputes", async (request, reply) => {
     };
   }
 
+  const inferDisputeProvider = (
+    channel: string,
+    eventType: string,
+    payload: Record<string, unknown>
+  ): "stripe" | "epos" => {
+    const rawProvider = payload.provider;
+    if (typeof rawProvider === "string") {
+      const normalized = rawProvider.trim().toLowerCase();
+      if (normalized === "epos") {
+        return "epos";
+      }
+      if (normalized === "stripe") {
+        return "stripe";
+      }
+    }
+
+    if (
+      channel === "epos" ||
+      eventType.startsWith("epos.") ||
+      (typeof payload.eposTransactionId === "string" && payload.eposTransactionId.length > 0)
+    ) {
+      return "epos";
+    }
+
+    return "epos";
+  };
+
+  const parseAmountCents = (value: unknown): number => {
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+      return Math.floor(value);
+    }
+
+    if (typeof value === "string") {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed >= 0) {
+        return Math.floor(parsed);
+      }
+    }
+
+    return 0;
+  };
+
+  const normalizeEpochOrIso = (value: unknown): string | null => {
+    if (typeof value === "number") {
+      const ms = value > 1_000_000_000_000 ? value : value * 1000;
+      return new Date(ms).toISOString();
+    }
+
+    if (typeof value === "string") {
+      const numeric = Number(value);
+      if (Number.isFinite(numeric)) {
+        const ms = numeric > 1_000_000_000_000 ? numeric : numeric * 1000;
+        return new Date(ms).toISOString();
+      }
+
+      const parsed = Date.parse(value);
+      if (!Number.isNaN(parsed)) {
+        return new Date(parsed).toISOString();
+      }
+    }
+
+    return null;
+  };
+
   const disputes = await prisma.integrationEvent.findMany({
     where: {
-      channel: "stripe",
-      eventType: { contains: "charge.dispute" }
+      OR: [
+        {
+          channel: "stripe",
+          eventType: { contains: "charge.dispute" }
+        },
+        {
+          channel: "epos",
+          eventType: { contains: "dispute" }
+        },
+        {
+          channel: "admin",
+          eventType: { contains: "dispute" }
+        }
+      ]
     },
     orderBy: { createdAt: "desc" },
     take: query.limit,
     select: {
       id: true,
+      channel: true,
+      eventType: true,
       payload: true,
       status: true,
       createdAt: true
@@ -1909,20 +2077,48 @@ app.get("/api/admin/payments/disputes", async (request, reply) => {
   });
 
   return {
-    data: disputes.map((event: { id: string; payload: unknown; status: string; createdAt: Date }) => {
-      const payload = event.payload as Record<string, unknown>;
+    data: disputes.map((event) => {
+      const payload =
+        event.payload && typeof event.payload === "object"
+          ? (event.payload as Record<string, unknown>)
+          : {};
+
+      const disputeId =
+        typeof payload.disputeId === "string"
+          ? payload.disputeId
+          : typeof payload.caseId === "string"
+            ? payload.caseId
+            : event.id;
+
+      const paymentIntentId =
+        typeof payload.paymentIntentId === "string"
+          ? payload.paymentIntentId
+          : typeof payload.transactionReferenceCode === "string"
+            ? payload.transactionReferenceCode
+            : typeof payload.stripePaymentIntentId === "string"
+              ? payload.stripePaymentIntentId
+              : "unknown";
+
       return {
         id: event.id,
-        disputeId: typeof payload.disputeId === "string" ? payload.disputeId : "unknown",
-        paymentIntentId:
-          typeof payload.paymentIntentId === "string" ? payload.paymentIntentId : "unknown",
-        amountCents: typeof payload.amountCents === "number" ? payload.amountCents : 0,
+        disputeId,
+        paymentIntentId,
+        amountCents: parseAmountCents(payload.amountCents),
         currency: typeof payload.currency === "string" ? payload.currency : "unknown",
-        reason: typeof payload.reason === "string" ? payload.reason : "unknown",
+        reason: typeof payload.reason === "string" ? payload.reason : "manual_review_required",
+        provider: inferDisputeProvider(event.channel, event.eventType, payload),
+        eposTransactionId:
+          typeof payload.eposTransactionId === "string" ? payload.eposTransactionId : null,
+        dueBy: normalizeEpochOrIso(payload.evidenceDueBy),
         status: event.status,
         createdAt: event.createdAt
       };
-    })
+    }),
+    paymentProvider,
+    message:
+      paymentProvider === "epos"
+        ? "EPOS disputes are tracked as manual-operational events, with legacy Stripe disputes retained for audit visibility."
+        : undefined
   };
 });
 
@@ -1940,6 +2136,55 @@ app.patch("/api/admin/payments/disputes/:eventId/review", async (request, reply)
 
   if (!hasDatabaseUrl) {
     return { id: params.data.eventId, status: "reviewed" };
+  }
+
+  if (paymentProvider === "epos") {
+    const existingEvent = await prisma.integrationEvent.findUnique({
+      where: { id: params.data.eventId },
+      select: { payload: true }
+    });
+
+    const existingPayload =
+      existingEvent?.payload && typeof existingEvent.payload === "object"
+        ? (existingEvent.payload as Record<string, unknown>)
+        : {};
+
+    const updated = await prisma.integrationEvent.update({
+      where: { id: params.data.eventId },
+      data: {
+        status: "reviewed",
+        payload: {
+          ...existingPayload,
+          reviewedAt: new Date().toISOString(),
+          reviewedByRole: role,
+          provider: paymentProvider
+        }
+      },
+      select: {
+        id: true,
+        status: true,
+        payload: true
+      }
+    });
+
+    await writeAdminAuditEvent({
+      role,
+      action: "dispute_reviewed",
+      entityId: updated.id,
+      entityType: "payment",
+      payload: {
+        reviewStatus: updated.status,
+        provider: paymentProvider
+      }
+    });
+
+    return updated;
+  }
+
+  if (paymentProvider !== "stripe") {
+    return reply
+      .status(501)
+      .send({ message: unsupportedProviderMessage("/api/admin/payments/disputes/:eventId/review") });
   }
 
   const updated = await prisma.integrationEvent.update({
@@ -2355,11 +2600,7 @@ app.get("/api/admin/accounting/daily-close", async (request, reply) => {
       _sum: { totalCents: true }
     }),
     prisma.integrationEvent.findMany({
-      where: {
-        channel: "admin",
-        eventType: "admin.payment_refund_created",
-        createdAt: { gte: start, lt: end }
-      },
+      where: buildRefundEventFilter(start, end),
       select: { payload: true }
     }),
     prisma.integrationEvent.count({
@@ -2385,8 +2626,7 @@ app.get("/api/admin/accounting/daily-close", async (request, reply) => {
 
   const refundedCents = refundEvents.reduce((sum: number, item: { payload: unknown }) => {
     const payload = item.payload as Record<string, unknown>;
-    const amount = typeof payload.amountCents === "number" ? payload.amountCents : 0;
-    return sum + amount;
+    return sum + parseRefundAmountCents(payload);
   }, 0);
 
   const grossSalesCents = grossSales._sum.totalCents ?? 0;
@@ -2518,11 +2758,7 @@ app.get("/api/admin/accounting/daily-close/export", async (request, reply) => {
         _sum: { totalCents: true }
       }),
       prisma.integrationEvent.findMany({
-        where: {
-          channel: "admin",
-          eventType: "admin.payment_refund_created",
-          createdAt: { gte: start, lt: end }
-        },
+        where: buildRefundEventFilter(start, end),
         select: { payload: true }
       }),
       prisma.integrationEvent.count({
@@ -2545,8 +2781,7 @@ app.get("/api/admin/accounting/daily-close/export", async (request, reply) => {
 
     refundedCents = refundEvents.reduce((sum: number, item: { payload: unknown }) => {
       const payload = item.payload as Record<string, unknown>;
-      const amount = typeof payload.amountCents === "number" ? payload.amountCents : 0;
-      return sum + amount;
+      return sum + parseRefundAmountCents(payload);
     }, 0);
     grossSalesCents = grossSales._sum.totalCents ?? 0;
     netSalesCents = Math.max(0, grossSalesCents - refundedCents);
@@ -3434,524 +3669,54 @@ app.post(
   async (request, reply) => {
     const correlationId = request.correlationId;
 
-    if (await isWebhookRateLimited(request.ip)) {
-      request.log.warn({ ip: request.ip, correlationId }, "Stripe webhook rate limit exceeded");
-      return reply.status(429).send({ message: "Too many webhook requests" });
-    }
-
-    if (!isWebhookIpAllowed(request, webhookAllowedIps)) {
-      request.log.warn(
-        {
-          requestIp: request.ip,
-          requestIps: getRequestIps(request),
+    if (paymentProvider === "epos") {
+      const eposResult = await handleEposWebhook({
+        request: {
+          ip: request.ip,
+          headers: request.headers,
+          rawBody: (request as typeof request & { rawBody?: string }).rawBody,
           correlationId,
         },
-        "Stripe webhook blocked by IP allowlist"
-      );
-      await sendOperationalAlert({
-        type: "webhook_ip_not_allowed",
-        severity: "critical",
-        message: "Stripe webhook request blocked by IP allowlist",
-        details: {
-          requestIp: request.ip,
-          requestIps: getRequestIps(request),
-          correlationId,
-        }
+        logger: {
+          warn: (payload, message) => request.log.warn(payload, message),
+          info: (payload, message) => request.log.info(payload, message),
+        },
+        allowedIps: eposWebhookAllowedIps,
+        signatureHeader: eposWebhookSignatureHeader,
+        webhookSecret: eposWebhookSecret,
+        requireSignature: eposWebhookRequireSignature,
+        hasDatabaseUrl,
+        prisma: {
+          order: {
+            updateMany: (args) => prisma.order.updateMany(args as never),
+          },
+          paymentTransaction: {
+            upsert: (args) => prisma.paymentTransaction.upsert(args as never),
+          },
+          integrationEvent: {
+            create: (args) => prisma.integrationEvent.create(args as never),
+          },
+        },
+        isWebhookRateLimited,
+        isWebhookIpAllowed,
+        getRequestIps,
+        verifyHmacSha256Signature,
+        isDuplicateWebhookEvent,
+        isPersistedDuplicateWebhookEvent: isDuplicateEposWebhookEventInDatabase,
+        sendOperationalAlert,
       });
-      return reply.status(403).send({ message: "Webhook IP not allowed" });
-    }
 
-    const signature = request.headers["stripe-signature"];
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-    if (!stripe || !signature || !webhookSecret) {
-      await sendOperationalAlert({
-        type: "webhook_misconfigured",
-        severity: "critical",
-        message: "Stripe webhook received while webhook configuration is incomplete",
-        details: {
-          stripeConfigured: Boolean(stripe),
-          hasSignature: Boolean(signature),
-          hasWebhookSecret: Boolean(webhookSecret),
-          correlationId
-        }
-      });
-      return reply.status(400).send({ message: "Webhook is not configured" });
-    }
-
-    const raw = (request as typeof request & { rawBody?: string }).rawBody;
-    if (!raw) {
-      return reply.status(400).send({ message: "Missing webhook payload" });
-    }
-
-    let event: Stripe.Event;
-
-    try {
-      event = stripe.webhooks.constructEvent(raw, signature, webhookSecret);
-    } catch (error) {
-      request.log.warn({ error, correlationId }, "Invalid Stripe webhook signature");
-      await sendOperationalAlert({
-        type: "webhook_signature_invalid",
-        severity: "critical",
-        message: "Stripe webhook signature verification failed",
-        details: {
-          error: error instanceof Error ? error.message : "Invalid signature",
-          correlationId
-        }
-      });
-      return reply.status(400).send({ message: "Invalid signature" });
-    }
-
-    if (await isDuplicateWebhookEvent(event.id)) {
-      request.log.info(
-        { eventId: event.id, eventType: event.type, correlationId },
-        "Duplicate Stripe webhook event ignored"
-      );
-      return { received: true, duplicate: true, correlationId };
-    }
-
-    if (hasDatabaseUrl) {
-      try {
-        const isPersistedDuplicate = await isDuplicateWebhookEventInDatabase(event);
-        if (isPersistedDuplicate) {
-          request.log.info(
-            { eventId: event.id, eventType: event.type, correlationId },
-            "Duplicate Stripe webhook event ignored via persisted lookup"
-          );
-          return { received: true, duplicate: true, correlationId };
-        }
-      } catch (error) {
-        request.log.error(
-          { 
-            error, 
-            eventId: event.id, 
-            eventType: event.type,
-            correlationId,
-            alertType: 'duplicate_check_failure',
-            severity: 'high',
-            impact: 'potential_duplicate_processing'
-          }, 
-          "ALERT: Failed persisted webhook duplicate check; continuing with processing - potential duplicate events may be processed"
-        );
+      if (eposResult.statusCode !== 200) {
+        return reply.status(eposResult.statusCode).send(eposResult.body);
       }
+
+      return eposResult.body;
     }
 
-    if (event.type === "checkout.session.completed") {
-      const completedSession = event.data.object as Stripe.Checkout.Session;
-
-      if (hasDatabaseUrl) {
-        try {
-          const { stripeCustomerId, paymentIntentId, orderId } = getCheckoutSessionIdentifiers(completedSession);
-
-          const writeCheckoutEvent = async (
-            status: string,
-            details: Record<string, unknown>
-          ) => {
-            await prisma.integrationEvent.create({
-              data: {
-                orderId,
-                correlationId,
-                channel: "stripe",
-                eventType: event.type,
-                status,
-                payload: {
-                  eventId: event.id,
-                  correlationId,
-                  sessionId: completedSession.id,
-                  stripeCustomerId: stripeCustomerId ?? null,
-                  paymentIntentId: paymentIntentId ?? null,
-                  ...details
-                } as Prisma.InputJsonValue
-              }
-            });
-          };
-
-          if (!paymentIntentId) {
-            await writeCheckoutEvent("ignored", {
-              reason: "missing_payment_intent"
-            });
-            return { received: true, correlationId };
-          }
-
-          if (orderId) {
-            await prisma.order.updateMany({
-              where: { id: orderId },
-              data: {
-                stripeIntentId: paymentIntentId,
-                correlationId
-              }
-            });
-          }
-
-          if (!stripeCustomerId) {
-            await writeCheckoutEvent("processed", {
-              reason: "guest_checkout_no_customer",
-              linkedOrderId: orderId ?? null,
-              paymentIntentId
-            });
-            return { received: true, correlationId };
-          }
-
-          const customer = await prisma.customer.findFirst({
-            where: { stripeCustomerId },
-            select: {
-              id: true,
-              defaultPaymentMethodId: true
-            }
-          });
-
-          if (!customer) {
-            await writeCheckoutEvent("ignored", {
-              reason: "customer_not_found"
-            });
-            return { received: true, correlationId };
-          }
-
-          const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId, {
-            expand: ["payment_method"]
-          });
-
-          const paymentMethod =
-            typeof paymentIntent.payment_method === "string"
-              ? await stripe.paymentMethods.retrieve(paymentIntent.payment_method)
-              : paymentIntent.payment_method;
-
-          if (!paymentMethod || paymentMethod.type !== "card" || !paymentMethod.card) {
-            await writeCheckoutEvent("ignored", {
-              reason: "unsupported_or_missing_payment_method",
-              paymentMethodType: paymentMethod?.type ?? null
-            });
-            return { received: true, correlationId };
-          }
-
-          const shouldBeDefault = !customer.defaultPaymentMethodId;
-
-          request.log.info(
-            {
-              eventType: event.type,
-              stripeCustomerId,
-              paymentIntentId,
-              correlationId
-            },
-            "Processing completed checkout session"
-          );
-
-          await prisma.$transaction(async (tx) => {
-            if (shouldBeDefault) {
-              await tx.savedPaymentMethod.updateMany({
-                where: { customerId: customer.id },
-                data: { isDefault: false }
-              });
-            }
-
-            await tx.savedPaymentMethod.upsert({
-              where: { stripePaymentMethodId: paymentMethod.id },
-              update: {
-                brand: paymentMethod.card?.brand ?? "card",
-                last4: paymentMethod.card?.last4 ?? "0000",
-                expMonth: paymentMethod.card?.exp_month ?? 1,
-                expYear: paymentMethod.card?.exp_year ?? 1970,
-                isDefault: shouldBeDefault
-              },
-              create: {
-                customerId: customer.id,
-                stripePaymentMethodId: paymentMethod.id,
-                brand: paymentMethod.card?.brand ?? "card",
-                last4: paymentMethod.card?.last4 ?? "0000",
-                expMonth: paymentMethod.card?.exp_month ?? 1,
-                expYear: paymentMethod.card?.exp_year ?? 1970,
-                isDefault: shouldBeDefault
-              }
-            });
-
-            if (shouldBeDefault) {
-              await tx.customer.update({
-                where: { id: customer.id },
-                data: { defaultPaymentMethodId: paymentMethod.id }
-              });
-            }
-          });
-
-          await writeCheckoutEvent("processed", {
-            customerId: customer.id,
-            stripePaymentMethodId: paymentMethod.id,
-            shouldSetDefault: shouldBeDefault
-          });
-        } catch (error) {
-          request.log.error({ error }, "Failed to sync checkout session payment method");
-          await sendOperationalAlert({
-            type: "checkout_session_sync_failed",
-            severity: "critical",
-            message: "Checkout session webhook synchronization failed",
-            details: {
-              eventType: event.type,
-              error: error instanceof Error ? error.message : "Unknown processing error",
-              correlationId
-            }
-          });
-          return reply.status(500).send({ message: "Webhook processing failed" });
-        }
-      }
-    }
-
-    if (event.type.startsWith("payment_intent.")) {
-      const paymentIntent = event.data.object as Stripe.PaymentIntent;
-
-      if (hasDatabaseUrl) {
-        try {
-          const metadataOrderId = typeof paymentIntent.metadata.orderId === "string" && paymentIntent.metadata.orderId
-            ? paymentIntent.metadata.orderId
-            : undefined;
-          const orderByStripeIntent = await prisma.order.findFirst({
-            where: { stripeIntentId: paymentIntent.id },
-            select: { id: true }
-          });
-          let resolvedOrderId = metadataOrderId ?? orderByStripeIntent?.id;
-
-          if (!resolvedOrderId) {
-            try {
-              const sessions = await stripe.checkout.sessions.list({
-                payment_intent: paymentIntent.id,
-                limit: 1
-              });
-              const sessionOrderId =
-                typeof sessions.data[0]?.metadata?.orderId === "string" && sessions.data[0].metadata.orderId
-                  ? sessions.data[0].metadata.orderId
-                  : undefined;
-              if (sessionOrderId) {
-                resolvedOrderId = sessionOrderId;
-              }
-            } catch (lookupError) {
-              request.log.warn(
-                {
-                  paymentIntentId: paymentIntent.id,
-                  error: lookupError instanceof Error ? lookupError.message : "Unknown lookup error"
-                },
-                "Failed to resolve payment intent order via checkout session lookup"
-              );
-            }
-          }
-          const bookingId =
-            typeof paymentIntent.metadata.bookingId === "string" && paymentIntent.metadata.bookingId
-              ? paymentIntent.metadata.bookingId
-              : undefined;
-          const paymentType =
-            typeof paymentIntent.metadata.paymentType === "string" && paymentIntent.metadata.paymentType
-              ? paymentIntent.metadata.paymentType
-              : "order";
-
-          request.log.info(
-            {
-              eventType: event.type,
-              paymentIntentId: paymentIntent.id,
-              amountCents: paymentIntent.amount,
-              status: paymentIntent.status,
-              orderId: resolvedOrderId,
-              metadataOrderId,
-              bookingId,
-              paymentType,
-              correlationId
-            },
-            "Reconciling payment intent webhook"
-          );
-
-          // Use a transaction to ensure atomicity - PaymentTransaction, Order, and IntegrationEvent
-          // must all succeed or fail together to maintain data integrity
-          await prisma.$transaction(async (tx) => {
-            await tx.paymentTransaction.upsert({
-              where: { stripePaymentIntentId: paymentIntent.id },
-              update: {
-                amountCents: paymentIntent.amount,
-                currency: paymentIntent.currency,
-                status: mapStripeStatusToPaymentStatus(paymentIntent.status),
-                orderId: resolvedOrderId,
-                bookingId,
-                paymentType,
-                correlationId
-              },
-              create: {
-                stripePaymentIntentId: paymentIntent.id,
-                amountCents: paymentIntent.amount,
-                currency: paymentIntent.currency,
-                status: mapStripeStatusToPaymentStatus(paymentIntent.status),
-                orderId: resolvedOrderId,
-                bookingId,
-                paymentType,
-                correlationId
-              }
-            });
-
-            if (resolvedOrderId) {
-              await tx.order.update({
-                where: { id: resolvedOrderId },
-                data: {
-                  stripeIntentId: paymentIntent.id,
-                  correlationId
-                }
-              });
-            }
-
-            await tx.integrationEvent.create({
-              data: {
-                orderId: resolvedOrderId,
-                correlationId,
-                channel: "stripe",
-                eventType: event.type,
-                status: "processed",
-                payload: {
-                  eventId: event.id,
-                  paymentIntentId: paymentIntent.id,
-                  status: paymentIntent.status,
-                  correlationId
-                } as Prisma.InputJsonValue
-              }
-            });
-          });
-
-          if (!resolvedOrderId && event.type === "payment_intent.succeeded") {
-            await sendOperationalAlert({
-              type: "payment_intent_missing_order_link",
-              severity: "warning",
-              message: "Successful payment intent has no linked order",
-              details: {
-                eventType: event.type,
-                paymentIntentId: paymentIntent.id,
-                metadataOrderId: metadataOrderId ?? null,
-                correlationId
-              }
-            });
-          }
-        } catch (error) {
-          request.log.error({ error, correlationId }, "Failed to reconcile payment intent webhook");
-          await sendOperationalAlert({
-            type: "payment_intent_reconcile_failed",
-            severity: "critical",
-            message: "Payment intent webhook reconciliation failed",
-            details: {
-              eventType: event.type,
-              paymentIntentId: paymentIntent.id,
-              error: error instanceof Error ? error.message : "Unknown processing error",
-              correlationId
-            }
-          });
-          return reply.status(500).send({ message: "Webhook processing failed" });
-        }
-      }
-    }
-
-    if (event.type.startsWith("charge.dispute.")) {
-      const dispute = event.data.object as Stripe.Dispute;
-
-      if (hasDatabaseUrl) {
-        try {
-          const paymentIntentId =
-            typeof dispute.payment_intent === "string" ? dispute.payment_intent : undefined;
-          const disputeStatus = normalizeDisputeStatus(dispute.status);
-
-          request.log.info(
-            {
-              eventType: event.type,
-              disputeId: dispute.id,
-              paymentIntentId,
-              disputeStatus,
-              amountCents: dispute.amount,
-              reason: dispute.reason,
-              correlationId
-            },
-            "Reconciling dispute webhook"
-          );
-
-          const linkedPayment = paymentIntentId
-            ? await prisma.paymentTransaction.findUnique({
-                where: { stripePaymentIntentId: paymentIntentId },
-                select: { orderId: true }
-              })
-            : null;
-
-          if (disputeStatus === "lost" && paymentIntentId) {
-            await prisma.paymentTransaction.updateMany({
-              where: { stripePaymentIntentId: paymentIntentId },
-              data: { status: "failed" }
-            });
-          }
-
-          const recentDisputeEvents = await prisma.integrationEvent.findMany({
-            where: {
-              channel: "stripe",
-              eventType: { contains: "charge.dispute" }
-            },
-            orderBy: { createdAt: "desc" },
-            take: 200,
-            select: {
-              id: true,
-              payload: true
-            }
-          });
-
-          const existing = recentDisputeEvents.find((candidate) => {
-            const payload = candidate.payload as Record<string, unknown>;
-            return payload.disputeId === dispute.id;
-          });
-
-          const nextPayload = {
-            ...(existing ? (existing.payload as Record<string, unknown>) : {}),
-            eventId: event.id,
-            disputeId: dispute.id,
-            paymentIntentId: paymentIntentId ?? "unknown",
-            amountCents: dispute.amount,
-            currency: typeof (dispute.currency) === "string" ? dispute.currency : "unknown",
-            reason: dispute.reason,
-            disputeStatus,
-            evidenceDueBy: dispute.evidence_details?.due_by ?? null,
-            updatedAt: event.created,
-            correlationId,
-            evidenceDetails: JSON.parse(JSON.stringify(dispute.evidence_details ?? {}))
-          } as Prisma.InputJsonValue;
-
-          if (existing) {
-            await prisma.integrationEvent.update({
-              where: { id: existing.id },
-              data: {
-                orderId: linkedPayment?.orderId,
-                correlationId,
-                eventType: event.type,
-                status: disputeStatus,
-                payload: nextPayload
-              }
-            });
-          } else {
-            await prisma.integrationEvent.create({
-              data: {
-                orderId: linkedPayment?.orderId,
-                correlationId,
-                channel: "stripe",
-                eventType: event.type,
-                status: disputeStatus,
-                payload: nextPayload
-              }
-            });
-          }
-
-          await evaluateRiskThresholds("dispute_webhook_event");
-        } catch (error) {
-          request.log.error({ error, correlationId }, "Failed to persist dispute webhook event");
-          await sendOperationalAlert({
-            type: "dispute_reconcile_failed",
-            severity: "critical",
-            message: "Dispute webhook reconciliation failed",
-            details: {
-              eventType: event.type,
-              disputeId: dispute.id,
-              error: error instanceof Error ? error.message : "Unknown processing error",
-              correlationId
-            }
-          });
-          return reply.status(500).send({ message: "Webhook processing failed" });
-        }
-      }
-    }
-
-    return { received: true, correlationId };
+    // Non-EPOS providers not supported
+    return reply.status(501).send({ 
+      message: unsupportedProviderMessage("/api/payments/webhook") 
+    });
   }
 );
 

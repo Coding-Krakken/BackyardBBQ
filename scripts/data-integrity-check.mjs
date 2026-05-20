@@ -14,17 +14,31 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-const STRIPE_SOURCES = ["direct", "catering"];
+const ONLINE_PAYMENT_SOURCES = ["direct", "catering"];
 const THIRD_PARTY_CHANNELS = ["doordash", "ubereats", "grubhub"];
 const SUCCESS_STATUSES = ["succeeded", "partially_refunded"];
+const paymentProvider = (process.env.PAYMENT_PROVIDER ?? "stripe").trim().toLowerCase();
+
+function resolveExternalPaymentId(value) {
+  if (!value || typeof value !== "string") {
+    return "none";
+  }
+
+  if (value.startsWith("epos_txn_")) {
+    return `EPOS TXN: ${value.slice("epos_txn_".length)}`;
+  }
+
+  return `Stripe PI: ${value}`;
+}
 
 async function main() {
   console.log("Running data integrity check...\n");
+  console.log(`Payment provider: ${paymentProvider}\n`);
 
-  // 1. Find orders without payments (Stripe sources only)
+  // 1. Find orders without payments (online-payment sources only)
   const ordersWithoutPayments = await prisma.order.findMany({
     where: {
-      source: { in: STRIPE_SOURCES },
+      source: { in: ONLINE_PAYMENT_SOURCES },
       status: { notIn: ["cancelled", "pending"] },
       payment: null,
     },
@@ -61,7 +75,7 @@ async function main() {
   const [orderSum, paymentSum, thirdPartyOrders] = await Promise.all([
     prisma.order.aggregate({
       where: {
-        source: { in: STRIPE_SOURCES },
+        source: { in: ONLINE_PAYMENT_SOURCES },
         status: { notIn: ["cancelled"] },
       },
       _sum: { totalCents: true },
@@ -108,7 +122,7 @@ async function main() {
   // Sums comparison
   console.log("FINANCIAL SUMMARY");
   console.log("---------------------------------------------------------------");
-  console.log(`  Stripe Orders (direct + catering):  $${(orderSumCents / 100).toFixed(2)} (${orderSum._count} orders)`);
+  console.log(`  Online Orders (direct + catering):  $${(orderSumCents / 100).toFixed(2)} (${orderSum._count} orders)`);
   console.log(`  PaymentTransactions (succeeded):    $${(paymentSumCents / 100).toFixed(2)} (${paymentSum._count} payments)`);
   console.log(`  Third-party Orders (delivery):      $${(thirdPartySumCents / 100).toFixed(2)} (${thirdPartyOrders._count} orders)`);
   console.log("---------------------------------------------------------------");
@@ -149,7 +163,7 @@ async function main() {
     console.log(`  Found ${paymentsWithoutOrders.length} payments:\n`);
     for (const payment of paymentsWithoutOrders.slice(0, 20)) {
       console.log(`  - ${payment.id}`);
-      console.log(`    Stripe PI: ${payment.stripePaymentIntentId}`);
+      console.log(`    External Id: ${resolveExternalPaymentId(payment.stripePaymentIntentId)}`);
       console.log(`    Amount: $${(payment.amountCents / 100).toFixed(2)} | Status: ${payment.status}`);
       console.log(`    Created: ${payment.createdAt.toISOString()}`);
       console.log();
@@ -167,8 +181,8 @@ async function main() {
     
     if (ordersWithoutPayments.length > 0) {
       console.log("  1. For orphaned orders:");
-      console.log("     - Check Stripe dashboard for corresponding charges");
-      console.log("     - If payment exists in Stripe: backfill PaymentTransaction");
+      console.log(`     - Check ${paymentProvider.toUpperCase()} records for corresponding transactions`);
+      console.log("     - If payment exists: backfill PaymentTransaction");
       console.log("     - If no payment exists: mark order as 'cancelled'");
       console.log("     - Run: node scripts/reconcile-orphaned-orders.mjs --dry-run");
       console.log();
@@ -176,7 +190,7 @@ async function main() {
     
     if (paymentsWithoutOrders.length > 0) {
       console.log("  2. For orphaned payments:");
-      console.log("     - Check metadata on PaymentIntent in Stripe");
+      console.log("     - Check external transaction metadata/reference code");
       console.log("     - Link to existing Order if orderId found");
       console.log("     - May indicate webhook processing failure");
       console.log();
@@ -185,8 +199,8 @@ async function main() {
     if (differenceCents !== 0) {
       console.log("  3. For sum discrepancy:");
       console.log("     - Review orders and payments from the lists above");
-      console.log("     - Check for missing webhook events in Stripe");
-      console.log("     - Consider running reconciliation against Stripe API");
+      console.log("     - Check for missing payment webhook events");
+      console.log(`     - Consider running reconciliation against ${paymentProvider.toUpperCase()} API`);
       console.log();
     }
   }

@@ -25,7 +25,41 @@ test("prints n/a summary when files are missing in non-strict mode", () => {
     const result = runSummary(["--input-dir", dir]);
     assert.equal(result.status, 0);
     assert.match(result.stdout, /Stripe Replay Summary/);
+    assert.match(result.stdout, /Provider \| stripe/);
     assert.match(result.stdout, /Checkout firstAttempt.ok \| n\/a/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("passes epos require-pass with checkout replay only", () => {
+  const dir = createTempDir();
+
+  try {
+    writeFileSync(
+      join(dir, "checkout-replay.json"),
+      JSON.stringify({
+        firstAttempt: { ok: true },
+        secondAttempt: { ok: true },
+        duplicateSuppressed: true,
+      }),
+      "utf8"
+    );
+
+    const result = runSummary([
+      "--provider",
+      "epos",
+      "--input-dir",
+      dir,
+      "--require-files",
+      "true",
+      "--require-pass",
+      "true",
+    ]);
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /EPOS Replay Summary/);
+    assert.match(result.stdout, /Provider \| epos/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -4,14 +4,7 @@ export const dynamic = "force-dynamic";
 
 import Image from "next/image";
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import {
-  CheckoutElementsProvider,
-  ExpressCheckoutElement,
-  PaymentElement,
-  useCheckout
-} from "@stripe/react-stripe-js/checkout";
-import { loadStripe } from "@stripe/stripe-js";
+import { useEffect, useRef, useState } from "react";
 import { SiteFooter } from "../components/HomeSections";
 import { SiteNavbar } from "../components/SiteNavbar";
 import { useCart } from "../components/cart/CartContext";
@@ -19,9 +12,10 @@ import { businessInfo } from "../config/content";
 import { siteImages } from "../config/images";
 import type { CartItem } from "../components/cart/CartContext";
 import { AnalyticsEvents, trackEvent } from "../lib/analytics";
+import { getClientPaymentProvider } from "../lib/payment-provider";
+import { getCheckoutIntroText, getCheckoutPendingLabel, getCheckoutPrimaryActionLabel } from "./checkout-copy";
 
-const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim() ?? "";
-const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
+const paymentProvider = getClientPaymentProvider();
 
 type FulfillmentMode = "delivery" | "pickup";
 type FulfillmentSpeed = "asap" | "scheduled";
@@ -70,84 +64,6 @@ function validate(details: CheckoutDetails) {
   return errors;
 }
 
-function PaymentForm() {
-  const checkoutState = useCheckout();
-  const [status, setStatus] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    if (checkoutState.type !== "success") {
-      return;
-    }
-
-    setSubmitting(true);
-    setStatus("");
-
-    try {
-      const result = await checkoutState.checkout.confirm();
-      if (result.type === "error") {
-        setStatus(result.error.message ?? "Payment failed. Please try again.");
-      } else {
-        trackEvent(AnalyticsEvents.checkoutSubmitted, { source: "stripe_elements" });
-      }
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Payment failed. Please try again.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <form onSubmit={onSubmit} className="checkout-form">
-      <div style={{ marginBottom: "1.5rem" }}>
-        <ExpressCheckoutElement onConfirm={() => undefined} />
-      </div>
-
-      <div style={{ textAlign: "center", margin: "1.5rem 0", position: "relative" }}>
-        <span
-          style={{
-            background: "var(--bg-charcoal)",
-            padding: "0 1rem",
-            position: "relative",
-            zIndex: 1,
-            color: "var(--warm-gray)"
-          }}
-        >
-          Or pay with card
-        </span>
-        <div
-          style={{
-            position: "absolute",
-            top: "50%",
-            left: 0,
-            right: 0,
-            height: "1px",
-            background: "var(--line)",
-            zIndex: 0
-          }}
-        />
-      </div>
-
-      <PaymentElement
-        options={{
-          layout: {
-            type: "accordion",
-            radios: "auto",
-            spacedAccordionItems: true
-          }
-        }}
-      />
-
-      <button className="btn btn-primary" style={{ marginTop: "1.5rem", width: "100%" }} type="submit" disabled={submitting}>
-        {submitting ? "Processing..." : "Pay Securely"}
-      </button>
-      {status ? <p className="status-text" style={{ marginTop: "1rem", color: "var(--ember)" }}>{status}</p> : null}
-    </form>
-  );
-}
-
 export default function CheckoutPage() {
   const { state, isHydrated, subtotalCents, estimatedTaxCents } = useCart();
   const items = state.items;
@@ -158,13 +74,7 @@ export default function CheckoutPage() {
   const [tipPercent, setTipPercent] = useState(15);
   const [customTipCents, setCustomTipCents] = useState<number | null>(null);
 
-  const [clientSecret, setClientSecret] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(() => {
-    if (!stripePromise) {
-      return "Secure checkout is unavailable because Stripe is not configured in this environment.";
-    }
-    return null;
-  });
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const idempotencyKeyRef = useRef(`checkout-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
 
@@ -172,12 +82,7 @@ export default function CheckoutPage() {
   const totalBeforePaymentCents = subtotalCents + estimatedTaxCents + tipCents;
 
   useEffect(() => {
-    if (!checkoutStarted || !isHydrated || items.length === 0 || clientSecret) {
-      return;
-    }
-
-    if (!stripePromise) {
-      setErrorMessage("Secure checkout is unavailable because Stripe is not configured in this environment.");
+    if (!checkoutStarted || !isHydrated || items.length === 0) {
       return;
     }
 
@@ -215,8 +120,21 @@ export default function CheckoutPage() {
           throw new Error("Unable to initialize checkout.");
         }
 
-        const payload = (await response.json()) as { clientSecret: string };
-        setClientSecret(payload.clientSecret);
+        const payload = (await response.json()) as {
+          provider?: "stripe" | "epos";
+          sessionId?: string;
+        };
+
+        if ((payload.provider ?? paymentProvider) !== "epos" || !payload.sessionId) {
+          throw new Error("EPOS checkout did not return a session identifier.");
+        }
+
+        trackEvent(AnalyticsEvents.checkoutSubmitted, {
+          source: "epos_api",
+          sessionId: payload.sessionId,
+        });
+
+        window.location.assign(`/checkout/success?session_id=${encodeURIComponent(payload.sessionId)}`);
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : "Unable to initialize checkout.");
       }
@@ -227,7 +145,6 @@ export default function CheckoutPage() {
     });
   }, [
     checkoutStarted,
-    clientSecret,
     details.address,
     details.email,
     details.fulfillmentMode,
@@ -239,11 +156,10 @@ export default function CheckoutPage() {
     estimatedTaxCents,
     isHydrated,
     items.length,
+    paymentProvider,
     subtotalCents,
     tipCents
   ]);
-
-  const checkoutOptions = useMemo(() => (clientSecret ? { clientSecret } : undefined), [clientSecret]);
 
   const setField = <K extends keyof CheckoutDetails>(key: K, value: CheckoutDetails[K]) => {
     setDetails((previous) => ({ ...previous, [key]: value }));
@@ -279,7 +195,7 @@ export default function CheckoutPage() {
         <div className="page-shell subpage-hero-content narrow">
           <span className="hero-eyebrow">Secure Payment</span>
           <h1>Checkout</h1>
-          <p>Complete your order details first, then finish payment with a secure Stripe checkout experience.</p>
+          <p>{getCheckoutIntroText(paymentProvider)}</p>
         </div>
       </section>
 
@@ -425,20 +341,16 @@ export default function CheckoutPage() {
 
             {!checkoutStarted ? (
               <button className="btn btn-primary" style={{ marginTop: "1rem", width: "100%" }} onClick={startCheckout}>
-                Continue to Secure Payment
+                {getCheckoutPrimaryActionLabel()}
               </button>
             ) : null}
 
             {errorMessage ? <p className="status-text" style={{ marginTop: "1rem" }}>{errorMessage}</p> : null}
 
-            {checkoutStarted && checkoutOptions && stripePromise ? (
-              <div style={{ marginTop: "1rem" }}>
-                <CheckoutElementsProvider stripe={stripePromise} options={checkoutOptions}>
-                  <PaymentForm />
-                </CheckoutElementsProvider>
-              </div>
-            ) : checkoutStarted && !errorMessage ? (
-              <p className="status-text" style={{ marginTop: "1rem" }}>Preparing secure payment...</p>
+            {checkoutStarted && !errorMessage ? (
+              <p className="status-text" style={{ marginTop: "1rem" }}>
+                {getCheckoutPendingLabel()}
+              </p>
             ) : null}
           </article>
         )}

@@ -1,12 +1,6 @@
 /** @jest-environment node */
 
-import { getCheckoutSessionIdentifiers, shouldTreatWebhookEventAsDuplicate } from "../webhook/utils";
-
-type CheckoutSessionLike = {
-  customer?: string | null;
-  payment_intent?: string | null;
-  metadata?: Record<string, string>;
-};
+import { shouldTreatWebhookEventAsDuplicate } from "../webhook/utils";
 
 describe("shouldTreatWebhookEventAsDuplicate", () => {
   it("returns false for first event and true for immediate duplicate", () => {
@@ -45,77 +39,5 @@ describe("shouldTreatWebhookEventAsDuplicate", () => {
     expect(store.get("evt_default_now")).toBe(5000);
 
     nowSpy.mockRestore();
-  });
-});
-
-describe("getCheckoutSessionIdentifiers", () => {
-  it("extracts customer, payment intent, and order id metadata", () => {
-    const session = {
-      customer: "cus_123",
-      payment_intent: "pi_123",
-      metadata: { orderId: "ord_123" },
-    } satisfies CheckoutSessionLike;
-
-    expect(getCheckoutSessionIdentifiers(session)).toEqual({
-      stripeCustomerId: "cus_123",
-      paymentIntentId: "pi_123",
-      orderId: "ord_123",
-    });
-  });
-
-  it("returns undefined values when identifier fields are absent", () => {
-    const session = {
-      customer: null,
-      payment_intent: null,
-      metadata: {},
-    } satisfies CheckoutSessionLike;
-
-    expect(getCheckoutSessionIdentifiers(session)).toEqual({
-      stripeCustomerId: undefined,
-      paymentIntentId: undefined,
-      orderId: undefined,
-    });
-  });
-
-  it("treats object and empty metadata identifiers as undefined", () => {
-    const session = {
-      customer: { id: "cus_obj" },
-      payment_intent: { id: "pi_obj" },
-      metadata: { orderId: "" },
-    } as unknown as CheckoutSessionLike;
-
-    expect(getCheckoutSessionIdentifiers(session)).toEqual({
-      stripeCustomerId: undefined,
-      paymentIntentId: undefined,
-      orderId: undefined,
-    });
-  });
-
-  it("treats non-string orderId metadata as undefined", () => {
-    const session = {
-      customer: "cus_123",
-      payment_intent: "pi_123",
-      metadata: { orderId: 12345 },
-    } as unknown as CheckoutSessionLike;
-
-    expect(getCheckoutSessionIdentifiers(session)).toEqual({
-      stripeCustomerId: "cus_123",
-      paymentIntentId: "pi_123",
-      orderId: undefined,
-    });
-  });
-
-  it("treats null metadata as undefined identifiers", () => {
-    const session = {
-      customer: "cus_999",
-      payment_intent: "pi_999",
-      metadata: null,
-    } as unknown as CheckoutSessionLike;
-
-    expect(getCheckoutSessionIdentifiers(session)).toEqual({
-      stripeCustomerId: "cus_999",
-      paymentIntentId: "pi_999",
-      orderId: undefined,
-    });
   });
 });

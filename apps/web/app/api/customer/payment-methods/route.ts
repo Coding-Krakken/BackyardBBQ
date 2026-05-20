@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../../../lib/auth";
-import { prisma } from "../../../../lib/prisma";
+import { getPaymentProvider } from "../../../lib/payment-provider";
 
 export const dynamic = "force-dynamic";
 
@@ -13,30 +13,23 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const customer = await prisma.customer.findUnique({
-      where: { id: session.user.id },
-      select: {
-        defaultPaymentMethodId: true,
-        savedPaymentMethods: {
-          orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
-          select: {
-            id: true,
-            stripePaymentMethodId: true,
-            brand: true,
-            last4: true,
-            expMonth: true,
-            expYear: true,
-            isDefault: true,
-            createdAt: true,
-            updatedAt: true,
-          },
+    const provider = getPaymentProvider();
+
+    if (provider !== "epos") {
+      return NextResponse.json(
+        {
+          error: "Configured payment provider is unsupported for this endpoint.",
         },
-      },
-    });
+        { status: 501 }
+      );
+    }
 
     return NextResponse.json({
-      paymentMethods: customer?.savedPaymentMethods ?? [],
-      defaultPaymentMethodId: customer?.defaultPaymentMethodId ?? null,
+      paymentMethods: [],
+      defaultPaymentMethodId: null,
+      provider,
+      capability: "unavailable",
+      message: "Saved payment methods are not available. Payments are processed directly through our EPOS terminal.",
     });
   } catch (error) {
     console.error("Get payment methods error:", error);

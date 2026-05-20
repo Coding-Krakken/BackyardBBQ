@@ -1,218 +1,60 @@
 /** @jest-environment node */
 
-describe("DELETE /api/customer/payment-methods/[id] Stripe detach paths", () => {
+import { getServerSession } from "next-auth";
+import { DELETE } from "../route";
+
+jest.mock("next-auth", () => ({
+  getServerSession: jest.fn(),
+}));
+
+/**
+ * DELETE /api/customer/payment-methods/[id]
+ * Route returns 410 Gone for all EPOS provider requests because saved
+ * payment methods are managed directly through the EPOS terminal—not
+ * through a server-side token vault.
+ */
+describe("DELETE /api/customer/payment-methods/[id] — EPOS mode", () => {
   beforeEach(() => {
-    jest.resetModules();
     jest.clearAllMocks();
-    process.env.STRIPE_SECRET_KEY = "test_detach_secret";
+    process.env.PAYMENT_PROVIDER = "epos";
   });
 
-  it("returns 502 when Stripe detach fails", async () => {
-    const detachMock = jest.fn().mockRejectedValue(new Error("detach failed"));
-    const getServerSession = jest.fn().mockResolvedValue({ user: { id: "cust_1" } });
-    const findFirst = jest.fn().mockResolvedValue({
-      id: "spm_1",
-      customerId: "cust_1",
-      stripePaymentMethodId: "pm_1",
-      isDefault: false,
-    });
-    const findUnique = jest.fn().mockResolvedValue({
-      id: "cust_1",
-      stripeCustomerId: "cus_1",
-      defaultPaymentMethodId: "pm_other",
-    });
+  afterEach(() => {
+    delete process.env.PAYMENT_PROVIDER;
+  });
 
-    jest.doMock("next-auth", () => ({ getServerSession }));
-    jest.doMock("stripe", () => ({
-      __esModule: true,
-      default: jest.fn().mockImplementation(() => ({
-        paymentMethods: {
-          detach: detachMock,
-        },
-      })),
-    }));
-    jest.doMock("../../../../../../lib/prisma", () => ({
-      prisma: {
-        savedPaymentMethod: { findFirst },
-        customer: { findUnique },
-        $transaction: jest.fn(),
-      },
-    }));
-
-    const { DELETE } = await import("../route");
+  it("returns 401 when unauthenticated", async () => {
+    (getServerSession as jest.Mock).mockResolvedValue(null);
 
     const response = await DELETE(new Request("http://localhost"), {
       params: Promise.resolve({ id: "spm_1" }),
     });
     const payload = await response.json();
 
-    expect(response.status).toBe(502);
-    expect(payload.error).toBe("detach failed");
-    expect(detachMock).toHaveBeenCalledWith("pm_1");
+    expect(response.status).toBe(401);
+    expect(payload.error).toBe("Unauthorized");
   });
 
-  it("returns generic detach failure message when thrown value is not an Error", async () => {
-    const detachMock = jest.fn().mockRejectedValue("detach exploded");
-    const getServerSession = jest.fn().mockResolvedValue({ user: { id: "cust_1" } });
-    const findFirst = jest.fn().mockResolvedValue({
-      id: "spm_1",
-      customerId: "cust_1",
-      stripePaymentMethodId: "pm_1",
-      isDefault: false,
-    });
-    const findUnique = jest.fn().mockResolvedValue({
-      id: "cust_1",
-      stripeCustomerId: "cus_1",
-      defaultPaymentMethodId: "pm_other",
-    });
-
-    jest.doMock("next-auth", () => ({ getServerSession }));
-    jest.doMock("stripe", () => ({
-      __esModule: true,
-      default: jest.fn().mockImplementation(() => ({
-        paymentMethods: {
-          detach: detachMock,
-        },
-      })),
-    }));
-    jest.doMock("../../../../../../lib/prisma", () => ({
-      prisma: {
-        savedPaymentMethod: { findFirst },
-        customer: { findUnique },
-        $transaction: jest.fn(),
-      },
-    }));
-
-    const { DELETE } = await import("../route");
+  it("returns 410 with EPOS unavailability message when authenticated", async () => {
+    (getServerSession as jest.Mock).mockResolvedValue({ user: { id: "cust_1" } });
 
     const response = await DELETE(new Request("http://localhost"), {
-      params: Promise.resolve({ id: "spm_1" }),
+      params: Promise.resolve({ id: "spm_epos_1" }),
     });
     const payload = await response.json();
 
-    expect(response.status).toBe(502);
-    expect(payload.error).toBe("Stripe detach failed");
+    expect(response.status).toBe(410);
+    expect(payload.error).toContain("EPOS");
+    expect(payload.paymentMethodId).toBe("spm_epos_1");
   });
 
-  it("continues deletion flow when Stripe detach succeeds", async () => {
-    const detachMock = jest.fn().mockResolvedValue({ id: "pm_1" });
-    const getServerSession = jest.fn().mockResolvedValue({ user: { id: "cust_1" } });
-    const findFirst = jest.fn().mockResolvedValue({
-      id: "spm_1",
-      customerId: "cust_1",
-      stripePaymentMethodId: "pm_1",
-      isDefault: false,
-    });
-    const findUnique = jest.fn().mockResolvedValue({
-      id: "cust_1",
-      stripeCustomerId: "cus_1",
-      defaultPaymentMethodId: "pm_other",
-    });
-
-    const deleteMock = jest.fn().mockResolvedValue({ id: "spm_1" });
-    const transactionMock = jest.fn().mockImplementation(async (fn: any) =>
-      fn({
-        savedPaymentMethod: {
-          delete: deleteMock,
-          findFirst: jest.fn(),
-          updateMany: jest.fn(),
-          update: jest.fn(),
-        },
-        customer: {
-          update: jest.fn(),
-        },
-      })
-    );
-
-    jest.doMock("next-auth", () => ({ getServerSession }));
-    jest.doMock("stripe", () => ({
-      __esModule: true,
-      default: jest.fn().mockImplementation(() => ({
-        paymentMethods: {
-          detach: detachMock,
-        },
-      })),
-    }));
-    jest.doMock("../../../../../../lib/prisma", () => ({
-      prisma: {
-        savedPaymentMethod: { findFirst },
-        customer: { findUnique },
-        $transaction: transactionMock,
-      },
-    }));
-
-    const { DELETE } = await import("../route");
+  it("returns 410 regardless of payment method id value", async () => {
+    (getServerSession as jest.Mock).mockResolvedValue({ user: { id: "cust_2" } });
 
     const response = await DELETE(new Request("http://localhost"), {
-      params: Promise.resolve({ id: "spm_1" }),
+      params: Promise.resolve({ id: "any-random-id" }),
     });
-    const payload = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(payload.success).toBe(true);
-    expect(detachMock).toHaveBeenCalledWith("pm_1");
-    expect(deleteMock).toHaveBeenCalledWith({ where: { id: "spm_1" } });
-    expect(transactionMock).toHaveBeenCalled();
+    expect(response.status).toBe(410);
   });
-
-  it("skips detach when STRIPE_SECRET_KEY is missing at module load", async () => {
-    process.env.STRIPE_SECRET_KEY = "   ";
-
-    const getServerSession = jest.fn().mockResolvedValue({ user: { id: "cust_1" } });
-    const findFirst = jest.fn().mockResolvedValue({
-      id: "spm_1",
-      customerId: "cust_1",
-      stripePaymentMethodId: "pm_1",
-      isDefault: false,
-    });
-    const findUnique = jest.fn().mockResolvedValue({
-      id: "cust_1",
-      stripeCustomerId: "cus_1",
-      defaultPaymentMethodId: "pm_other",
-    });
-
-    const detachMock = jest.fn();
-    const deleteMock = jest.fn().mockResolvedValue({ id: "spm_1" });
-    const transactionMock = jest.fn().mockImplementation(async (fn: any) =>
-      fn({
-        savedPaymentMethod: {
-          delete: deleteMock,
-          findFirst: jest.fn(),
-          updateMany: jest.fn(),
-          update: jest.fn(),
-        },
-        customer: {
-          update: jest.fn(),
-        },
-      })
-    );
-
-    jest.doMock("next-auth", () => ({ getServerSession }));
-    jest.doMock("stripe", () => ({
-      __esModule: true,
-      default: jest.fn().mockImplementation(() => ({
-        paymentMethods: {
-          detach: detachMock,
-        },
-      })),
-    }));
-    jest.doMock("../../../../../../lib/prisma", () => ({
-      prisma: {
-        savedPaymentMethod: { findFirst },
-        customer: { findUnique },
-        $transaction: transactionMock,
-      },
-    }));
-
-    const { DELETE } = await import("../route");
-
-    const response = await DELETE(new Request("http://localhost"), {
-      params: Promise.resolve({ id: "spm_1" }),
-    });
-
-    expect(response.status).toBe(200);
-    expect(detachMock).not.toHaveBeenCalled();
-    expect(deleteMock).toHaveBeenCalledWith({ where: { id: "spm_1" } });
-  });
-
 });

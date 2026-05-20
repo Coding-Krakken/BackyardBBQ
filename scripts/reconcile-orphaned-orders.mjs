@@ -3,26 +3,29 @@
  * Reconcile Orphaned Orders Script
  * 
  * Marks orphaned orders (orders without PaymentTransaction) as cancelled,
- * or backfills PaymentTransaction from Stripe if data exists.
+ * or backfills PaymentTransaction from the active payment provider if data exists.
  * 
  * Usage:
  *   node scripts/reconcile-orphaned-orders.mjs --dry-run      # Preview changes
  *   node scripts/reconcile-orphaned-orders.mjs --execute      # Apply changes
- *   node scripts/reconcile-orphaned-orders.mjs --backfill     # Attempt Stripe backfill
+ *   node scripts/reconcile-orphaned-orders.mjs --backfill     # Attempt provider backfill
  * 
- * Environment: Requires DATABASE_URL. Optional STRIPE_SECRET_KEY for backfill.
+ * Environment: Requires DATABASE_URL.
+ * - Stripe backfill requires STRIPE_SECRET_KEY.
+ * - EPOS backfill requires EPOS_NOW_BASE_URL + EPOS_NOW_AUTH_TOKEN.
  */
 
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-const STRIPE_SOURCES = ["direct", "catering"];
+const ONLINE_PAYMENT_SOURCES = ["direct", "catering"];
+const paymentProvider = (process.env.PAYMENT_PROVIDER ?? "stripe").trim().toLowerCase();
 
 async function getOrphanedOrders() {
   return prisma.order.findMany({
     where: {
-      source: { in: STRIPE_SOURCES },
+      source: { in: ONLINE_PAYMENT_SOURCES },
       status: { notIn: ["cancelled", "pending"] },
       payment: null,
     },
@@ -38,6 +41,22 @@ async function getOrphanedOrders() {
     },
     orderBy: { createdAt: "desc" },
   });
+}
+
+function isSupportedProvider(provider) {
+  return provider === "stripe" || provider === "epos";
+}
+
+function resolveExternalPaymentId(value) {
+  if (!value || typeof value !== "string") {
+    return "none";
+  }
+
+  if (value.startsWith("epos_txn_")) {
+    return `EPOS TXN: ${value.slice("epos_txn_".length)}`;
+  }
+
+  return `Stripe PI: ${value}`;
 }
 
 async function getOrphanedSuccessfulPayments() {
@@ -184,6 +203,297 @@ async function backfillFromStripe(orders, dryRun = true) {
   return { backfilled, notFound };
 }
 
+function getEposConfig() {
+  const baseUrl = process.env.EPOS_NOW_BASE_URL?.trim();
+  const authToken = process.env.EPOS_NOW_AUTH_TOKEN?.trim();
+
+  if (!baseUrl || !authToken) {
+    return null;
+  }
+
+  return {
+    baseUrl: baseUrl.replace(/\/+$/, ""),
+    authToken,
+    authHeaderName: process.env.EPOS_NOW_AUTH_HEADER?.trim() || "Authorization",
+    authScheme: process.env.EPOS_NOW_AUTH_SCHEME?.trim() || "Bearer",
+  };
+}
+
+function getEposAuthHeaderValue(config) {
+  if (!config.authScheme) {
+    return config.authToken;
+  }
+
+  return `${config.authScheme} ${config.authToken}`;
+}
+
+async function eposRequest(config, path) {
+  const response = await fetch(`${config.baseUrl}${path}`, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      [config.authHeaderName]: getEposAuthHeaderValue(config),
+    },
+  });
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "Unknown EPOS error");
+    throw new Error(`EPOS request failed (${response.status}): ${errorText || response.statusText}`);
+  }
+
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    return null;
+  }
+
+  return response.json();
+}
+
+function toRecord(value) {
+  if (!value || Array.isArray(value) || typeof value !== "object") {
+    return {};
+  }
+
+  return value;
+}
+
+function toNumber(value) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+function normalizeEposTransaction(value) {
+  const data = toRecord(value);
+  const rawId = data.Id ?? data.id;
+  const id = typeof rawId === "number" || typeof rawId === "string" ? String(rawId) : null;
+
+  const statusId = toNumber(data.StatusId ?? data.statusId);
+  const totalAmount = toNumber(data.TotalAmount ?? data.totalAmount);
+
+  return {
+    id,
+    statusId,
+    totalAmount,
+  };
+}
+
+function transactionIsCompleted(transaction) {
+  return transaction.statusId === 1;
+}
+
+function selectBestEposTransaction(candidate) {
+  if (Array.isArray(candidate)) {
+    const normalized = candidate.map((item) => normalizeEposTransaction(item));
+    const completed = normalized.find((item) => item.id && transactionIsCompleted(item));
+    if (completed) {
+      return completed;
+    }
+
+    return normalized.find((item) => item.id) ?? null;
+  }
+
+  const single = normalizeEposTransaction(candidate);
+  return single.id ? single : null;
+}
+
+function getPaginationEnvelope(response) {
+  const root = toRecord(response);
+  const currentPage = toNumber(root.Page ?? root.page ?? root.CurrentPage ?? root.currentPage);
+  const totalPages = toNumber(root.TotalPages ?? root.totalPages ?? root.PageCount ?? root.pageCount);
+
+  if (
+    typeof currentPage === "number" &&
+    Number.isInteger(currentPage) &&
+    currentPage > 0 &&
+    typeof totalPages === "number" &&
+    Number.isInteger(totalPages) &&
+    totalPages > 0
+  ) {
+    return { currentPage, totalPages };
+  }
+
+  return null;
+}
+
+function extractTransactionsFromResponse(response) {
+  if (Array.isArray(response)) {
+    return response;
+  }
+
+  const root = toRecord(response);
+  const candidates = [
+    root.Items,
+    root.items,
+    root.Data,
+    root.data,
+    root.Results,
+    root.results,
+  ];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      return candidate;
+    }
+  }
+
+  return [];
+}
+
+function hasPossibleNextPage(response) {
+  const envelope = getPaginationEnvelope(response);
+  if (envelope) {
+    return envelope.currentPage < envelope.totalPages;
+  }
+
+  // EPOS docs indicate list endpoints return 200 items per page.
+  const items = extractTransactionsFromResponse(response);
+  return items.length === 200;
+}
+
+async function fetchEposTransactionsByReferenceCode(config, referenceCode) {
+  const encodedReference = encodeURIComponent(referenceCode);
+  const configuredMaxPages = Number(process.env.EPOS_NOW_REFERENCE_LOOKUP_MAX_PAGES ?? "5");
+  const maxPages =
+    Number.isInteger(configuredMaxPages) && configuredMaxPages > 0
+      ? Math.min(configuredMaxPages, 50)
+      : 5;
+  let page = 1;
+  const items = [];
+
+  while (page <= maxPages) {
+    const suffix = page === 1 ? "" : `?page=${page}`;
+    let response;
+    try {
+      response = await eposRequest(
+        config,
+        `/api/v4/Transaction/ReferenceCode/${encodedReference}${suffix}`
+      );
+    } catch (error) {
+      // A non-first page can fail when there are no additional pages.
+      if (page === 1) {
+        throw error;
+      }
+      break;
+    }
+
+    if (!response || typeof response !== "object") {
+      break;
+    }
+
+    const pageItems = extractTransactionsFromResponse(response);
+    if (pageItems.length > 0) {
+      items.push(...pageItems);
+    } else {
+      items.push(response);
+      break;
+    }
+
+    if (!hasPossibleNextPage(response)) {
+      break;
+    }
+
+    page += 1;
+  }
+
+  return items;
+}
+
+async function backfillFromEpos(orders, dryRun = true) {
+  const config = getEposConfig();
+  if (!config) {
+    console.log("\nWARNING: EPOS config missing - cannot backfill");
+    console.log("   Set EPOS_NOW_BASE_URL and EPOS_NOW_AUTH_TOKEN to enable backfill mode");
+    return { backfilled: 0, notFound: orders.length };
+  }
+
+  let backfilled = 0;
+  let notFound = 0;
+
+  for (const order of orders) {
+    let transaction = null;
+
+    const existingExternalId =
+      typeof order.stripeIntentId === "string" && order.stripeIntentId.startsWith("epos_txn_")
+        ? order.stripeIntentId.slice("epos_txn_".length)
+        : null;
+
+    try {
+      if (existingExternalId) {
+        const byId = await eposRequest(config, `/api/v4/Transaction/${encodeURIComponent(existingExternalId)}`);
+        transaction = normalizeEposTransaction(byId);
+      }
+
+      if (!transaction?.id) {
+        const referenceCandidates = [order.id, `epos_order_${order.id}`];
+
+        for (const referenceCode of referenceCandidates) {
+          const byReference = await fetchEposTransactionsByReferenceCode(config, referenceCode);
+          transaction = selectBestEposTransaction(byReference);
+          if (transaction?.id) {
+            break;
+          }
+        }
+      }
+    } catch (error) {
+      console.log(`  EPOS lookup failed for order ${order.id}: ${error.message}`);
+      transaction = null;
+    }
+
+    if (!transaction?.id || !transactionIsCompleted(transaction)) {
+      notFound++;
+      continue;
+    }
+
+    const amountCents =
+      transaction.totalAmount !== null
+        ? Math.max(0, Math.round(transaction.totalAmount * 100))
+        : order.totalCents;
+
+    if (dryRun) {
+      console.log(
+        `  [DRY RUN] Would create PaymentTransaction for order ${order.id} from EPOS txn ${transaction.id}`
+      );
+    } else {
+      await prisma.paymentTransaction.create({
+        data: {
+          customerId: order.customerId,
+          orderId: order.id,
+          stripePaymentIntentId: `epos_txn_${transaction.id}`,
+          amountCents,
+          currency: "usd",
+          status: "succeeded",
+          paymentType: "order",
+        },
+      });
+      console.log(`  Created PaymentTransaction for order ${order.id}`);
+    }
+
+    backfilled++;
+  }
+
+  return { backfilled, notFound };
+}
+
+async function backfillFromProvider(orders, dryRun = true) {
+  if (paymentProvider === "epos") {
+    return backfillFromEpos(orders, dryRun);
+  }
+
+  return backfillFromStripe(orders, dryRun);
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const dryRun = args.includes("--dry-run") || (!args.includes("--execute") && !args.includes("--backfill"));
@@ -193,10 +503,17 @@ async function main() {
   console.log("           RECONCILE ORPHANED ORDERS");
   console.log("===============================================================\n");
 
+  if (!isSupportedProvider(paymentProvider)) {
+    console.error(`Unsupported PAYMENT_PROVIDER '${paymentProvider}'. Expected 'stripe' or 'epos'.`);
+    process.exit(1);
+  }
+
+  console.log(`Payment provider: ${paymentProvider}\n`);
+
   if (dryRun) {
     console.log("DRY RUN MODE - No changes will be made\n");
   } else if (backfill) {
-    console.log("BACKFILL MODE - Will attempt to recover from Stripe\n");
+    console.log("BACKFILL MODE - Will attempt to recover from provider records\n");
   } else {
     console.log("EXECUTE MODE - Changes will be applied\n");
   }
@@ -209,7 +526,7 @@ async function main() {
     console.log(`Found ${orphanedPayments.length} successful payments with no linked order:\n`);
     for (const payment of orphanedPayments.slice(0, 10)) {
       console.log(`  - ${payment.id}`);
-      console.log(`    PI: ${payment.stripePaymentIntentId}`);
+      console.log(`    External Id: ${resolveExternalPaymentId(payment.stripePaymentIntentId)}`);
       console.log(`    Amount: ${payment.amountCents} ${payment.currency.toUpperCase()}`);
       console.log();
     }
@@ -234,7 +551,9 @@ async function main() {
   for (const order of orphanedOrders.slice(0, 10)) {
     console.log(`  - ${order.id}`);
     console.log(`    Source: ${order.source} | Status: ${order.status}`);
-    console.log(`    Amount: $${(order.totalCents / 100).toFixed(2)} | PI: ${order.stripeIntentId ?? "none"}`);
+    console.log(
+      `    Amount: $${(order.totalCents / 100).toFixed(2)} | External Id: ${resolveExternalPaymentId(order.stripeIntentId)}`
+    );
     console.log(`    Customer: ${order.customer?.email ?? "guest"}`);
     console.log();
   }
@@ -246,16 +565,16 @@ async function main() {
   // Process based on mode
   if (backfill) {
     console.log("---------------------------------------------------------------");
-    console.log("Attempting Stripe backfill...\n");
+    console.log(`Attempting ${paymentProvider.toUpperCase()} backfill...\n`);
     
-    const { backfilled, notFound } = await backfillFromStripe(orphanedOrders, dryRun);
+    const { backfilled, notFound } = await backfillFromProvider(orphanedOrders, dryRun);
     
     console.log(`\nBackfill results:`);
     console.log(`  Backfilled: ${backfilled}`);
     console.log(`  Not found in Stripe: ${notFound}`);
     
     if (notFound > 0 && !dryRun) {
-      console.log(`\nWARNING: ${notFound} orders could not be recovered from Stripe.`);
+      console.log(`\nWARNING: ${notFound} orders could not be recovered from ${paymentProvider.toUpperCase()}.`);
       console.log(`   Run with --execute to cancel these orders.`);
     }
   } else {

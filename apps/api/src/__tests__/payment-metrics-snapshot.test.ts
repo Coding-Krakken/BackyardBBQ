@@ -45,6 +45,32 @@ describe("buildPaymentMetricsSnapshot", () => {
     expect(mockPrisma.integrationEvent.findFirst).toHaveBeenCalledTimes(1);
     expect(mockPrisma.$queryRaw).toHaveBeenCalledTimes(1);
 
+    expect(mockPrisma.integrationEvent.count).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          eventType: { contains: "dispute" },
+        }),
+      })
+    );
+
+    expect(mockPrisma.integrationEvent.count).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          channel: { in: ["stripe", "epos"] },
+        }),
+      })
+    );
+
+    expect(mockPrisma.integrationEvent.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          channel: { in: ["stripe", "epos"] },
+        }),
+      })
+    );
+
     expect(mockPrisma.paymentTransaction.findMany).not.toHaveBeenCalled();
     expect(mockPrisma.integrationEvent.findMany).not.toHaveBeenCalled();
   });

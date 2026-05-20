@@ -30,16 +30,19 @@ export const PAYMENT_REVENUE_STATUSES = ["succeeded", "partially_refunded"] as c
 export const PAYMENT_FAILED_STATUSES = ["failed", "canceled"] as const;
 
 /**
- * Delivery channels that process payments through third-party platforms (not Stripe).
+ * Delivery channels that process payments through third-party platforms.
  * Orders from these channels should NOT have PaymentTransaction records.
  */
 export const THIRD_PARTY_DELIVERY_CHANNELS = ["doordash", "ubereats", "grubhub"] as const;
 
 /**
- * Order sources that process payments through Stripe.
+ * Order sources that process payments through EPOS Now.
  * Orders from these sources SHOULD have corresponding PaymentTransaction records.
  */
-export const STRIPE_PAYMENT_SOURCES = ["direct", "catering"] as const;
+export const EPOS_PAYMENT_SOURCES = ["direct", "catering"] as const;
+
+/** @deprecated Use EPOS_PAYMENT_SOURCES instead */
+export const STRIPE_PAYMENT_SOURCES = EPOS_PAYMENT_SOURCES;
 
 // Type exports for TypeScript consumers
 export type PaymentSuccessStatus = (typeof PAYMENT_SUCCESS_STATUSES)[number];
@@ -47,4 +50,6 @@ export type PaymentRefundStatus = (typeof PAYMENT_REFUND_STATUSES)[number];
 export type PaymentRevenueStatus = (typeof PAYMENT_REVENUE_STATUSES)[number];
 export type PaymentFailedStatus = (typeof PAYMENT_FAILED_STATUSES)[number];
 export type ThirdPartyDeliveryChannel = (typeof THIRD_PARTY_DELIVERY_CHANNELS)[number];
-export type StripePaymentSource = (typeof STRIPE_PAYMENT_SOURCES)[number];
+export type EposPaymentSource = (typeof EPOS_PAYMENT_SOURCES)[number];
+/** @deprecated Use EposPaymentSource instead */
+export type StripePaymentSource = EposPaymentSource;

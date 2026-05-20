@@ -22,7 +22,7 @@ curl https://backyard-bbq-backend.vercel.app/health
 
 # Database health
 curl https://backyard-bbq-backend.vercel.app/api/payments/health
-# Response: {"stripeConfigured":false,"databaseConfigured":true}
+# Response: {"eposConfigured":true,"databaseConfigured":true}
 ```
 
 ## Architecture
@@ -126,10 +126,10 @@ If you want to remove this deployment:
 - `PATCH /api/admin/catering/bookings/:id/status` - Update booking status (admin)
 
 ### Payments
-- `POST /api/payments/webhook` - Stripe webhook handler
+- `POST /api/payments/webhook` - EPOS Now webhook handler
 - `GET /api/payments/health` - Payment system health
-- `GET /api/health/stripe` - Stripe connectivity check
-- `GET /api/health/webhook` - Last Stripe webhook status check
+- `GET /api/health/epos` - EPOS Now connectivity check
+- `GET /api/health/webhook` - Last EPOS webhook status check
 - `POST /api/admin/payments/refunds` - Process refund (admin)
 - `GET /api/admin/payments` - List payments (admin)
 - `GET /api/admin/payments/disputes` - List disputes (admin)

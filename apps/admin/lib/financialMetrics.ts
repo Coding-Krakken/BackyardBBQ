@@ -140,8 +140,8 @@ export async function getDetailedRevenueMetrics(
 export async function getRevenueBySource(dateRange: DateRange): Promise<
   Array<{ source: string; grossCents: number; refundsCents: number; netCents: number }>
 > {
-  // Get Stripe-based payments with their order source
-  const stripePayments = await prisma.paymentTransaction.findMany({
+  // Get payment transactions with their order source
+  const revenuePayments = await prisma.paymentTransaction.findMany({
     where: {
       status: { in: PAYMENT_REVENUE_STATUSES as unknown as PaymentStatus[] },
       createdAt: { gte: dateRange.from, lte: dateRange.to },
@@ -170,7 +170,7 @@ export async function getRevenueBySource(dateRange: DateRange): Promise<
     { grossCents: number; refundsCents: number }
   >();
 
-  for (const payment of stripePayments) {
+  for (const payment of revenuePayments) {
     const source = payment.order?.source ?? "direct";
     const current = bySource.get(source) ?? { grossCents: 0, refundsCents: 0 };
     current.grossCents += payment.amountCents;
@@ -234,7 +234,7 @@ export async function checkDataIntegrity(): Promise<{
   sumDifferenceCents: number;
   details?: string;
 }> {
-  // Count orders from Stripe-based sources without payments
+  // Count orders from payment sources without completed transactions
   const ordersWithoutPayments = await prisma.order.count({
     where: {
       source: { in: ["direct", "catering"] },
@@ -251,7 +251,7 @@ export async function checkDataIntegrity(): Promise<{
     },
   });
 
-  // Sum orders from Stripe sources
+  // Sum orders from payment sources
   const orderSum = await prisma.order.aggregate({
     where: {
       source: { in: ["direct", "catering"] },

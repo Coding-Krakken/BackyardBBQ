@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { prisma } from "@/lib/prisma";
 
+function inferProvider(paymentReference: string): "stripe" | "epos" {
+  return paymentReference.startsWith("epos_txn_") ? "epos" : "stripe";
+}
+
 function parseDate(value: string | null): Date | null {
   if (!value) return null;
   const parsed = new Date(value);
@@ -82,30 +86,69 @@ export async function GET(
       where: { customerId: id },
       select: {
         stripePaymentIntentId: true,
+        orderId: true,
+        bookingId: true,
         status: true,
         amountCents: true,
       },
     }),
     prisma.integrationEvent.findMany({
       where: {
-        channel: "stripe",
-        eventType: { contains: "charge.dispute" },
+        OR: [
+          {
+            channel: "stripe",
+            eventType: { contains: "charge.dispute" },
+          },
+          {
+            channel: "epos",
+            eventType: { contains: "dispute" },
+          },
+          {
+            channel: "admin",
+            eventType: { contains: "dispute" },
+          },
+        ],
       },
       select: {
+        id: true,
         payload: true,
       },
     }),
   ]);
 
-  const intentIds = new Set(allCustomerPayments.map((payment) => payment.stripePaymentIntentId));
+  const paymentReferenceKeys = new Set<string>();
+  for (const payment of allCustomerPayments) {
+    paymentReferenceKeys.add(payment.stripePaymentIntentId);
+    if (payment.stripePaymentIntentId.startsWith("epos_txn_")) {
+      paymentReferenceKeys.add(payment.stripePaymentIntentId.slice("epos_txn_".length));
+    }
+    if (payment.orderId) {
+      paymentReferenceKeys.add(payment.orderId);
+    }
+    if (payment.bookingId) {
+      paymentReferenceKeys.add(`booking:${payment.bookingId}`);
+    }
+  }
 
-  const disputeIntentIds = new Set<string>();
+  const disputeIds = new Set<string>();
   for (const event of disputeEvents) {
     const payload = event.payload as Record<string, unknown>;
-    const paymentIntentId =
-      typeof payload.paymentIntentId === "string" ? payload.paymentIntentId : null;
-    if (paymentIntentId && intentIds.has(paymentIntentId)) {
-      disputeIntentIds.add(paymentIntentId);
+
+    const candidateReferences = [
+      typeof payload.paymentIntentId === "string" ? payload.paymentIntentId : null,
+      typeof payload.stripePaymentIntentId === "string" ? payload.stripePaymentIntentId : null,
+      typeof payload.transactionReferenceCode === "string" ? payload.transactionReferenceCode : null,
+      typeof payload.referenceCode === "string" ? payload.referenceCode : null,
+      typeof payload.eposTransactionId === "string" ? payload.eposTransactionId : null,
+    ].filter((value): value is string => Boolean(value));
+
+    const matchesCustomerPayment = candidateReferences.some((reference) =>
+      paymentReferenceKeys.has(reference)
+    );
+
+    if (matchesCustomerPayment) {
+      const disputeId = typeof payload.disputeId === "string" ? payload.disputeId : event.id;
+      disputeIds.add(disputeId);
     }
   }
 
@@ -126,6 +169,7 @@ export async function GET(
   const data = payments.map((payment) => ({
     id: payment.id,
     stripePaymentIntentId: payment.stripePaymentIntentId,
+    provider: inferProvider(payment.stripePaymentIntentId),
     orderId: payment.orderId,
     bookingId: payment.bookingId,
     paymentType: payment.paymentType,
@@ -140,7 +184,7 @@ export async function GET(
     aggregates: {
       totalSpentCents,
       refundsCents,
-      disputeCount: disputeIntentIds.size,
+      disputeCount: disputeIds.size,
       totalTransactions: allCustomerPayments.length,
     },
   });

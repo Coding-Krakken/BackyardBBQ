@@ -20,7 +20,7 @@ test("prints usage with --help", () => {
   const result = runChecks(["--help"]);
   assert.equal(result.status, 0);
   assert.match(result.stdout, /Usage:/);
-  assert.match(result.stdout, /Environment requirements:/);
+  assert.match(result.stdout, /Provider-specific environment requirements:/);
 });
 
 test("fails fast when Stripe env vars are missing", () => {
@@ -55,6 +55,18 @@ test("fails on invalid admin role before running integration commands", () => {
   assert.match(result.stderr, /Invalid --admin-role/);
 });
 
+test("fails fast for epos mode when EPOS webhook secret is missing", () => {
+  const result = runChecks([
+    "--provider",
+    "epos",
+  ], {
+    EPOS_NOW_WEBHOOK_SECRET: "",
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Missing required environment variable: EPOS_NOW_WEBHOOK_SECRET/);
+});
+
 test("fails on invalid event id format", () => {
   const result = runChecks([
     "--checkout-event-id",
@@ -68,4 +80,14 @@ test("fails on invalid event id format", () => {
 
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Invalid --checkout-event-id/);
+});
+
+test("fails on invalid provider value", () => {
+  const result = runChecks([
+    "--provider",
+    "paypal",
+  ]);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Invalid --provider/);
 });

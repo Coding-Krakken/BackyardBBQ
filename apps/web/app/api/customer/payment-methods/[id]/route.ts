@@ -1,17 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import Stripe from "stripe";
 import { authOptions } from "../../../../../lib/auth";
-import { prisma } from "../../../../../lib/prisma";
-
-function getStripeClient() {
-  const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim();
-  if (!stripeSecretKey) {
-    return null;
-  }
-
-  return new Stripe(stripeSecretKey, { apiVersion: "2026-04-22.dahlia" });
-}
+import { getPaymentProvider, unsupportedProviderMessage } from "../../../../lib/payment-provider";
 
 export async function DELETE(
   _request: Request,
@@ -24,86 +14,22 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const provider = getPaymentProvider();
+    if (provider !== "epos") {
+      return NextResponse.json(
+        { error: unsupportedProviderMessage("/api/customer/payment-methods/:id") },
+        { status: 501 }
+      );
+    }
+
     const { id } = await context.params;
-
-    const method = await prisma.savedPaymentMethod.findFirst({
-      where: {
-        id,
-        customerId: session.user.id,
+    return NextResponse.json(
+      {
+        error: "Payment methods are managed directly through the EPOS terminal and cannot be modified here.",
+        paymentMethodId: id,
       },
-      select: {
-        id: true,
-        customerId: true,
-        stripePaymentMethodId: true,
-        isDefault: true,
-      },
-    });
-
-    if (!method) {
-      return NextResponse.json({ error: "Payment method not found" }, { status: 404 });
-    }
-
-    const customer = await prisma.customer.findUnique({
-      where: { id: session.user.id },
-      select: {
-        id: true,
-        stripeCustomerId: true,
-        defaultPaymentMethodId: true,
-      },
-    });
-
-    const stripe = getStripeClient();
-    if (stripe && customer?.stripeCustomerId) {
-      try {
-        await stripe.paymentMethods.detach(method.stripePaymentMethodId);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Stripe detach failed";
-        return NextResponse.json({ error: message }, { status: 502 });
-      }
-    }
-
-    const wasDefault =
-      method.isDefault || customer?.defaultPaymentMethodId === method.stripePaymentMethodId;
-
-    await prisma.$transaction(async (tx: any) => {
-      await tx.savedPaymentMethod.delete({
-        where: { id: method.id },
-      });
-
-      if (!wasDefault) {
-        return;
-      }
-
-      const nextDefault = await tx.savedPaymentMethod.findFirst({
-        where: { customerId: method.customerId },
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true,
-          stripePaymentMethodId: true,
-        },
-      });
-
-      await tx.savedPaymentMethod.updateMany({
-        where: { customerId: method.customerId },
-        data: { isDefault: false },
-      });
-
-      if (nextDefault) {
-        await tx.savedPaymentMethod.update({
-          where: { id: nextDefault.id },
-          data: { isDefault: true },
-        });
-      }
-
-      await tx.customer.update({
-        where: { id: method.customerId },
-        data: {
-          defaultPaymentMethodId: nextDefault?.stripePaymentMethodId ?? null,
-        },
-      });
-    });
-
-    return NextResponse.json({ success: true });
+      { status: 410 }
+    );
   } catch (error) {
     console.error("Delete payment method error:", error);
     return NextResponse.json(

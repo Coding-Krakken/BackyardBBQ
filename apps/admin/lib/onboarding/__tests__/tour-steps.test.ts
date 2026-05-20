@@ -89,9 +89,9 @@ describe("getTourSteps – feature key integrity", () => {
     expect(deliveryStep).toBeDefined();
   });
 
-  it("has steps covering stripe-payments (complete feature)", () => {
+  it("has steps covering payments (complete feature)", () => {
     const steps = getTourSteps();
-    const paymentStep = steps.find((s) => s.featureKey === "stripe-payments");
+    const paymentStep = steps.find((s) => s.featureKey === "payments");
     expect(paymentStep).toBeDefined();
   });
 });

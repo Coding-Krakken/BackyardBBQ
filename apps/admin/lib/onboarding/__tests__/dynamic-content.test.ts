@@ -95,7 +95,7 @@ describe("getFeatureBadgeHTML", () => {
   });
 
   it("returns badge HTML for a known complete feature", () => {
-    const html = getFeatureBadgeHTML("stripe-payments");
+    const html = getFeatureBadgeHTML("payments");
     expect(html).toContain("onboarding-badge-complete");
   });
 
@@ -123,7 +123,7 @@ describe("buildFeatureDescription", () => {
   });
 
   it("includes the feature description text", () => {
-    const html = buildFeatureDescription("stripe-payments");
+    const html = buildFeatureDescription("payments");
     expect(html.length).toBeGreaterThan(50);
   });
 
