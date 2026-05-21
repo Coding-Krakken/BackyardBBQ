@@ -114,6 +114,42 @@ describe("DoorDashClient", () => {
 
       expect(mockedPerformProviderRequest).not.toHaveBeenCalled();
     });
+
+    it("returns null JWT when apiKey is undefined (direct helper path)", () => {
+      const client = new DoorDashClient(makeCredentials({ apiKey: undefined }));
+      const token = (client as any).getDoorDashJwt();
+
+      expect(token).toBeNull();
+    });
+
+    it("returns null JWT when apiSecret is undefined (direct helper path)", () => {
+      const client = new DoorDashClient(makeCredentials({ apiSecret: undefined }));
+      const token = (client as any).getDoorDashJwt();
+
+      expect(token).toBeNull();
+    });
+
+    it("returns null JWT when apiKey is whitespace", async () => {
+      const client = new DoorDashClient(makeCredentials({ apiKey: "   " }));
+      await client.syncOrderStatus({
+        externalOrderId: "order-1",
+        status: "accepted",
+        occurredAt: new Date().toISOString(),
+      });
+
+      expect(mockedPerformProviderRequest).not.toHaveBeenCalled();
+    });
+
+    it("returns null JWT when apiSecret is whitespace", async () => {
+      const client = new DoorDashClient(makeCredentials({ apiSecret: "   " }));
+      await client.syncOrderStatus({
+        externalOrderId: "order-1",
+        status: "accepted",
+        occurredAt: new Date().toISOString(),
+      });
+
+      expect(mockedPerformProviderRequest).not.toHaveBeenCalled();
+    });
   });
 
   describe("verifyWebhookSignature", () => {
@@ -398,6 +434,19 @@ describe("DoorDashClient", () => {
 
       expect(mockedPerformProviderRequest).not.toHaveBeenCalled();
     });
+
+    it("skips call when JWT cannot be generated", async () => {
+      delete process.env.DOORDASH_DEVELOPER_ID;
+
+      const client = new DoorDashClient(makeCredentials());
+      await client.publishMenuSnapshot({
+        locationId: "loc-1",
+        publishedAt: "2026-01-01T00:00:00Z",
+        items: [],
+      });
+
+      expect(mockedPerformProviderRequest).not.toHaveBeenCalled();
+    });
   });
 
   describe("checkHealth", () => {
@@ -434,6 +483,17 @@ describe("DoorDashClient", () => {
 
       expect(result.healthy).toBe(false);
       expect(result.reason).toBe("DoorDash credentials not configured");
+    });
+
+    it("returns unhealthy when JWT cannot be generated", async () => {
+      delete process.env.DOORDASH_DEVELOPER_ID;
+
+      const client = new DoorDashClient(makeCredentials());
+      const result = await client.checkHealth();
+
+      expect(result.healthy).toBe(false);
+      expect(result.reason).toBe("DoorDash credentials not configured");
+      expect(mockedPerformProviderRequest).not.toHaveBeenCalled();
     });
 
     it("uses /drive/v2/health endpoint", async () => {

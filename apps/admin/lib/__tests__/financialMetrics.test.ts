@@ -73,7 +73,7 @@ describe("financialMetrics", () => {
   });
 
   describe("getRevenueBySource", () => {
-    it("combines stripe payments, refunds, and delivery settlements", async () => {
+    it("combines payments, refunds, and delivery settlements", async () => {
       mockPrisma.paymentTransaction.findMany
         .mockResolvedValueOnce([
           { amountCents: 5000, status: "succeeded", order: { source: "direct" } },

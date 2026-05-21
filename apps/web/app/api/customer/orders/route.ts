@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import Stripe from "stripe";
 import { authOptions } from "../../../../lib/auth";
 import { prisma } from "../../../../lib/prisma";
 import { checkRateLimit } from "../../../../lib/rate-limit";
+import { findEposTransactionByReferenceCode } from "../../../../lib/epos-now";
+import { getPaymentProvider } from "../../../lib/payment-provider";
 
 export const dynamic = "force-dynamic";
 const GUEST_TRACK_RATE_LIMIT = 30;
@@ -19,18 +20,6 @@ function getRequestIp(request: NextRequest) {
   }
 
   return request.headers.get("x-real-ip") ?? "unknown";
-}
-
-function getStripeClient() {
-  const secretKey = process.env.STRIPE_SECRET_KEY;
-
-  if (!secretKey) {
-    throw new Error("Missing STRIPE_SECRET_KEY environment variable");
-  }
-
-  return new Stripe(secretKey, {
-    apiVersion: "2026-04-22.dahlia",
-  });
 }
 
 export async function GET(request: NextRequest) {
@@ -81,36 +70,24 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      const stripe = getStripeClient();
-      const checkoutSession = await stripe.checkout.sessions.retrieve(sessionId);
+      const provider = getPaymentProvider();
+      let resolvedOrderId: string | undefined;
 
-      const isCompleted = checkoutSession.status === "complete";
-      const isPaid = checkoutSession.payment_status === "paid";
-      const isWebCheckoutSource =
-        typeof checkoutSession.metadata?.source === "string"
-          ? checkoutSession.metadata.source === "web-checkout"
-          : true;
-
-      if (!isCompleted || !isPaid || !isWebCheckoutSource) {
+      if (provider !== "epos") {
         return NextResponse.json({ orders: [], pagination: { total: 0, limit, offset, hasMore: false } });
       }
 
-      let resolvedOrderId =
-        typeof checkoutSession.metadata?.orderId === "string" && checkoutSession.metadata.orderId
-          ? checkoutSession.metadata.orderId
-          : undefined;
+      if (!sessionId.startsWith("epos_order_")) {
+        return NextResponse.json({ orders: [], pagination: { total: 0, limit, offset, hasMore: false } });
+      }
 
-      const paymentIntentId =
-        typeof checkoutSession.payment_intent === "string"
-          ? checkoutSession.payment_intent
-          : undefined;
+      resolvedOrderId = sessionId.slice("epos_order_".length) || undefined;
 
-      if (!resolvedOrderId && paymentIntentId) {
-        const linkedPayment = await prisma.paymentTransaction.findUnique({
-          where: { stripePaymentIntentId: paymentIntentId },
-          select: { orderId: true }
-        });
-        resolvedOrderId = linkedPayment?.orderId ?? undefined;
+      if (resolvedOrderId) {
+        const remoteTransaction = await findEposTransactionByReferenceCode(resolvedOrderId);
+        if (!remoteTransaction || remoteTransaction.statusId !== 1) {
+          return NextResponse.json({ orders: [], pagination: { total: 0, limit, offset, hasMore: false } });
+        }
       }
 
       if (!resolvedOrderId) {

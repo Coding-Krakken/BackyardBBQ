@@ -19,6 +19,7 @@ import {
 } from "../config/content";
 import { siteImages } from "../config/images";
 import { AnalyticsEvents, trackEvent } from "../lib/analytics";
+
 import { 
   fadeInUp, 
   staggerContainer, 
@@ -795,6 +796,7 @@ export function CateringSalesSection() {
 export function OrderingHubSection() {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: "-100px" });
+  const checkoutSubtitle = "EPOS-powered payment flow";
 
   return (
     <motion.section
@@ -827,7 +829,7 @@ export function OrderingHubSection() {
           <ExternalLinkCard href={orderingLinks.grubhubUrl} title="Grubhub" subtitle="Expanded local delivery coverage" />
         </motion.div>
         <motion.div variants={staggerItem}>
-          <ExternalLinkCard href="/checkout" title="Secure Checkout" subtitle="Stripe-powered payment flow" />
+          <ExternalLinkCard href="/checkout" title="Secure Checkout" subtitle={checkoutSubtitle} />
         </motion.div>
       </motion.div>
     </motion.section>

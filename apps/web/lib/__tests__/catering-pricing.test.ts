@@ -19,6 +19,15 @@ describe("calculateCateringPricing", () => {
     expect(result.depositCents + result.finalPaymentCents).toBe(result.estimatedTotalCents);
   });
 
+  it("uses the largest volume tier for very large parties", () => {
+    const result = calculateCateringPricing({ partySize: 150 });
+
+    expect(result.perGuestCents).toBe(2100);
+    expect(result.estimatedTotalCents).toBe(315000);
+    expect(result.depositCents).toBe(94500);
+    expect(result.finalPaymentCents).toBe(220500);
+  });
+
   it("applies premium package multiplier", () => {
     const result = calculateCateringPricing({
       partySize: 60,

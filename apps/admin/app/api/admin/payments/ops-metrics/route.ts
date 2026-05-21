@@ -11,6 +11,31 @@ function toDateKey(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
+function parseUpdatedAtMs(payload: Record<string, unknown>): number | null {
+  const candidates = [payload.updatedAt, payload.occurredAt, payload.eventTimestamp];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === "number" && Number.isFinite(candidate) && candidate > 0) {
+      // Heuristic: 13+ digits is milliseconds; otherwise treat as epoch seconds.
+      return candidate >= 1_000_000_000_000 ? candidate : candidate * 1000;
+    }
+
+    if (typeof candidate === "string") {
+      const asNumber = Number(candidate);
+      if (Number.isFinite(asNumber) && asNumber > 0) {
+        return asNumber >= 1_000_000_000_000 ? asNumber : asNumber * 1000;
+      }
+
+      const asDate = Date.parse(candidate);
+      if (Number.isFinite(asDate)) {
+        return asDate;
+      }
+    }
+  }
+
+  return null;
+}
+
 export async function GET(request: NextRequest) {
   const auth = await requireAdmin(["owner", "admin", "accounting"]);
   if (auth instanceof NextResponse) return auth;
@@ -19,7 +44,7 @@ export async function GET(request: NextRequest) {
   const days = Math.min(parseInt(searchParams.get("days") ?? "30", 10), 90);
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
-  const [payments, stripeEvents] = await Promise.all([
+  const [payments, integrationEvents] = await Promise.all([
     prisma.paymentTransaction.findMany({
       where: { createdAt: { gte: since } },
       select: {
@@ -31,10 +56,10 @@ export async function GET(request: NextRequest) {
     }),
     prisma.integrationEvent.findMany({
       where: {
-        channel: "stripe",
         createdAt: { gte: since },
       },
       select: {
+        channel: true,
         eventType: true,
         payload: true,
         createdAt: true,
@@ -42,6 +67,11 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: "asc" },
     }),
   ]);
+
+  const webhookEvents = integrationEvents.filter(
+    (event) => event.channel === "stripe" || event.channel === "epos"
+  );
+  const disputeEvents = integrationEvents.filter((event) => event.eventType.includes("dispute"));
 
   const totalTransactions = payments.length;
   const successfulTransactions = payments.filter(
@@ -58,18 +88,12 @@ export async function GET(request: NextRequest) {
     .filter((p) => PAYMENT_REFUND_STATUSES.includes(p.status as typeof PAYMENT_REFUND_STATUSES[number]))
     .reduce((sum, p) => sum + p.amountCents, 0);
 
-  // Use consistent event type matching for disputes
-  const disputeEvents = stripeEvents.filter((e) => e.eventType.includes("dispute"));
-
-  const webhookWithLatency = stripeEvents
+  const webhookWithLatency = webhookEvents
     .map((e) => {
       const payload = e.payload as Record<string, unknown>;
-      const updatedAt =
-        typeof payload.updatedAt === "number"
-          ? payload.updatedAt
-          : null;
-      if (!updatedAt) return null;
-      const latencyMs = e.createdAt.getTime() - updatedAt * 1000;
+      const updatedAtMs = parseUpdatedAtMs(payload);
+      if (!updatedAtMs) return null;
+      const latencyMs = e.createdAt.getTime() - updatedAtMs;
       return latencyMs >= 0 ? latencyMs : null;
     })
     .filter((value): value is number => typeof value === "number");
@@ -138,11 +162,11 @@ export async function GET(request: NextRequest) {
       refundRate,
       disputeRate,
       averagePaymentCents,
-      webhookEvents: stripeEvents.length,
+      webhookEvents: webhookEvents.length,
       averageWebhookLatencyMs,
       lastWebhookAt:
-        stripeEvents.length > 0
-          ? stripeEvents[stripeEvents.length - 1]?.createdAt.toISOString() ?? null
+        webhookEvents.length > 0
+          ? webhookEvents[webhookEvents.length - 1]?.createdAt.toISOString() ?? null
           : null,
     },
     daily,

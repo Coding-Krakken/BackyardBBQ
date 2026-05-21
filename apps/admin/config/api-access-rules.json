@@ -25,7 +25,7 @@
       "GET": ["owner", "admin", "accounting"]
     },
     "/api/admin/payments/refunds": {
-      "POST": ["owner", "admin"]
+      "POST": ["owner", "admin", "accounting"]
     },
     "/api/admin/payments/disputes": {
       "GET": ["owner", "admin", "accounting"]

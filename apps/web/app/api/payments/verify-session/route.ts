@@ -1,24 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import Stripe from "stripe";
+import { findEposTransactionByReferenceCode } from "../../../../lib/epos-now";
+import { getPaymentProvider, unsupportedProviderMessage } from "../../../lib/payment-provider";
 import { prisma } from "../../../../lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-function getStripeClient() {
-  const secretKey = process.env.STRIPE_SECRET_KEY;
-
-  if (!secretKey) {
-    throw new Error("Missing STRIPE_SECRET_KEY environment variable");
-  }
-
-  return new Stripe(secretKey, {
-    apiVersion: "2026-04-22.dahlia",
-  });
-}
-
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
-    const stripe = getStripeClient();
+    const provider = getPaymentProvider();
     const searchParams = request.nextUrl.searchParams;
     const sessionId = searchParams.get("session_id");
 
@@ -29,34 +18,122 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Retrieve the Checkout Session with line item totals.
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
-
-    const orderIdFromSessionMetadata =
-      typeof session.metadata?.orderId === "string" && session.metadata.orderId
-        ? session.metadata.orderId
-        : null;
-
-    const paymentIntentId = typeof session.payment_intent === "string" ? session.payment_intent : null;
-    let resolvedOrderId = orderIdFromSessionMetadata;
-
-    if (!resolvedOrderId && paymentIntentId) {
-      const linkedPayment = await prisma.paymentTransaction.findUnique({
-        where: { stripePaymentIntentId: paymentIntentId },
-        select: { orderId: true },
-      });
-      resolvedOrderId = linkedPayment?.orderId ?? null;
+    if (provider !== "epos") {
+      return NextResponse.json(
+        { error: unsupportedProviderMessage("/api/payments/verify-session") },
+        { status: 501 }
+      );
     }
 
+    if (sessionId.startsWith("epos_booking_")) {
+      const bookingId = sessionId.slice("epos_booking_".length);
+
+      const booking = await prisma.cateringBooking.findUnique({
+        where: { id: bookingId },
+        select: {
+          id: true,
+          depositCents: true,
+        },
+      });
+
+      if (!booking) {
+        return NextResponse.json(
+          { error: "Booking not found for session_id" },
+          { status: 404 }
+        );
+      }
+
+      const linkedDeposit = await prisma.paymentTransaction.findFirst({
+        where: {
+          bookingId: booking.id,
+          paymentType: "deposit",
+        },
+        orderBy: { updatedAt: "desc" },
+        select: {
+          status: true,
+          amountCents: true,
+          currency: true,
+        },
+      });
+
+      let remoteStatusId: number | undefined;
+      try {
+        const remoteTransaction = await findEposTransactionByReferenceCode(`booking:${booking.id}`);
+        remoteStatusId = remoteTransaction?.statusId;
+      } catch {
+        // Fall back to local status when EPOS lookup is temporarily unavailable.
+      }
+
+      const isComplete = remoteStatusId === 1 || linkedDeposit?.status === "succeeded";
+
+      const amountTotal = linkedDeposit?.amountCents ?? booking.depositCents ?? 0;
+
+      return NextResponse.json({
+        provider,
+        status: isComplete ? "complete" : "open",
+        paymentStatus: isComplete ? "paid" : "unpaid",
+        customerEmail: undefined,
+        currency: linkedDeposit?.currency ?? "usd",
+        amountSubtotal: amountTotal,
+        amountTax: 0,
+        amountTotal,
+        orderId: null,
+        bookingId: booking.id,
+      });
+    }
+
+    const orderId = sessionId.startsWith("epos_order_")
+      ? sessionId.slice("epos_order_".length)
+      : sessionId;
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        currency: true,
+        subtotalCents: true,
+        taxCents: true,
+        totalCents: true,
+        status: true,
+      },
+    });
+
+    if (!order) {
+      return NextResponse.json(
+        { error: "Order not found for session_id" },
+        { status: 404 }
+      );
+    }
+
+    const linkedPayment = await prisma.paymentTransaction.findUnique({
+      where: { orderId: order.id },
+      select: { status: true },
+    });
+
+    let remoteStatusId: number | undefined;
+    try {
+      const remoteTransaction = await findEposTransactionByReferenceCode(order.id);
+      remoteStatusId = remoteTransaction?.statusId;
+    } catch {
+      // Fall back to local status when EPOS lookup is temporarily unavailable.
+    }
+
+    const isComplete =
+      remoteStatusId === 1
+      || linkedPayment?.status === "succeeded"
+      || order.status === "confirmed"
+      || order.status === "completed";
+
     return NextResponse.json({
-      status: session.status,
-      paymentStatus: session.payment_status,
-      customerEmail: session.customer_details?.email,
-      currency: session.currency,
-      amountSubtotal: session.amount_subtotal,
-      amountTax: session.total_details?.amount_tax ?? 0,
-      amountTotal: session.amount_total,
-      orderId: resolvedOrderId,
+      provider,
+      status: isComplete ? "complete" : "open",
+      paymentStatus: isComplete ? "paid" : "unpaid",
+      customerEmail: undefined,
+      currency: order.currency,
+      amountSubtotal: order.subtotalCents,
+      amountTax: order.taxCents,
+      amountTotal: order.totalCents,
+      orderId: order.id,
     });
   } catch (error) {
     console.error("Error verifying checkout session:", error);

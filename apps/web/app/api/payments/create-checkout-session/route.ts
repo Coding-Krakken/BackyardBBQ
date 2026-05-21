@@ -1,22 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import Stripe from "stripe";
 import { z } from "zod";
 import { authOptions } from "../../../../lib/auth";
+import { createEposTransaction, getEposTenderTypeId } from "../../../../lib/epos-now";
+import { getPaymentProvider, unsupportedProviderMessage } from "../../../lib/payment-provider";
 import { prisma } from "../../../../lib/prisma";
 import { checkRateLimit } from "../../../../lib/rate-limit";
-
-function getStripeClient() {
-  const secretKey = process.env.STRIPE_SECRET_KEY;
-
-  if (!secretKey) {
-    throw new Error("Missing STRIPE_SECRET_KEY environment variable");
-  }
-
-  return new Stripe(secretKey, {
-    apiVersion: "2026-04-22.dahlia",
-  });
-}
 
 const DEFAULT_TAX_RATE = 0.08;
 const ALLOWED_DRIFT_CENTS = 1;
@@ -54,15 +43,12 @@ const requestSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    const stripe = getStripeClient();
-    // Validate required environment variables
-    if (!process.env.NEXT_PUBLIC_SITE_URL) {
-      console.error("Missing NEXT_PUBLIC_SITE_URL environment variable");
+    const provider = getPaymentProvider();
+
+    if (provider !== "epos") {
       return NextResponse.json(
-        {
-          error: "Server configuration error. Please contact support.",
-        },
-        { status: 500 }
+        { error: unsupportedProviderMessage("/api/payments/create-checkout-session") },
+        { status: 501 }
       );
     }
 
@@ -111,7 +97,6 @@ export async function POST(request: NextRequest) {
     const subtotalCents = parsedMetadata.data.subtotalCents;
     const tipCents = parsedMetadata.data.tipCents ?? 0;
     const clientTaxCents = parsedMetadata.data.clientTaxCents;
-    const metadataIdempotencyKey = parsedMetadata.data.idempotencyKey;
     const metadataLocationId = typeof metadata.locationId === "string" ? metadata.locationId : undefined;
     const effectiveLocationId = locationId ?? metadataLocationId;
     const subtotalLineItemCents =
@@ -137,10 +122,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const requestIdempotencyKey = request.headers.get("x-idempotency-key")?.trim();
-    const stripeIdempotencyKey =
-      requestIdempotencyKey || metadataIdempotencyKey || undefined;
-
     if (typeof subtotalCents === "number" && typeof clientTaxCents === "number") {
       const estimatedServerTaxCents = Math.round(subtotalCents * SERVER_TAX_RATE);
       const driftPercent =
@@ -158,52 +139,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const stripeMetadata = Object.fromEntries(
-      Object.entries(metadata).map(([key, value]) => [key, String(value)])
-    );
-
     const authSession = await getServerSession(authOptions);
-    let stripeCustomerId: string | undefined;
-
-    if (authSession?.user?.id && authSession.user.email) {
-      const customer = await prisma.customer.findUnique({
-        where: { id: authSession.user.id },
-        select: {
-          id: true,
-          email: true,
-          firstName: true,
-          lastName: true,
-          stripeCustomerId: true,
-        },
-      });
-
-      if (customer) {
-        stripeCustomerId = customer.stripeCustomerId ?? undefined;
-
-        if (!stripeCustomerId) {
-          const stripeCustomer = await stripe.customers.create({
-            email: customer.email,
-            name:
-              [customer.firstName, customer.lastName]
-                .filter(Boolean)
-                .join(" ")
-                .trim() || undefined,
-            metadata: {
-              customerId: customer.id,
-            },
-          });
-
-          stripeCustomerId = stripeCustomer.id;
-
-          await prisma.customer.update({
-            where: { id: customer.id },
-            data: {
-              stripeCustomerId,
-            },
-          });
-        }
-      }
-    }
 
     const resolvedLocation = effectiveLocationId
       ? await prisma.location.findFirst({ where: { id: effectiveLocationId, isActive: true }, select: { id: true } })
@@ -219,7 +155,7 @@ export async function POST(request: NextRequest) {
     // Compute tax server-side (Syracuse, NY: 8% on prepared food)
     const taxCents = Math.round(subtotalLineItemCents * SERVER_TAX_RATE);
 
-    // Create Order in DB before Stripe session
+    // Create Order before creating the EPOS transaction.
     const order = await prisma.order.create({
       data: {
         customerId: authSession?.user?.id ?? null,
@@ -234,93 +170,73 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    let checkoutSession: { client_secret: string | null; id: string };
     try {
-      // Create Checkout Session with ui_mode: "elements" for PaymentElement / ExpressCheckoutElement
-      checkoutSession = await stripe.checkout.sessions.create(
-        {
-          ui_mode: "elements",
-          mode: "payment",
-          customer: stripeCustomerId,
-          line_items: [
-            {
-              price_data: {
-                currency,
-                unit_amount: subtotalLineItemCents,
-                product_data: {
-                  name: "Backyard BBQ Order",
-                  description: "Premium BBQ order from Backyard BBQ King",
-                },
-              },
-              quantity: 1,
-            },
-            ...(tipCents > 0
-              ? [
-                  {
-                    price_data: {
-                      currency,
-                      unit_amount: tipCents,
-                      product_data: {
-                        name: "Tip",
-                        description: "Customer gratuity",
-                      },
-                    },
-                    quantity: 1,
-                  },
-                ]
-              : []),
-            ...(taxCents > 0
-              ? [
-                  {
-                    price_data: {
-                      currency,
-                      unit_amount: taxCents,
-                      product_data: {
-                        name: "Sales Tax",
-                        description: `NY State + Onondaga County (${(SERVER_TAX_RATE * 100).toFixed(0)}%)`,
-                      },
-                    },
-                    quantity: 1,
-                  },
-                ]
-              : []),
-          ],
-          payment_intent_data: {
-            setup_future_usage: stripeCustomerId ? "off_session" : undefined,
-            metadata: {
-              ...stripeMetadata,
-              orderId: order.id,
-              source: "web-checkout",
-              locationId: resolvedLocation.id,
-            },
-          },
-          // Add metadata for searchability and reporting
-          metadata: {
-            ...stripeMetadata,
-            source: "web-checkout",
-            orderId: order.id,
-            locationId: resolvedLocation.id,
-            serverTaxRate: String(SERVER_TAX_RATE),
-            serverEstimatedTaxCents:
-              typeof subtotalCents === "number"
-                ? String(Math.round(subtotalCents * SERVER_TAX_RATE))
-                : "0",
-          },
-          // Return URL for after payment confirmation
-          return_url: `${process.env.NEXT_PUBLIC_SITE_URL}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-        },
-        stripeIdempotencyKey ? { idempotencyKey: stripeIdempotencyKey } : undefined
-      );
-    } catch (stripeError) {
-      await prisma.order.delete({ where: { id: order.id } }).catch(() => undefined);
-      throw stripeError;
-    }
+      const referenceCode = order.id;
+      const tenderTypeId = getEposTenderTypeId();
+      const serviceTypeRaw =
+        typeof metadata.fulfillmentMode === "string"
+          ? metadata.fulfillmentMode.toLowerCase()
+          : "pickup";
+      const serviceType = serviceTypeRaw === "delivery" ? 2 : 1;
 
-    return NextResponse.json({
-      clientSecret: checkoutSession.client_secret,
-      sessionId: checkoutSession.id,
-      orderId: order.id,
-    });
+      const createdTransaction = await createEposTransaction({
+        DateTime: new Date().toISOString(),
+        StatusId: 1,
+        ServiceType: serviceType,
+        TotalAmount: Number((amountCents / 100).toFixed(2)),
+        ServiceCharge: 0,
+        Gratuity: Number((tipCents / 100).toFixed(2)),
+        IsTransactionIncTax: true,
+        ReferenceCode: referenceCode,
+        TransactionItems: [],
+        MiscProductItems: [],
+        Tenders: [
+          {
+            TenderTypeId: tenderTypeId,
+            Amount: Number((amountCents / 100).toFixed(2)),
+            ChangeGiven: 0,
+          },
+        ],
+        AdjustStock: false,
+      });
+
+      await prisma.paymentTransaction.upsert({
+        where: { orderId: order.id },
+        update: {
+          amountCents,
+          currency,
+          status: "succeeded",
+          stripePaymentIntentId: `epos_txn_${createdTransaction.id}`,
+        },
+        create: {
+          orderId: order.id,
+          customerId: authSession?.user?.id ?? null,
+          paymentType: "order",
+          stripePaymentIntentId: `epos_txn_${createdTransaction.id}`,
+          amountCents,
+          currency,
+          status: "succeeded",
+        },
+      });
+
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { status: "confirmed" },
+      });
+
+      const eposSessionId = `epos_order_${order.id}`;
+
+      return NextResponse.json({
+        provider,
+        clientSecret: null,
+        sessionId: eposSessionId,
+        orderId: order.id,
+        transactionId: createdTransaction.id,
+      });
+    } catch (eposError) {
+      await prisma.order.delete({ where: { id: order.id } }).catch(() => undefined);
+      throw eposError;
+    }
   } catch (error) {
     console.error("Error creating checkout session:", error);
     return NextResponse.json(

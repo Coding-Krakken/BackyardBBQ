@@ -7,9 +7,9 @@ import { useEffect, useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { DashboardHeader, DashboardSidebar } from "../components/DashboardLayout";
 import { businessInfo } from "../../config/content";
-
-const FAQ_ITEMS = [
-  {
+function getFaqItems() {
+  return [
+    {
     question: "How do I track my order?",
     answer: "You can track your order in real-time from your Dashboard. Navigate to the Orders page to see your active orders with live status updates. We'll also send you notifications as your order progresses."
   },
@@ -35,17 +35,19 @@ const FAQ_ITEMS = [
   },
   {
     question: "How do I save my payment information?",
-    answer: "You can save payment methods securely in your Profile settings. We use Stripe for secure payment processing and never store your full card details on our servers."
+    answer: "Payment processing is handled directly through our EPOS terminal at the point of service for maximum security and convenience."
   },
   {
     question: "What's your refund policy?",
     answer: "If you're not satisfied with your order, contact us within 24 hours and we'll make it right. We offer full refunds for quality issues or order errors. Your satisfaction is our top priority!"
   }
-];
+  ];
+}
 
 export default function SupportPage() {
   const { status } = useSession();
   const router = useRouter();
+  const faqItems = getFaqItems();
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [subject, setSubject] = useState("");
   const [orderId, setOrderId] = useState("");
@@ -177,7 +179,7 @@ export default function SupportPage() {
           <article className="panel" style={{ marginBottom: "2rem" }}>
             <h3>Frequently Asked Questions</h3>
             <div style={{ marginTop: "1.5rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-              {FAQ_ITEMS.map((item, index) => (
+              {faqItems.map((item, index) => (
                 <div
                   key={index}
                   style={{
