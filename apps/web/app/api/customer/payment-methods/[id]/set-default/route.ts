@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../../../../../lib/auth";
-import { prisma } from "../../../../../../lib/prisma";
+import { getPaymentProvider, unsupportedProviderMessage } from "../../../../../lib/payment-provider";
 
 export async function PATCH(
   _request: Request,
@@ -14,42 +14,22 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id } = await context.params;
-
-    const method = await prisma.savedPaymentMethod.findFirst({
-      where: {
-        id,
-        customerId: session.user.id,
-      },
-      select: {
-        id: true,
-        customerId: true,
-        stripePaymentMethodId: true,
-      },
-    });
-
-    if (!method) {
-      return NextResponse.json({ error: "Payment method not found" }, { status: 404 });
+    const provider = getPaymentProvider();
+    if (provider !== "epos") {
+      return NextResponse.json(
+        { error: unsupportedProviderMessage("/api/customer/payment-methods/:id/set-default") },
+        { status: 501 }
+      );
     }
 
-    await prisma.$transaction(async (tx: any) => {
-      await tx.savedPaymentMethod.updateMany({
-        where: { customerId: method.customerId },
-        data: { isDefault: false },
-      });
-
-      await tx.savedPaymentMethod.update({
-        where: { id: method.id },
-        data: { isDefault: true },
-      });
-
-      await tx.customer.update({
-        where: { id: method.customerId },
-        data: { defaultPaymentMethodId: method.stripePaymentMethodId },
-      });
-    });
-
-    return NextResponse.json({ success: true });
+    const { id } = await context.params;
+    return NextResponse.json(
+      {
+        error: "Payment method preferences are managed at the point of service through our EPOS terminal.",
+        paymentMethodId: id,
+      },
+      { status: 410 }
+    );
   } catch (error) {
     console.error("Set default payment method error:", error);
     return NextResponse.json(

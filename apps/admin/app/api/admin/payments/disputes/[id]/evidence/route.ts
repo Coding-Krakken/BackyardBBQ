@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { prisma } from "@/lib/prisma";
-import { stripe } from "@/lib/stripe";
+import { getPaymentProvider, unsupportedProviderMessage } from "@/lib/payment-provider";
 
 const evidenceSchema = z.object({
   customerName: z.string().trim().max(120).optional(),
@@ -69,9 +69,7 @@ export async function POST(
   const auth = await requireAdmin(["owner", "admin", "accounting"]);
   if (auth instanceof NextResponse) return auth;
 
-  if (!stripe) {
-    return NextResponse.json({ message: "Stripe is not configured" }, { status: 500 });
-  }
+  const provider = getPaymentProvider();
 
   const { parsed, files } = await parseEvidencePayload(request);
   if (!parsed.success) {
@@ -88,92 +86,35 @@ export async function POST(
 
   const previousPayload = (event.payload ?? {}) as Record<string, unknown>;
 
-  const disputeId =
-    typeof previousPayload.disputeId === "string" && previousPayload.disputeId
-      ? previousPayload.disputeId
-      : null;
-
-  if (!disputeId) {
-    return NextResponse.json({ message: "Dispute ID is missing from event payload" }, { status: 400 });
-  }
-
-  const evidence: {
-    customer_name?: string;
-    customer_email_address?: string;
-    product_description?: string;
-    shipping_tracking_number?: string;
-    uncategorized_text?: string;
-    uncategorized_file?: string;
-  } = {};
-
-  if (parsed.data.customerName) {
-    evidence.customer_name = parsed.data.customerName;
-  }
-  if (parsed.data.customerEmail) {
-    evidence.customer_email_address = parsed.data.customerEmail;
-  }
-  if (parsed.data.orderDetails) {
-    evidence.product_description = parsed.data.orderDetails;
-  }
-  if (parsed.data.shippingTrackingNumber) {
-    evidence.shipping_tracking_number = parsed.data.shippingTrackingNumber;
-  }
-  if (parsed.data.uncategorizedText) {
-    evidence.uncategorized_text = parsed.data.uncategorizedText;
-  }
-
-  const uploadedFileIds: string[] = [];
-
-  for (const file of files.slice(0, 3)) {
-    if (file.size <= 0 || file.size > 8 * 1024 * 1024) {
-      continue;
-    }
-
-    const bytes = Buffer.from(await file.arrayBuffer());
-    const uploaded = await stripe.files.create({
-      purpose: "dispute_evidence",
-      file: {
-        data: bytes,
-        name: file.name || `evidence-${Date.now()}.bin`,
-        type: file.type || "application/octet-stream",
-      },
-    });
-
-    uploadedFileIds.push(uploaded.id);
-  }
-
-  if (uploadedFileIds.length > 0) {
-    evidence.uncategorized_file = uploadedFileIds[0];
-  }
-
-  let updatedDisputeStatus = "under_review";
-
-  try {
-    const dispute = await stripe.disputes.update(disputeId, {
-      evidence,
-      submit: true,
-    });
-    updatedDisputeStatus = dispute.status;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to submit evidence to Stripe";
-    return NextResponse.json({ message }, { status: 502 });
-  }
-
-  const updated = await prisma.integrationEvent.update({
-    where: { id: params.id },
-    data: {
-      status: updatedDisputeStatus,
-      payload: {
-        ...previousPayload,
-        disputeStatus: updatedDisputeStatus,
-        evidence: {
-          ...parsed.data,
-          uploadedFileIds,
-          submittedAt: new Date().toISOString(),
+  if (provider === "epos") {
+    const updated = await prisma.integrationEvent.update({
+      where: { id: params.id },
+      data: {
+        status: "evidence_submitted",
+        payload: {
+          ...previousPayload,
+          provider,
+          disputeStatus: "evidence_submitted",
+          evidence: {
+            ...parsed.data,
+            fileCount: files.length,
+            submittedAt: new Date().toISOString(),
+            instructions:
+              "Attach this evidence manually in EPOS support/back-office dispute workflow.",
+          },
         },
       },
-    },
-  });
+    });
 
-  return NextResponse.json({ data: updated });
+    return NextResponse.json({
+      data: updated,
+      message:
+        "Evidence recorded for manual EPOS dispute handling.",
+    });
+  }
+
+  return NextResponse.json(
+    { message: unsupportedProviderMessage("/api/admin/payments/disputes/[id]/evidence") },
+    { status: 501 }
+  );
 }

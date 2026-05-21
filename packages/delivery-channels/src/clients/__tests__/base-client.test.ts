@@ -1,7 +1,7 @@
 /** @jest-environment node */
 
 import { createHmac } from "node:crypto";
-import { verifyWebhookHmac, buildSimulatedHealth } from "../base-client";
+import { verifyWebhookHmac, buildSimulatedHealth, performProviderRequest } from "../base-client";
 
 describe("verifyWebhookHmac", () => {
   const secret = "test-hmac-secret-key";
@@ -109,5 +109,106 @@ describe("buildSimulatedHealth", () => {
   it("returns healthy status for grubhub", () => {
     const result = buildSimulatedHealth("grubhub");
     expect(result).toEqual({ healthy: true, latencyMs: 220 });
+  });
+});
+
+describe("performProviderRequest", () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    jest.restoreAllMocks();
+  });
+
+  it("returns parsed JSON for successful responses", async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({ ok: true }),
+      text: jest.fn().mockResolvedValue("")
+    } as unknown as Response);
+
+    await expect(
+      performProviderRequest({
+        url: "https://provider.test/orders/1",
+        method: "POST",
+        apiKey: "api-key",
+        body: { status: "accepted" }
+      })
+    ).resolves.toEqual({ ok: true });
+  });
+
+  it("returns null for 204 responses", async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 204,
+      json: jest.fn(),
+      text: jest.fn().mockResolvedValue("")
+    } as unknown as Response);
+
+    await expect(
+      performProviderRequest({
+        url: "https://provider.test/orders/1",
+        method: "PATCH",
+        apiKey: "api-key"
+      })
+    ).resolves.toBeNull();
+  });
+
+  it("throws with provider status details when response is not ok", async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 502,
+      json: jest.fn(),
+      text: jest.fn().mockResolvedValue("upstream timeout")
+    } as unknown as Response);
+
+    await expect(
+      performProviderRequest({
+        url: "https://provider.test/orders/1",
+        method: "GET",
+        apiKey: "api-key"
+      })
+    ).rejects.toThrow("Provider request failed (502): upstream timeout");
+  });
+
+  it("returns null when json parsing fails on successful response", async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: jest.fn().mockRejectedValue(new Error("bad json")),
+      text: jest.fn().mockResolvedValue("")
+    } as unknown as Response);
+
+    await expect(
+      performProviderRequest({
+        url: "https://provider.test/orders/1",
+        method: "GET",
+        apiKey: "api-key"
+      })
+    ).resolves.toBeNull();
+  });
+
+  it("aborts request when timeout elapses", async () => {
+    jest.useFakeTimers();
+
+    const abortError = new Error("aborted");
+    global.fetch = jest.fn().mockImplementation((_url: string, init?: RequestInit) => {
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(abortError));
+      });
+    }) as unknown as typeof fetch;
+
+    const requestPromise = performProviderRequest({
+      url: "https://provider.test/orders/timeout",
+      method: "GET",
+      apiKey: "api-key",
+      timeoutMs: 5
+    });
+
+    jest.advanceTimersByTime(10);
+    await expect(requestPromise).rejects.toBe(abortError);
+
+    jest.useRealTimers();
   });
 });

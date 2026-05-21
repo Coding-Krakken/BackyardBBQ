@@ -27,15 +27,15 @@
       "label": "Menu Management",
       "description": "Add, edit, and organize menu items with pricing, categories, and customizations."
     },
-    "stripe-payments": {
+    "payments": {
       "status": "complete",
-      "label": "Stripe Payments",
-      "description": "Checkout Sessions, Payment Element, Apple/Google Pay, saved cards, refunds."
+      "label": "Payments",
+      "description": "Checkout processing, gateway transaction tracking, provider-aware refunds, and payment operations."
     },
     "payment-disputes": {
       "status": "complete",
       "label": "Payment Disputes",
-      "description": "Monitor and respond to Stripe chargebacks and disputes."
+      "description": "Monitor and respond to payment disputes, evidence requests, and review timelines."
     },
     "accounting": {
       "status": "complete",

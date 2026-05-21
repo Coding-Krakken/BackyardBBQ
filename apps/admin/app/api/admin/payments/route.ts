@@ -2,6 +2,43 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { prisma } from "@/lib/prisma";
 
+const EPOS_TXN_PREFIX = "epos_txn_";
+
+function inferProvider(paymentIntentId: string | null, payloadProvider: unknown): "stripe" | "epos" {
+  if (typeof payloadProvider === "string") {
+    const normalized = payloadProvider.trim().toLowerCase();
+    if (normalized === "epos") {
+      return "epos";
+    }
+    if (normalized === "stripe") {
+      return "stripe";
+    }
+  }
+
+  if (paymentIntentId?.startsWith(EPOS_TXN_PREFIX)) {
+    return "epos";
+  }
+
+  return "epos";
+}
+
+function parseAmountCents(payload: Record<string, unknown>, keys: readonly string[]): number {
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+      return Math.floor(value);
+    }
+    if (typeof value === 'string') {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed) && parsed >= 0) {
+        return Math.floor(parsed);
+      }
+    }
+  }
+
+  return 0;
+}
+
 export async function GET(request: NextRequest) {
   const auth = await requireAdmin(['owner', 'admin', 'accounting']);
   if (auth instanceof NextResponse) return auth;
@@ -22,11 +59,19 @@ export async function GET(request: NextRequest) {
     ? await prisma.integrationEvent.findMany({
         where: {
           channel: 'admin',
-          eventType: 'admin.refund.issued',
+          eventType: {
+            in: [
+              'admin.refund.issued',
+              'admin.refund.manual_requested',
+              'admin.payment_refund_created',
+              'admin.payment_refund_requested',
+            ],
+          },
         },
         orderBy: { createdAt: 'desc' },
         take: 500,
         select: {
+          eventType: true,
           payload: true,
           createdAt: true,
         },
@@ -41,8 +86,11 @@ export async function GET(request: NextRequest) {
       reason: string;
       refundedAt: string;
       stripeRefundId: string | null;
+      provider: "stripe" | "epos";
     }>
   >();
+
+  const paymentProviderById = new Map<string, "stripe" | "epos">();
 
   for (const event of refundEvents) {
     const payload = event.payload as Record<string, unknown>;
@@ -51,13 +99,14 @@ export async function GET(request: NextRequest) {
       continue;
     }
 
-    const amountCents = typeof payload.requestedAmountCents === 'number' ? payload.requestedAmountCents : 0;
-    const totalRefundedCents =
-      typeof payload.totalRefundedCents === 'number' ? payload.totalRefundedCents : amountCents;
+    const amountCents = parseAmountCents(payload, ['requestedAmountCents', 'amountCents', 'refundAmountCents']);
+    const totalRefundedCents = parseAmountCents(payload, ['totalRefundedCents']) || amountCents;
     const reason = typeof payload.reason === 'string' ? payload.reason : 'requested_by_customer';
     const refundedAt =
       typeof payload.refundedAt === 'string' ? payload.refundedAt : event.createdAt.toISOString();
     const stripeRefundId = typeof payload.stripeRefundId === 'string' ? payload.stripeRefundId : null;
+    const paymentIntentId = typeof payload.paymentIntentId === 'string' ? payload.paymentIntentId : null;
+    const provider = inferProvider(paymentIntentId, payload.provider);
 
     const existing = refundHistoryByPaymentId.get(transactionId) ?? [];
     existing.push({
@@ -66,14 +115,20 @@ export async function GET(request: NextRequest) {
       reason,
       refundedAt,
       stripeRefundId,
+      provider,
     });
     refundHistoryByPaymentId.set(transactionId, existing);
+
+    const knownProvider = paymentProviderById.get(transactionId);
+    if (!knownProvider || provider === 'epos') {
+      paymentProviderById.set(transactionId, provider);
+    }
   }
 
   const data = payments.map((payment) => ({
     ...payment,
     paymentType: payment.paymentType || "order",
-    provider: "stripe",
+    provider: paymentProviderById.get(payment.id) ?? inferProvider(payment.stripePaymentIntentId, null),
     refundHistory: refundHistoryByPaymentId.get(payment.id) ?? [],
   }));
 

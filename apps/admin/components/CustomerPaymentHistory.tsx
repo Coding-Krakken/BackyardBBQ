@@ -10,6 +10,7 @@ import { fetcher, formatCurrency, formatDate } from '@/lib/utils';
 interface PaymentHistoryRow {
   id: string;
   stripePaymentIntentId: string;
+  provider: 'stripe' | 'epos';
   orderId: string | null;
   bookingId: string | null;
   paymentType: string;
@@ -123,16 +124,23 @@ export function CustomerPaymentHistory({ customerId }: { customerId: string }) {
           { header: 'Date', accessor: (row: PaymentHistoryRow) => formatDate(row.createdAt), sortKey: (row: PaymentHistoryRow) => row.createdAt },
           {
             header: 'Transaction',
-            accessor: (row: PaymentHistoryRow) => (
-              <a
-                className="link-ember"
-                href={`https://dashboard.stripe.com/payments/${row.stripePaymentIntentId}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {row.stripePaymentIntentId.slice(0, 16)}
-              </a>
-            ),
+            accessor: (row: PaymentHistoryRow) => {
+              const shortId = row.stripePaymentIntentId.slice(0, 16);
+              if (row.provider === 'stripe') {
+                return (
+                  <a
+                    className="link-ember"
+                    href={`https://dashboard.stripe.com/payments/${row.stripePaymentIntentId}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {shortId}
+                  </a>
+                );
+              }
+
+              return <span>{shortId}</span>;
+            },
           },
           {
             header: 'Reference',

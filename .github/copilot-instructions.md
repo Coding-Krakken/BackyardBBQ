@@ -11,7 +11,7 @@ Turborepo monorepo with npm workspaces.
 |---|---|---|
 | `apps/web` | Next.js 14 (App Router) | Customer-facing: menu, checkout, catering, profile |
 | `apps/admin` | Next.js 14 (App Router) | Operations dashboard: payments, disputes, bookings |
-| `apps/api` | Fastify 4 (Vercel serverless) | Stripe webhook processing, payment metrics |
+| `apps/api` | Fastify 4 (Vercel serverless) | EPOS webhook processing, payment metrics |
 | `apps/workers` | Node.js | Background jobs, delivery-channel adapters |
 | `packages/database` | Prisma 5 + PostgreSQL | Shared schema and client |
 | `packages/domain` | TypeScript + Zod | Shared types, enums, validation schemas |
@@ -44,29 +44,33 @@ Important: `apps/api` uses its own local Prisma schema and should not import `@b
 npx prisma generate --schema=packages/database/prisma/schema.prisma
 ```
 
-## 4) Payments and Stripe
+## 4) Payments and EPOS Now
 
-Use the established split:
+Payment processing is handled exclusively through EPOS Now API v4:
 
-- Checkout Sessions (embedded mode): order payments and catering deposits.
-- Payment Methods API: saved card list/delete/set-default flows.
-- PaymentIntents: refunds and reconciliation paths.
+- Embedded checkout flow: order payments and catering deposits.
+- Transaction verification: post-payment validation and order correlation.
+- Manual refund queue: admin-initiated refunds via integration events.
+- Dispute tracking: operational review workflow for chargebacks.
 
 Webhook processing is in `apps/api/src/index.ts` and must retain hardening:
 
-- Signature verification required.
+- HMAC signature verification (SHA-256) required.
 - In-memory duplicate suppression with TTL.
 - Persisted deduplication via integration events.
 - Per-IP webhook rate limiting (default 100/min).
-- Optional Stripe IP allowlisting.
+- Optional EPOS IP allowlisting.
 
-Handled event groups:
+Handled event types:
 
-- `checkout.session.completed`
-- `payment_intent.*`
-- `charge.dispute.*`
+- `transaction.completed`
+- `transaction.failed`
+- `refund.processed`
+- `dispute.created`
 
-Do not commit real Stripe keys (`sk_*`, `pk_*`). Use env vars and sanitized fixtures.
+Do not commit real EPOS keys. Use env vars (`EPOS_NOW_API_KEY`, `EPOS_NOW_WEBHOOK_SECRET`) and sanitized fixtures.
+
+Historical Stripe data is preserved read-only for audit and reporting purposes.
 
 ## 5) Auth and Authorization
 

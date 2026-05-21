@@ -6,6 +6,8 @@ type PaymentStatusRow = {
   _sum: { amountCents: number | null };
 };
 
+const WEBHOOK_CHANNELS = ["stripe", "epos"] as const;
+
 type MetricsPrismaClient = Pick<PrismaClient, "$queryRaw"> & {
   paymentTransaction: Pick<PrismaClient["paymentTransaction"], "groupBy">;
   integrationEvent: Pick<PrismaClient["integrationEvent"], "count" | "findFirst">;
@@ -51,20 +53,19 @@ export async function buildPaymentMetricsSnapshot(input: {
     }),
     prisma.integrationEvent.count({
       where: {
-        channel: "stripe",
-        eventType: { contains: "charge.dispute" },
+        eventType: { contains: "dispute" },
         createdAt: { gte: since }
       }
     }),
     prisma.integrationEvent.count({
       where: {
-        channel: "stripe",
+        channel: { in: WEBHOOK_CHANNELS as unknown as string[] },
         createdAt: { gte: since }
       }
     }),
     prisma.integrationEvent.findFirst({
       where: {
-        channel: "stripe",
+        channel: { in: WEBHOOK_CHANNELS as unknown as string[] },
         createdAt: { gte: since }
       },
       orderBy: { createdAt: "desc" },
@@ -72,12 +73,50 @@ export async function buildPaymentMetricsSnapshot(input: {
     }),
     prisma.$queryRaw<Array<{ average_latency_ms: number | null }>>`
       SELECT AVG(
-        (EXTRACT(EPOCH FROM "createdAt") - ((payload->>'updatedAt')::double precision)) * 1000
+        GREATEST(
+          (
+            EXTRACT(EPOCH FROM "createdAt")
+            - COALESCE(
+              CASE
+                WHEN (payload->>'updatedAt') ~ '^[0-9]+(\\.[0-9]+)?$'
+                  THEN
+                    CASE
+                      WHEN (payload->>'updatedAt')::double precision >= 1000000000000
+                        THEN (payload->>'updatedAt')::double precision / 1000
+                      ELSE (payload->>'updatedAt')::double precision
+                    END
+              END,
+              CASE
+                WHEN (payload->>'occurredAt') ~ '^[0-9]+(\\.[0-9]+)?$'
+                  THEN
+                    CASE
+                      WHEN (payload->>'occurredAt')::double precision >= 1000000000000
+                        THEN (payload->>'occurredAt')::double precision / 1000
+                      ELSE (payload->>'occurredAt')::double precision
+                    END
+              END,
+              CASE
+                WHEN (payload->>'eventTimestamp') ~ '^[0-9]+(\\.[0-9]+)?$'
+                  THEN
+                    CASE
+                      WHEN (payload->>'eventTimestamp')::double precision >= 1000000000000
+                        THEN (payload->>'eventTimestamp')::double precision / 1000
+                      ELSE (payload->>'eventTimestamp')::double precision
+                    END
+              END
+            )
+          ) * 1000,
+          0
+        )
       ) AS average_latency_ms
       FROM "IntegrationEvent"
-      WHERE "channel" = 'stripe'
+      WHERE "channel" IN ('stripe', 'epos')
         AND "createdAt" >= ${since}
-        AND (payload->>'updatedAt') ~ '^[0-9]+(\\.[0-9]+)?$'
+        AND (
+          (payload->>'updatedAt') ~ '^[0-9]+(\\.[0-9]+)?$'
+          OR (payload->>'occurredAt') ~ '^[0-9]+(\\.[0-9]+)?$'
+          OR (payload->>'eventTimestamp') ~ '^[0-9]+(\\.[0-9]+)?$'
+        )
     `
   ]);
 

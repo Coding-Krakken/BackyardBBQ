@@ -1,12 +1,6 @@
 /** @jest-environment node */
 
-import { getCheckoutSessionIdentifiers, shouldTreatWebhookEventAsDuplicate } from "../webhook/utils";
-
-type CheckoutSessionLike = {
-  customer?: string | null;
-  payment_intent?: string | null;
-  metadata?: Record<string, string>;
-};
+import { shouldTreatWebhookEventAsDuplicate } from "../webhook/utils";
 
 describe("shouldTreatWebhookEventAsDuplicate", () => {
   it("returns false for first event and true for immediate duplicate", () => {
@@ -36,34 +30,14 @@ describe("shouldTreatWebhookEventAsDuplicate", () => {
     expect(store.has("evt_fresh")).toBe(true);
     expect(store.has("evt_new")).toBe(true);
   });
-});
 
-describe("getCheckoutSessionIdentifiers", () => {
-  it("extracts customer, payment intent, and order id metadata", () => {
-    const session = {
-      customer: "cus_123",
-      payment_intent: "pi_123",
-      metadata: { orderId: "ord_123" },
-    } satisfies CheckoutSessionLike;
+  it("uses Date.now when now is not provided", () => {
+    const nowSpy = jest.spyOn(Date, "now").mockReturnValue(5000);
+    const store = new Map<string, number>();
 
-    expect(getCheckoutSessionIdentifiers(session)).toEqual({
-      stripeCustomerId: "cus_123",
-      paymentIntentId: "pi_123",
-      orderId: "ord_123",
-    });
-  });
+    expect(shouldTreatWebhookEventAsDuplicate(store, "evt_default_now", 1000)).toBe(false);
+    expect(store.get("evt_default_now")).toBe(5000);
 
-  it("returns undefined values when identifier fields are absent", () => {
-    const session = {
-      customer: null,
-      payment_intent: null,
-      metadata: {},
-    } satisfies CheckoutSessionLike;
-
-    expect(getCheckoutSessionIdentifiers(session)).toEqual({
-      stripeCustomerId: undefined,
-      paymentIntentId: undefined,
-      orderId: undefined,
-    });
+    nowSpy.mockRestore();
   });
 });

@@ -1,7 +1,18 @@
 import { NextResponse } from "next/server";
 import { normalizeReservationForm } from "../../lib/validation";
+import { featureFlags } from "../../config/content";
 
 export async function POST(request: Request) {
+  // Check if dine-in feature is enabled
+  if (!featureFlags.isDineInEnabled) {
+    return NextResponse.json(
+      {
+        error: "Table reservations are not currently available. Please check back later or explore our takeout and catering options."
+      },
+      { status: 403 }
+    );
+  }
+
   try {
     const payload = (await request.json()) as Record<string, unknown>;
     const parsed = normalizeReservationForm(payload);

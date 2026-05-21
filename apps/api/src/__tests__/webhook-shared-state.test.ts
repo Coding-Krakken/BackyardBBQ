@@ -1,4 +1,5 @@
 import { WebhookSharedState } from "../webhook/shared-state";
+import { createWebhookSharedState } from "../webhook/shared-state";
 
 class MockRedis {
   private readonly kv = new Map<string, string>();
@@ -70,7 +71,79 @@ class MockRedis {
   }
 }
 
+class MockRedisQuitFailure extends MockRedis {
+  async quit(): Promise<"OK"> {
+    throw new Error("quit failed");
+  }
+}
+
 describe("WebhookSharedState", () => {
+  it("uses in-memory backend when mode is explicitly memory", async () => {
+    const state = new WebhookSharedState({ backendMode: "memory" });
+
+    expect(state.backendName).toBe("memory");
+    expect(await state.checkDuplicate("evt_memory", 60_000, 1_000)).toBe(false);
+    expect(await state.checkDuplicate("evt_memory", 60_000, 1_100)).toBe(true);
+    expect(await state.health()).toEqual({
+      backend: "memory",
+      fallbackActive: false,
+      redisConnected: null
+    });
+
+    await state.close();
+  });
+
+  it("falls back to memory backend when redis mode has no redis config", async () => {
+    const state = new WebhookSharedState({ backendMode: "redis" });
+
+    expect(state.backendName).toBe("memory");
+    expect(await state.checkDuplicate("evt_no_redis", 60_000, 5_000)).toBe(false);
+
+    await state.close();
+  });
+
+  it("uses redis backend in auto mode when redis client is provided", async () => {
+    const state = new WebhookSharedState({ redisClient: new MockRedis() });
+
+    expect(state.backendName).toBe("redis");
+    expect(await state.checkDuplicate("evt_auto_mode", 60_000)).toBe(false);
+
+    await state.close();
+  });
+
+  it("evicts stale duplicate markers in memory backend", async () => {
+    const state = new WebhookSharedState({ backendMode: "memory" });
+
+    expect(await state.checkDuplicate("evt_old", 100, 1_000)).toBe(false);
+    expect(await state.checkDuplicate("evt_fresh", 100, 1_250)).toBe(false);
+    expect(await state.checkDuplicate("evt_old", 100, 1_260)).toBe(false);
+
+    await state.close();
+  });
+
+  it("creates state through factory helper", async () => {
+    const state = createWebhookSharedState({ backendMode: "memory" });
+
+    expect(state).toBeInstanceOf(WebhookSharedState);
+    expect(await state.checkDuplicate("evt_factory", 60_000, 7_000)).toBe(false);
+
+    await state.close();
+  });
+
+  it("resets in-memory rate limit after window expiration", async () => {
+    const state = new WebhookSharedState({ backendMode: "memory" });
+    const key = "198.51.100.99";
+
+    expect(await state.isRateLimited(key, 2, 20)).toBe(false);
+    expect(await state.isRateLimited(key, 2, 20)).toBe(false);
+    expect(await state.isRateLimited(key, 2, 20)).toBe(true);
+
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    expect(await state.isRateLimited(key, 2, 20)).toBe(false);
+    await state.close();
+  });
+
   it("detects duplicates across three shared redis-backed instances", async () => {
     const redis = new MockRedis();
 
@@ -141,5 +214,42 @@ describe("WebhookSharedState", () => {
     expect(health.redisConnected).toBe(false);
 
     await state.close();
+  });
+
+  it("falls back without requiring fallback callback", async () => {
+    const state = new WebhookSharedState({
+      backendMode: "redis",
+      redisClient: new MockRedis(true)
+    });
+
+    expect(await state.checkDuplicate("evt_fallback_no_callback", 60_000)).toBe(false);
+    expect(await state.checkDuplicate("evt_fallback_no_callback", 60_000)).toBe(true);
+    expect(await state.isRateLimited("198.51.100.30", 1, 60_000)).toBe(false);
+    expect(await state.isRateLimited("198.51.100.30", 1, 60_000)).toBe(true);
+
+    await state.close();
+  });
+
+  it("reports healthy redis backend when ping succeeds", async () => {
+    const state = new WebhookSharedState({
+      backendMode: "redis",
+      redisClient: new MockRedis(false)
+    });
+
+    const health = await state.health();
+    expect(health.backend).toBe("redis");
+    expect(health.fallbackActive).toBe(false);
+    expect(health.redisConnected).toBe(true);
+
+    await state.close();
+  });
+
+  it("does not throw when close encounters backend failures", async () => {
+    const state = new WebhookSharedState({
+      backendMode: "redis",
+      redisClient: new MockRedisQuitFailure()
+    });
+
+    await expect(state.close()).resolves.toBeUndefined();
   });
 });

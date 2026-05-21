@@ -1,6 +1,11 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("Reservation flow", () => {
+  test.skip(
+    process.env.NEXT_PUBLIC_ENABLE_DINE_IN !== "true",
+    "Dine-in feature disabled"
+  );
+
   test("submits a reservation and shows confirmation", async ({ page }) => {
     await page.goto("/reserve", { waitUntil: "domcontentloaded" });
     const form = page.locator("form.reserve-form");

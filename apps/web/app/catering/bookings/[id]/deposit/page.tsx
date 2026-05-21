@@ -1,14 +1,12 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { CheckoutElementsProvider, ExpressCheckoutElement, PaymentElement, useCheckout } from "@stripe/react-stripe-js/checkout";
-import { loadStripe } from "@stripe/stripe-js";
 import { DashboardHeader, DashboardSidebar } from "../../../../dashboard/components/DashboardLayout";
+import { getClientPaymentProvider } from "../../../../lib/payment-provider";
 
-const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim() ?? "";
-const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
+const paymentProvider = getClientPaymentProvider();
 
 type BookingPayload = {
   booking: {
@@ -29,59 +27,6 @@ function formatMoney(cents: number) {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
-function DepositCheckoutForm() {
-  const checkoutState = useCheckout();
-  const [status, setStatus] = useState<string>("");
-  const [submitting, setSubmitting] = useState(false);
-
-  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    if (checkoutState.type !== "success") {
-      return;
-    }
-
-    setSubmitting(true);
-    setStatus("");
-
-    try {
-      const result = await checkoutState.checkout.confirm();
-      if (result.type === "error") {
-        setStatus(result.error.message ?? "Payment failed. Please try again.");
-      }
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Payment failed. Please try again.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <form className="checkout-form" onSubmit={onSubmit}>
-      <div style={{ marginBottom: "1.5rem" }}>
-        <ExpressCheckoutElement onConfirm={() => undefined} />
-      </div>
-
-      <PaymentElement
-        options={{
-          layout: {
-            type: "accordion",
-            defaultCollapsed: false,
-            radios: "auto",
-            spacedAccordionItems: true,
-          },
-        }}
-      />
-
-      <button className="btn btn-primary" type="submit" style={{ width: "100%", marginTop: "1.25rem" }} disabled={submitting}>
-        {submitting ? "Processing..." : "Pay Deposit"}
-      </button>
-
-      {status ? <p className="status-text" style={{ marginTop: "1rem" }}>{status}</p> : null}
-    </form>
-  );
-}
-
 export default function CateringDepositPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -90,7 +35,6 @@ export default function CateringDepositPage() {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [bookingData, setBookingData] = useState<BookingPayload | null>(null);
-  const [clientSecret, setClientSecret] = useState<string | null>(null);
   const initializedRef = useRef(false);
 
   useEffect(() => {
@@ -147,8 +91,16 @@ export default function CateringDepositPage() {
           throw new Error(payload.error ?? "Unable to initialize deposit checkout.");
         }
 
-        const payload = (await response.json()) as { clientSecret: string };
-        setClientSecret(payload.clientSecret);
+        const payload = (await response.json()) as {
+          provider?: "stripe" | "epos";
+          sessionId?: string;
+        };
+
+        if ((payload.provider ?? paymentProvider) !== "epos" || !payload.sessionId) {
+          throw new Error("EPOS checkout did not return a session identifier.");
+        }
+
+        window.location.assign(`/catering/bookings/${bookingId}/deposit/success?session_id=${encodeURIComponent(payload.sessionId)}`);
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : "Unable to initialize deposit checkout.");
       }
@@ -156,29 +108,6 @@ export default function CateringDepositPage() {
 
     void createSession();
   }, [bookingId, bookingData, errorMessage]);
-
-  const checkoutOptions = useMemo(
-    () =>
-      clientSecret
-        ? {
-            clientSecret,
-            appearance: {
-              theme: "night" as const,
-              labels: "floating" as const,
-              variables: {
-                colorPrimary: "#d4491b",
-                colorBackground: "#1a1410",
-                colorText: "#f4eee8",
-                colorDanger: "#d4491b",
-                fontFamily: "system-ui, -apple-system, sans-serif",
-                spacingUnit: "4px",
-                borderRadius: "8px",
-              },
-            },
-          }
-        : undefined,
-    [clientSecret]
-  );
 
   if (loading) {
     return (
@@ -206,7 +135,7 @@ export default function CateringDepositPage() {
           <section className="dashboard-section" style={{ maxWidth: "920px" }}>
             <h1>Catering Deposit Payment</h1>
             <p style={{ color: "var(--warm-gray)", marginTop: "0.5rem" }}>
-              Secure your event date by paying your required catering deposit.
+              Confirm your event by completing your EPOS catering deposit payment.
             </p>
           </section>
 
@@ -251,13 +180,10 @@ export default function CateringDepositPage() {
             <article className="panel dashboard-card">
               <h3>Pay Deposit</h3>
               {errorMessage ? <p className="status-text">{errorMessage}</p> : null}
-              {!errorMessage && checkoutOptions && stripePromise ? (
-                <CheckoutElementsProvider stripe={stripePromise} options={checkoutOptions}>
-                  <DepositCheckoutForm />
-                </CheckoutElementsProvider>
-              ) : null}
-              {!errorMessage && !checkoutOptions ? (
-                <p style={{ color: "var(--warm-gray)", marginTop: "1rem" }}>Preparing secure payment...</p>
+              {!errorMessage ? (
+                <p style={{ color: "var(--warm-gray)", marginTop: "1rem" }}>
+                  Submitting your deposit payment...
+                </p>
               ) : null}
             </article>
           </section>

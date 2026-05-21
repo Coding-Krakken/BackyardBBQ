@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<coverage generated="1779219138920" clover="3.2.0">
+  <project timestamp="1779219138921" name="All files">
+    <metrics statements="221" coveredstatements="221" conditionals="195" coveredconditionals="195" methods="51" coveredmethods="51" elements="467" coveredelements="467" complexity="0" loc="221" ncloc="221" packages="2" files="7" classes="7"/>
+    <package name="src">
+      <metrics statements="62" coveredstatements="62" conditionals="38" coveredconditionals="38" methods="16" coveredmethods="16"/>
+      <file name="index.ts" path="/home/obsidian/Projects/BackyardBBQ/packages/delivery-channels/src/index.ts">
+        <metrics statements="62" coveredstatements="62" conditionals="38" coveredconditionals="38" methods="16" coveredmethods="16"/>
+        <line num="1" count="1" type="stmt"/>
+        <line num="16" count="1" type="stmt"/>
+        <line num="18" count="1" type="stmt"/>
+        <line num="79" count="1" type="stmt"/>
+        <line num="100" count="1" type="stmt"/>
+        <line num="107" count="36" type="stmt"/>
+        <line num="110" count="32" type="stmt"/>
+        <line num="114" count="24" type="stmt"/>
+        <line num="119" count="92" type="stmt"/>
+        <line num="120" count="92" type="stmt"/>
+        <line num="121" count="2814" type="stmt"/>
+        <line num="123" count="92" type="stmt"/>
+        <line num="131" count="46" type="stmt"/>
+        <line num="133" count="46" type="stmt"/>
+        <line num="135" count="46" type="stmt"/>
+        <line num="138" count="46" type="cond" truecount="2" falsecount="0"/>
+        <line num="139" count="1" type="stmt"/>
+        <line num="142" count="45" type="cond" truecount="2" falsecount="0"/>
+        <line num="143" count="21" type="stmt"/>
+        <line num="146" count="24" type="stmt"/>
+        <line num="151" count="1" type="stmt"/>
+        <line num="152" count="1" type="stmt"/>
+        <line num="153" count="1" type="stmt"/>
+        <line num="169" count="108" type="stmt"/>
+        <line num="170" count="108" type="stmt"/>
+        <line num="171" count="108" type="stmt"/>
+        <line num="172" count="108" type="stmt"/>
+        <line num="173" count="108" type="stmt"/>
+        <line num="177" count="32" type="cond" truecount="2" falsecount="0"/>
+        <line num="178" count="1" type="stmt"/>
+        <line num="185" count="31" type="stmt"/>
+        <line num="186" count="31" type="stmt"/>
+        <line num="188" count="31" type="stmt"/>
+        <line num="189" count="46" type="stmt"/>
+        <line num="190" count="46" type="stmt"/>
+        <line num="192" count="46" type="cond" truecount="2" falsecount="0"/>
+        <line num="193" count="24" type="stmt"/>
+        <line num="194" count="24" type="stmt"/>
+        <line num="201" count="22" type="cond" truecount="2" falsecount="0"/>
+        <line num="202" count="1" type="stmt"/>
+        <line num="210" count="21" type="stmt"/>
+        <line num="214" count="6" type="stmt"/>
+        <line num="223" count="1" type="stmt"/>
+        <line num="227" count="1" type="stmt"/>
+        <line num="228" count="1" type="stmt"/>
+        <line num="229" count="1" type="stmt"/>
+        <line num="233" count="1" type="stmt"/>
+        <line num="234" count="1" type="stmt"/>
+        <line num="235" count="1" type="stmt"/>
+        <line num="239" count="1" type="stmt"/>
+        <line num="240" count="1" type="stmt"/>
+        <line num="241" count="1" type="stmt"/>
+        <line num="245" count="1" type="stmt"/>
+        <line num="246" count="1" type="stmt"/>
+        <line num="247" count="1" type="stmt"/>
+        <line num="251" count="1" type="stmt"/>
+        <line num="258" count="36" type="stmt"/>
+        <line num="265" count="1" type="stmt"/>
+        <line num="269" count="36" type="stmt"/>
+        <line num="273" count="36" type="stmt"/>
+        <line num="274" count="36" type="cond" truecount="8" falsecount="0"/>
+        <line num="276" count="36" type="stmt"/>
+      </file>
+    </package>
+    <package name="src.clients">
+      <metrics statements="159" coveredstatements="159" conditionals="157" coveredconditionals="157" methods="35" coveredmethods="35"/>
+      <file name="base-client.ts" path="/home/obsidian/Projects/BackyardBBQ/packages/delivery-channels/src/clients/base-client.ts">
+        <metrics statements="28" coveredstatements="28" conditionals="20" coveredconditionals="20" methods="5" coveredmethods="5"/>
+        <line num="10" count="5" type="stmt"/>
+        <line num="97" count="5" type="stmt"/>
+        <line num="102" count="24" type="cond" truecount="5" falsecount="0"/>
+        <line num="103" count="6" type="stmt"/>
+        <line num="106" count="18" type="stmt"/>
+        <line num="107" count="18" type="stmt"/>
+        <line num="109" count="18" type="stmt"/>
+        <line num="110" count="18" type="stmt"/>
+        <line num="112" count="18" type="cond" truecount="5" falsecount="0"/>
+        <line num="113" count="5" type="stmt"/>
+        <line num="116" count="13" type="stmt"/>
+        <line num="119" count="5" type="stmt"/>
+        <line num="126" count="5" type="cond" truecount="4" falsecount="0"/>
+        <line num="127" count="5" type="stmt"/>
+        <line num="128" count="5" type="stmt"/>
+        <line num="129" count="1" type="stmt"/>
+        <line num="132" count="5" type="stmt"/>
+        <line num="133" count="5" type="stmt"/>
+        <line num="143" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="144" count="1" type="stmt"/>
+        <line num="145" count="1" type="stmt"/>
+        <line num="148" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="149" count="1" type="stmt"/>
+        <line num="152" count="2" type="stmt"/>
+        <line num="154" count="5" type="stmt"/>
+        <line num="158" count="5" type="stmt"/>
+        <line num="159" count="7" type="stmt"/>
+        <line num="165" count="7" type="stmt"/>
+      </file>
+      <file name="doordash-client.ts" path="/home/obsidian/Projects/BackyardBBQ/packages/delivery-channels/src/clients/doordash-client.ts">
+        <metrics statements="56" coveredstatements="56" conditionals="63" coveredconditionals="63" methods="11" coveredmethods="11"/>
+        <line num="1" count="2" type="stmt"/>
+        <line num="16" count="2" type="stmt"/>
+        <line num="17" count="2" type="stmt"/>
+        <line num="19" count="2" type="stmt"/>
+        <line num="20" count="78" type="stmt"/>
+        <line num="24" count="78" type="stmt"/>
+        <line num="25" count="78" type="cond" truecount="6" falsecount="0"/>
+        <line num="29" count="26" type="cond" truecount="4" falsecount="0"/>
+        <line num="30" count="26" type="cond" truecount="4" falsecount="0"/>
+        <line num="31" count="26" type="cond" truecount="4" falsecount="0"/>
+        <line num="33" count="26" type="cond" truecount="5" falsecount="0"/>
+        <line num="34" count="7" type="stmt"/>
+        <line num="37" count="19" type="stmt"/>
+        <line num="38" count="19" type="stmt"/>
+        <line num="43" count="19" type="stmt"/>
+        <line num="51" count="19" type="stmt"/>
+        <line num="52" count="57" type="stmt"/>
+        <line num="58" count="19" type="stmt"/>
+        <line num="59" count="19" type="stmt"/>
+        <line num="60" count="19" type="stmt"/>
+        <line num="62" count="19" type="stmt"/>
+        <line num="66" count="8" type="stmt"/>
+        <line num="74" count="4" type="cond" truecount="8" falsecount="0"/>
+        <line num="75" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="76" count="1" type="stmt"/>
+        <line num="79" count="3" type="stmt"/>
+        <line num="89" count="2" type="stmt"/>
+        <line num="97" count="8" type="stmt"/>
+        <line num="107" count="8" type="stmt"/>
+        <line num="116" count="19" type="cond" truecount="5" falsecount="0"/>
+        <line num="117" count="3" type="stmt"/>
+        <line num="120" count="16" type="stmt"/>
+        <line num="121" count="16" type="cond" truecount="2" falsecount="0"/>
+        <line num="122" count="3" type="stmt"/>
+        <line num="125" count="13" type="stmt"/>
+        <line num="131" count="13" type="stmt"/>
+        <line num="144" count="3" type="cond" truecount="4" falsecount="0"/>
+        <line num="145" count="1" type="stmt"/>
+        <line num="150" count="2" type="stmt"/>
+        <line num="154" count="4" type="cond" truecount="5" falsecount="0"/>
+        <line num="155" count="1" type="stmt"/>
+        <line num="158" count="3" type="stmt"/>
+        <line num="159" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="160" count="1" type="stmt"/>
+        <line num="163" count="2" type="stmt"/>
+        <line num="176" count="7" type="cond" truecount="4" falsecount="0"/>
+        <line num="177" count="2" type="stmt"/>
+        <line num="184" count="5" type="stmt"/>
+        <line num="185" count="5" type="cond" truecount="2" falsecount="0"/>
+        <line num="186" count="1" type="stmt"/>
+        <line num="193" count="4" type="stmt"/>
+        <line num="194" count="4" type="stmt"/>
+        <line num="195" count="4" type="stmt"/>
+        <line num="201" count="3" type="stmt"/>
+        <line num="206" count="1" type="stmt"/>
+        <line num="207" count="1" type="stmt"/>
+      </file>
+      <file name="grubhub-client.ts" path="/home/obsidian/Projects/BackyardBBQ/packages/delivery-channels/src/clients/grubhub-client.ts">
+        <metrics statements="32" coveredstatements="32" conditionals="36" coveredconditionals="36" methods="9" coveredmethods="9"/>
+        <line num="1" count="2" type="stmt"/>
+        <line num="16" count="2" type="stmt"/>
+        <line num="18" count="2" type="stmt"/>
+        <line num="19" count="52" type="stmt"/>
+        <line num="23" count="52" type="stmt"/>
+        <line num="24" count="52" type="cond" truecount="6" falsecount="0"/>
+        <line num="28" count="2" type="stmt"/>
+        <line num="36" count="3" type="cond" truecount="8" falsecount="0"/>
+        <line num="37" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="38" count="1" type="stmt"/>
+        <line num="41" count="2" type="stmt"/>
+        <line num="51" count="1" type="stmt"/>
+        <line num="59" count="1" type="stmt"/>
+        <line num="69" count="1" type="stmt"/>
+        <line num="78" count="3" type="cond" truecount="4" falsecount="0"/>
+        <line num="79" count="1" type="stmt"/>
+        <line num="82" count="2" type="stmt"/>
+        <line num="88" count="2" type="stmt"/>
+        <line num="101" count="2" type="cond" truecount="4" falsecount="0"/>
+        <line num="102" count="1" type="stmt"/>
+        <line num="105" count="1" type="stmt"/>
+        <line num="121" count="2" type="cond" truecount="4" falsecount="0"/>
+        <line num="122" count="1" type="stmt"/>
+        <line num="125" count="1" type="stmt"/>
+        <line num="138" count="4" type="cond" truecount="2" falsecount="0"/>
+        <line num="139" count="1" type="stmt"/>
+        <line num="146" count="3" type="stmt"/>
+        <line num="147" count="3" type="stmt"/>
+        <line num="148" count="3" type="stmt"/>
+        <line num="154" count="1" type="stmt"/>
+        <line num="159" count="2" type="stmt"/>
+        <line num="160" count="2" type="stmt"/>
+      </file>
+      <file name="index.ts" path="/home/obsidian/Projects/BackyardBBQ/packages/delivery-channels/src/clients/index.ts">
+        <metrics statements="5" coveredstatements="5" conditionals="0" coveredconditionals="0" methods="0" coveredmethods="0"/>
+        <line num="1" count="1" type="stmt"/>
+        <line num="2" count="1" type="stmt"/>
+        <line num="3" count="1" type="stmt"/>
+        <line num="4" count="1" type="stmt"/>
+        <line num="5" count="1" type="stmt"/>
+      </file>
+      <file name="status-mapping.ts" path="/home/obsidian/Projects/BackyardBBQ/packages/delivery-channels/src/clients/status-mapping.ts">
+        <metrics statements="6" coveredstatements="6" conditionals="2" coveredconditionals="2" methods="1" coveredmethods="1"/>
+        <line num="8" count="5" type="stmt"/>
+        <line num="17" count="5" type="stmt"/>
+        <line num="44" count="5" type="stmt"/>
+        <line num="49" count="44" type="stmt"/>
+        <line num="50" count="44" type="cond" truecount="2" falsecount="0"/>
+        <line num="54" count="44" type="stmt"/>
+      </file>
+      <file name="ubereats-client.ts" path="/home/obsidian/Projects/BackyardBBQ/packages/delivery-channels/src/clients/ubereats-client.ts">
+        <metrics statements="32" coveredstatements="32" conditionals="36" coveredconditionals="36" methods="9" coveredmethods="9"/>
+        <line num="1" count="2" type="stmt"/>
+        <line num="16" count="2" type="stmt"/>
+        <line num="18" count="2" type="stmt"/>
+        <line num="19" count="51" type="stmt"/>
+        <line num="23" count="51" type="stmt"/>
+        <line num="24" count="51" type="cond" truecount="6" falsecount="0"/>
+        <line num="28" count="2" type="stmt"/>
+        <line num="36" count="3" type="cond" truecount="8" falsecount="0"/>
+        <line num="37" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="38" count="1" type="stmt"/>
+        <line num="41" count="2" type="stmt"/>
+        <line num="51" count="1" type="stmt"/>
+        <line num="59" count="1" type="stmt"/>
+        <line num="69" count="1" type="stmt"/>
+        <line num="78" count="3" type="cond" truecount="4" falsecount="0"/>
+        <line num="79" count="1" type="stmt"/>
+        <line num="82" count="2" type="stmt"/>
+        <line num="88" count="2" type="stmt"/>
+        <line num="101" count="2" type="cond" truecount="4" falsecount="0"/>
+        <line num="102" count="1" type="stmt"/>
+        <line num="105" count="1" type="stmt"/>
+        <line num="121" count="2" type="cond" truecount="4" falsecount="0"/>
+        <line num="122" count="1" type="stmt"/>
+        <line num="125" count="1" type="stmt"/>
+        <line num="138" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="139" count="1" type="stmt"/>
+        <line num="146" count="2" type="stmt"/>
+        <line num="147" count="2" type="stmt"/>
+        <line num="148" count="2" type="stmt"/>
+        <line num="154" count="1" type="stmt"/>
+        <line num="159" count="1" type="stmt"/>
+        <line num="160" count="1" type="stmt"/>
+      </file>
+    </package>
+  </project>
+</coverage>

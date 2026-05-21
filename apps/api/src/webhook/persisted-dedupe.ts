@@ -1,29 +1,26 @@
-type StripeEventLike = {
-  id: string;
-  type: string;
-};
-
-type PersistedWebhookEventRow = {
+type WebhookEventRow = {
   payload: unknown;
 };
 
 type IntegrationEventReader = {
   findMany: (args: {
     where: {
-      channel: "stripe";
+      channel: "epos";
       eventType: string;
       createdAt: { gte: Date };
     };
     orderBy: { createdAt: "desc" };
     take: number;
     select: { payload: true };
-  }) => Promise<PersistedWebhookEventRow[]>;
+  }) => Promise<WebhookEventRow[]>;
 };
 
-export async function isPersistedDuplicateWebhookEvent(input: {
+export async function isPersistedDuplicateIntegrationEvent(input: {
   hasDatabaseUrl: boolean;
   integrationEvent: IntegrationEventReader;
-  event: StripeEventLike;
+  channel: "epos";
+  eventType: string;
+  eventId: string;
   webhookEventTtlMs: number;
   now?: number;
 }) {
@@ -35,8 +32,8 @@ export async function isPersistedDuplicateWebhookEvent(input: {
   const since = new Date(now - input.webhookEventTtlMs);
   const recentEvents = await input.integrationEvent.findMany({
     where: {
-      channel: "stripe",
-      eventType: input.event.type,
+      channel: input.channel,
+      eventType: input.eventType,
       createdAt: { gte: since }
     },
     orderBy: { createdAt: "desc" },
@@ -52,6 +49,6 @@ export async function isPersistedDuplicateWebhookEvent(input: {
     }
 
     const payload = row.payload as Record<string, unknown>;
-    return payload.eventId === input.event.id;
+    return payload.eventId === input.eventId;
   });
 }

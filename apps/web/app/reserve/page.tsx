@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { ReserveClient } from "./ReserveClient";
+import { featureFlags } from "../config/content";
 
 export const metadata: Metadata = {
   title: "Reserve A Table",
@@ -8,5 +10,9 @@ export const metadata: Metadata = {
 };
 
 export default function ReservePage() {
+  if (!featureFlags.isDineInEnabled) {
+    redirect("/");
+  }
+  
   return <ReserveClient />;
 }

@@ -2,6 +2,7 @@ import { prisma } from '../../lib/prisma';
 import { SiteNavbar } from '../components/SiteNavbar';
 import { SiteFooter } from '../components/HomeSections';
 import { MenuClient } from './MenuClient';
+import { featureFlags } from '../config/content';
 import styles from './menu.module.css';
 
 export const metadata = {
@@ -88,7 +89,7 @@ export default async function MenuPage() {
           <h1>Slow-Smoked BBQ, Sides & More</h1>
           <p>
             Browse our complete menu of Texas-style smoked meats, hand-crafted sides, and refreshing beverages.
-            All items available for dine-in, takeout, and catering.
+            All items available for {featureFlags.isDineInEnabled ? 'dine-in, takeout, and catering' : 'takeout and catering'}.
           </p>
         </div>
       </section>

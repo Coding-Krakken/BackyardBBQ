@@ -1,21 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import Stripe from "stripe";
 import { z } from "zod";
+import { createEposTransaction, getEposTenderTypeId } from "../../../../lib/epos-now";
 import { authOptions } from "../../../../lib/auth";
+import { getPaymentProvider, unsupportedProviderMessage } from "../../../lib/payment-provider";
 import { prisma } from "../../../../lib/prisma";
-
-function getStripeClient() {
-  const secretKey = process.env.STRIPE_SECRET_KEY;
-
-  if (!secretKey) {
-    throw new Error("Missing STRIPE_SECRET_KEY environment variable");
-  }
-
-  return new Stripe(secretKey, {
-    apiVersion: "2026-04-22.dahlia",
-  });
-}
 
 const requestSchema = z.object({
   bookingId: z.string().min(1),
@@ -23,7 +12,15 @@ const requestSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    const stripe = getStripeClient();
+    const provider = getPaymentProvider();
+
+    if (provider !== "epos") {
+      return NextResponse.json(
+        { error: unsupportedProviderMessage("/api/payments/create-catering-deposit-session") },
+        { status: 501 }
+      );
+    }
+
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
@@ -72,84 +69,68 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Deposit amount is not configured" }, { status: 400 });
     }
 
-    const customer = await prisma.customer.findUnique({
-      where: { id: session.user.id },
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        stripeCustomerId: true,
-      },
-    });
+    const referenceCode = `booking:${booking.id}`;
+    const tenderTypeId = getEposTenderTypeId();
 
-    if (!customer) {
-      return NextResponse.json({ error: "Customer not found" }, { status: 404 });
-    }
-
-    let stripeCustomerId = customer.stripeCustomerId;
-
-    if (!stripeCustomerId) {
-      const stripeCustomer = await stripe.customers.create({
-        email: customer.email,
-        name:
-          [customer.firstName, customer.lastName]
-            .filter(Boolean)
-            .join(" ")
-            .trim() || undefined,
-        metadata: {
-          customerId: customer.id,
-        },
-      });
-
-      stripeCustomerId = stripeCustomer.id;
-
-      await prisma.customer.update({
-        where: { id: customer.id },
-        data: { stripeCustomerId },
-      });
-    }
-
-    const checkoutSession = await stripe.checkout.sessions.create({
-      ui_mode: "elements",
-      mode: "payment",
-      customer: stripeCustomerId,
-      line_items: [
+    const createdTransaction = await createEposTransaction({
+      DateTime: new Date().toISOString(),
+      StatusId: 1,
+      ServiceType: 1,
+      TotalAmount: Number((depositCents / 100).toFixed(2)),
+      ServiceCharge: 0,
+      Gratuity: 0,
+      IsTransactionIncTax: true,
+      ReferenceCode: referenceCode,
+      TransactionItems: [],
+      MiscProductItems: [],
+      Tenders: [
         {
-          price_data: {
-            currency: "usd",
-            unit_amount: depositCents,
-            product_data: {
-              name: "Backyard BBQ Catering Deposit",
-              description: `Deposit for booking ${booking.id.slice(0, 8)} (${booking.partySize} guests)`,
-            },
-          },
-          quantity: 1,
+          TenderTypeId: tenderTypeId,
+          Amount: Number((depositCents / 100).toFixed(2)),
+          ChangeGiven: 0,
         },
       ],
-      automatic_tax: {
-        enabled: true,
-      },
-      customer_update: {
-        address: "auto",
-      },
-      payment_intent_data: {
-        setup_future_usage: "off_session",
-      },
-      metadata: {
-        source: "catering-deposit",
-        bookingId: booking.id,
-        paymentType: "deposit",
-        estimatedTotalCents: String(booking.estimatedTotalCents ?? 0),
-        eventDate: booking.eventDate.toISOString(),
-      },
-      return_url: `${process.env.NEXT_PUBLIC_SITE_URL}/catering/bookings/${booking.id}/deposit/success?session_id={CHECKOUT_SESSION_ID}`,
+      AdjustStock: false,
     });
 
+    const existingDepositPayment = await prisma.paymentTransaction.findFirst({
+      where: {
+        bookingId: booking.id,
+        paymentType: "deposit",
+      },
+      select: { id: true },
+    });
+
+    if (existingDepositPayment) {
+      await prisma.paymentTransaction.update({
+        where: { id: existingDepositPayment.id },
+        data: {
+          customerId: session.user.id,
+          amountCents: depositCents,
+          currency: "usd",
+          status: "succeeded",
+          stripePaymentIntentId: `epos_txn_${createdTransaction.id}`,
+        },
+      });
+    } else {
+      await prisma.paymentTransaction.create({
+        data: {
+          customerId: session.user.id,
+          bookingId: booking.id,
+          paymentType: "deposit",
+          stripePaymentIntentId: `epos_txn_${createdTransaction.id}`,
+          amountCents: depositCents,
+          currency: "usd",
+          status: "succeeded",
+        },
+      });
+    }
+
     return NextResponse.json({
-      clientSecret: checkoutSession.client_secret,
-      sessionId: checkoutSession.id,
+      clientSecret: null,
+      sessionId: `epos_booking_${booking.id}`,
       amountCents: depositCents,
+      provider,
     });
   } catch (error) {
     console.error("Create catering deposit session error:", error);

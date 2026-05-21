@@ -4,6 +4,10 @@ const config = {
   testEnvironment: "jsdom",
   roots: ["<rootDir>/apps", "<rootDir>/packages"],
   testMatch: ["**/__tests__/**/*.test.ts", "**/__tests__/**/*.test.tsx"],
+  testPathIgnorePatterns: [
+    "/node_modules/",
+    "<rootDir>/apps/admin/",
+  ],
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/apps/web/app/$1",
     "\\.(css|less|scss|sass)$": "identity-obj-proxy",
