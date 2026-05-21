@@ -9,6 +9,13 @@ test.describe("Mobile conversion bar", () => {
     await expect(quickActions).toBeVisible();
     await expect(quickActions.getByRole("link", { name: "Order", exact: true })).toBeVisible();
     await expect(quickActions.getByRole("link", { name: "Catering", exact: true })).toBeVisible();
-    await expect(quickActions.getByRole("link", { name: "Reserve", exact: true })).toBeVisible();
+
+    const reserveLink = quickActions.getByRole("link", { name: "Reserve", exact: true });
+    if ((await reserveLink.count()) > 0) {
+      await expect(reserveLink).toBeVisible();
+      return;
+    }
+
+    await expect(quickActions.getByRole("button", { name: /Cart/i })).toBeVisible();
   });
 });

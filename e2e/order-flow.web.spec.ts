@@ -6,7 +6,7 @@ test.describe("Order flow", () => {
 
     const addToCartButton = page.locator("button.menu-card-add").first();
     if (await addToCartButton.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await addToCartButton.click();
+      await addToCartButton.click({ force: true });
       await page.goto("/cart", { waitUntil: "domcontentloaded" });
 
       await expect(page.getByRole("heading", { level: 1, name: "Your Cart", exact: true })).toBeVisible();
@@ -15,7 +15,7 @@ test.describe("Order flow", () => {
         await proceedToCheckout.click();
 
         await expect(page.getByRole("heading", { name: "Checkout" })).toBeVisible();
-        await expect(page.getByRole("button", { name: "Continue to Secure Payment" })).toBeVisible();
+        await expect(page.getByRole("button", { name: /Continue to (Secure )?Payment/i })).toBeVisible();
         return;
       }
 

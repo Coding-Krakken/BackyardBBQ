@@ -12,10 +12,12 @@ test.describe("@catering Guest catering checkout readiness", () => {
   test("submits catering quote and keeps checkout path available", async ({ page }) => {
     await page.goto("/catering", { waitUntil: "domcontentloaded" });
 
-    const wizardPanel = page.locator(".wizard-panel");
+    const wizardPanel = page.locator("article").filter({ hasText: "Quote Wizard" }).first();
+    await expect(wizardPanel).toBeVisible();
     await page.getByRole("button", { name: "Get Catering Quote" }).first().click({ force: true });
 
     await wizardPanel.getByLabel("Event date").fill("2026-08-14");
+    await wizardPanel.getByLabel("Event address").fill("123 Oak Street, Syracuse, NY");
     await wizardPanel.getByRole("button", { name: "Continue" }).click();
     await wizardPanel.getByLabel("Guest count").fill("48");
     await wizardPanel.getByRole("button", { name: "Continue" }).click();
