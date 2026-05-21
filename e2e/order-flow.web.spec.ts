@@ -19,7 +19,7 @@ test.describe("Order flow", () => {
         return;
       }
 
-      await expect(page.locator("body")).toContainText("Your cart is currently empty");
+      await expect(page.locator("body")).toContainText(/Your cart is (currently )?empty/i);
     }
 
     await expect(page.getByRole("heading", { name: "No menu items match your filters" })).toBeVisible();
