@@ -8,7 +8,7 @@ import { CartDrawer } from "./components/cart/CartDrawer";
 import { MobileBottomBar } from "./components/MobileBottomBar";
 import { MobileCartCTA } from "./components/MobileCartCTA";
 import { JsonLd } from "./components/seo/JsonLd";
-import { businessInfo } from "./config/content";
+import { businessInfo, featureFlags } from "./config/content";
 
 const displayFont = Cormorant_Garamond({
   subsets: ["latin"],
@@ -64,7 +64,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const restaurantSchema = {
     "@context": "https://schema.org",
-    "@type": ["Restaurant", "LocalBusiness"],
+    "@type": featureFlags.isDineInEnabled ? ["Restaurant", "LocalBusiness"] : ["LocalBusiness"],
     name: "Backyard BBQ King",
     image: `${siteUrl}${defaultOgImage}`,
     url: siteUrl,
@@ -78,7 +78,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     },
     servesCuisine: "BBQ",
     priceRange: "$$",
-    openingHoursSpecification: [{ "@type": "OpeningHoursSpecification", description: businessInfo.hours }]
+    ...(featureFlags.isDineInEnabled && {
+      openingHoursSpecification: [{ "@type": "OpeningHoursSpecification", description: businessInfo.hours }]
+    })
   };
 
   return (

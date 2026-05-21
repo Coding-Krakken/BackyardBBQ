@@ -5,13 +5,13 @@ import { createPortal } from "react-dom";
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
-import { orderingLinks } from "../config/content";
+import { orderingLinks, featureFlags } from "../config/content";
 import { MagneticButton } from "./MagneticButton";
 import { springs } from "../lib/animations";
 import { CartIcon } from "./cart/CartIcon";
 import { trackEvent } from "../lib/analytics";
 
-const navLinks = [
+const baseNavLinks = [
   { href: "/", label: "Home" },
   { href: "/menu", label: "Order Online" },
   { href: "/menu", label: "Menu" },
@@ -19,18 +19,26 @@ const navLinks = [
   { href: "/reserve", label: "Reserve A Table" }
 ] as const;
 
+const navLinks = baseNavLinks.filter(link => 
+  link.href !== "/reserve" || featureFlags.isDineInEnabled
+);
+
 const primaryDesktopCta = {
   href: orderingLinks.orderOnlineUrl,
   label: "Start Order"
 } as const;
 
-const ctaLinks = [
+const baseCtaLinks = [
   { href: orderingLinks.orderOnlineUrl, label: "Order Online", variant: "primary" },
   { href: orderingLinks.cateringInquiryUrl, label: "Catering", variant: "secondary" },
   { href: "/reserve", label: "Reserve A Table", variant: "secondary" },
   { href: orderingLinks.doordashUrl, label: "DoorDash", variant: "ghost" },
   { href: orderingLinks.uberEatsUrl, label: "Uber Eats", variant: "ghost" }
 ] as const;
+
+const ctaLinks = baseCtaLinks.filter(link => 
+  link.href !== "/reserve" || featureFlags.isDineInEnabled
+);
 
 function isExternalUrl(url: string) {
   return /^https?:\/\//.test(url);

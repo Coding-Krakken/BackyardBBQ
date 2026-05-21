@@ -6,7 +6,8 @@ import { useSession } from "next-auth/react";
 import { useEffect, useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { DashboardHeader, DashboardSidebar } from "../components/DashboardLayout";
-import { businessInfo } from "../../config/content";
+import Link from "next/link";
+import { businessInfo, featureFlags } from "../../config/content";
 function getFaqItems() {
   return [
     {
@@ -165,13 +166,18 @@ export default function SupportPage() {
             </article>
 
             <article className="panel">
-              <h3>🏪 Visit Us</h3>
+              <h3>{featureFlags.isDineInEnabled ? '🏪 Visit Us' : '🚚 Service Area'}</h3>
               <p style={{ color: "var(--warm-gray)", marginTop: "0.8rem" }}>
                 {businessInfo.location}
               </p>
               <p style={{ color: "var(--warm-gray)", fontSize: "0.9rem", marginTop: "0.5rem" }}>
-                {businessInfo.hours}
+                {featureFlags.isDineInEnabled ? businessInfo.hours : businessInfo.truckSchedule}
               </p>
+              {!featureFlags.isDineInEnabled && (
+                <p style={{ color: "var(--warm-gray)", fontSize: "0.9rem", marginTop: "0.5rem" }}>
+                  {businessInfo.cateringAvailability}
+                </p>
+              )}
             </article>
           </div>
 

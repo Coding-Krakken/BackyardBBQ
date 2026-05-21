@@ -9,6 +9,7 @@ import {
   businessInfo,
   cateringHighlights,
   featureHighlights,
+  featureFlags,
   galleryImages,
   heroContent,
   menuItems,
@@ -837,7 +838,7 @@ export function OrderingHubSection() {
 }
 
 export function HowItWorksSection() {
-  const steps = [
+  const baseSteps = [
     {
       title: "Order Pickup or Delivery",
       description: "Build your cart, choose pickup or delivery, and checkout in minutes."
@@ -852,11 +853,15 @@ export function HowItWorksSection() {
     }
   ] as const;
 
+  const steps = baseSteps.filter(step => 
+    step.title !== "Reserve A Table" || featureFlags.isDineInEnabled
+  );
+
   return (
     <section className="page-shell section">
       <div className="section-heading center">
         <span className="eyebrow">How It Works</span>
-        <h2>Three Fast Paths to Great BBQ</h2>
+        <h2>{featureFlags.isDineInEnabled ? 'Three Fast Paths to Great BBQ' : 'Two Fast Paths to Great BBQ'}</h2>
       </div>
       <div className="info-primary-grid">
         {steps.map((step, index) => (
@@ -920,6 +925,10 @@ export function GallerySection() {
 export function FinalCtaSection() {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: "-100px" });
+
+  if (!featureFlags.isDineInEnabled) {
+    return null;
+  }
 
   return (
     <motion.section
@@ -1022,7 +1031,7 @@ export function SiteFooter() {
           <a href="/">Home</a>
           <a href="/menu">Menu</a>
           <a href="/catering">Catering</a>
-          <a href="/reserve">Reserve A Table</a>
+          {featureFlags.isDineInEnabled && <a href="/reserve">Reserve A Table</a>}
           <a href="/dashboard">Account</a>
         </div>
         <div className="footer-socials" aria-label="Social media links">

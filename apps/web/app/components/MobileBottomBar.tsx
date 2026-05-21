@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCart } from "./cart/CartContext";
 import { AnalyticsEvents, trackEvent } from "../lib/analytics";
+import { featureFlags } from "../config/content";
 
 export function MobileBottomBar() {
   const pathname = usePathname();
@@ -30,13 +31,15 @@ export function MobileBottomBar() {
       >
         <span>Catering</span>
       </Link>
-      <Link
-        href="/reserve"
-        className="mobile-bottom-link"
-        onClick={() => trackEvent(AnalyticsEvents.ctaClickedReserveTable, { source: "mobile_bottom_bar" })}
-      >
-        <span>Reserve</span>
-      </Link>
+      {featureFlags.isDineInEnabled && (
+        <Link
+          href="/reserve"
+          className="mobile-bottom-link"
+          onClick={() => trackEvent(AnalyticsEvents.ctaClickedReserveTable, { source: "mobile_bottom_bar" })}
+        >
+          <span>Reserve</span>
+        </Link>
+      )}
       <button
         type="button"
         className="mobile-bottom-link mobile-bottom-cart"
@@ -54,7 +57,7 @@ export function MobileBottomBar() {
           bottom: 0;
           z-index: 55;
           display: none;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
+          grid-template-columns: repeat(${featureFlags.isDineInEnabled ? '4' : '3'}, minmax(0, 1fr));
           gap: 0.45rem;
           padding: 0.5rem 0.65rem calc(0.5rem + env(safe-area-inset-bottom));
           background: linear-gradient(180deg, rgba(9, 14, 17, 0.94), rgba(6, 8, 9, 0.98));

@@ -1,5 +1,10 @@
 import { galleryImages, menuImages } from "./images";
 
+// Feature flags
+export const featureFlags = {
+  isDineInEnabled: process.env.NEXT_PUBLIC_ENABLE_DINE_IN === "true"
+} as const;
+
 const orderOnlineUrl = process.env.NEXT_PUBLIC_ORDER_ONLINE_URL ?? "/menu";
 const doordashUrl = process.env.NEXT_PUBLIC_DOORDASH_URL ?? "https://www.doordash.com";
 const uberEatsUrl =
@@ -41,10 +46,12 @@ export const heroContent = {
     label: "Book Catering",
     href: cateringInquiryUrl
   },
-  tertiaryCta: {
-    label: "Reserve A Table",
-    href: "/reserve"
-  }
+  ...(featureFlags.isDineInEnabled && {
+    tertiaryCta: {
+      label: "Reserve A Table",
+      href: "/reserve"
+    }
+  })
 };
 
 export const menuItems = [
