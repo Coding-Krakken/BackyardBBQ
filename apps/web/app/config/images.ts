@@ -18,7 +18,7 @@ export const siteImages = {
   },
   catering: {
     src: "/images/marketing/catering.jpg",
-    alt: "Upscale catering table with barbecue platters and warm lighting"
+    alt: "Upscale catering table with barbecue trays and warm lighting"
   },
   whyUsLeft: {
     src: "/images/marketing/why-us-left.jpg",

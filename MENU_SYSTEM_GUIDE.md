@@ -142,12 +142,9 @@ Complete database-driven menu system with shopping cart, admin management, and d
 The system supports 7 menu categories:
 
 1. **mains** - Mains/Platters (brisket, ribs, pulled pork, etc.)
-2. **sandwiches** - Sandwiches
-3. **sides** - Sides (mac & cheese, coleslaw, beans, etc.)
-4. **drinks** - Drinks (tea, lemonade, root beer, etc.)
-5. **desserts** - Desserts (banana pudding, peach cobbler, etc.)
-6. **combos** - Combos/Specials (family packs, tailgate packs)
-7. **kids** - Kids Menu
+2. **drinks** - Drinks (tea, water, soda options)
+3. **meats** - Smoked meats and protein plates
+4. **sides** - Sides (mac & cheese, coleslaw, beans, etc.)
 
 ---
 
@@ -156,14 +153,11 @@ The system supports 7 menu categories:
 **Seed Script:** `packages/database/prisma/seed-menu.ts`
 
 **Seeded Data:**
-- 34 menu items total
-- 7 mains (4 featured)
-- 5 sandwiches
-- 7 sides (1 featured)
-- 5 drinks
-- 4 desserts
-- 3 combos
-- 3 kids items
+- 37 menu items total
+- 3 combos (all featured)
+- 16 meats (featured: Brisket, Beef Ribs, Pork Ribs)
+- 10 sides (featured: Mac & Cheese, Baked Beans)
+- 8 drinks
 
 **Run Seed:**
 ```bash
@@ -173,10 +167,10 @@ npx tsx packages/database/prisma/seed-menu.ts
 **What It Does:**
 1. Creates a default location if none exists
 2. Clears existing menu items for that location
-3. Creates all 34 items with:
+3. Creates all 37 items with:
    - Proper categorization
    - Sort ordering
-   - Unsplash image URLs
+   - High-quality Unsplash image URLs
    - Customization options where applicable
    - Featured flags where applicable
 
@@ -192,9 +186,10 @@ export const TAX_RATE = 0.08; // 8%
 **Categories:** `apps/web/app/config/constants.ts`
 ```typescript
 export const CATEGORIES = [
-  { value: 'mains', label: 'Mains / Platters' },
-  { value: 'sandwiches', label: 'Sandwiches' },
-  // ... etc
+  { value: 'combos', label: 'Combos' },
+  { value: 'drinks', label: 'Drinks' },
+  { value: 'meats', label: 'Meats' },
+  { value: 'sides', label: 'Sides' }
 ];
 ```
 

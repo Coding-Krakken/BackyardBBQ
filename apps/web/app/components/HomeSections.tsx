@@ -12,7 +12,6 @@ import {
   featureFlags,
   galleryImages,
   heroContent,
-  menuItems,
   orderingLinks,
   socialLinks,
   testimonials,

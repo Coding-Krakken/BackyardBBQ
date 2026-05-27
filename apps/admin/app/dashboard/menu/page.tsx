@@ -40,13 +40,10 @@ interface Customization {
 }
 
 const CATEGORIES = [
-  { value: 'mains', label: 'Mains / Platters' },
-  { value: 'sandwiches', label: 'Sandwiches' },
+  { value: 'meats', label: 'Meats' },
   { value: 'sides', label: 'Sides' },
   { value: 'drinks', label: 'Drinks' },
-  { value: 'desserts', label: 'Desserts' },
-  { value: 'combos', label: 'Combos / Specials' },
-  { value: 'kids', label: 'Kids Menu' }
+  { value: 'combos', label: 'Combos' }
 ];
 
 export default function MenuPage() {
@@ -64,7 +61,7 @@ export default function MenuPage() {
   const [formDescription, setFormDescription] = useState('');
   const [formPrice, setFormPrice] = useState('');
   const [formImageUrl, setFormImageUrl] = useState('');
-  const [formCategory, setFormCategory] = useState('mains');
+  const [formCategory, setFormCategory] = useState('meats');
   const [formSortOrder, setFormSortOrder] = useState('0');
   const [formCustomizations, setFormCustomizations] = useState<Customization[]>([]);
   const [formNotes, setFormNotes] = useState('');
@@ -82,7 +79,7 @@ export default function MenuPage() {
     setFormDescription('');
     setFormPrice('');
     setFormImageUrl('');
-    setFormCategory('mains');
+    setFormCategory('meats');
     setFormSortOrder('0');
     setFormCustomizations([]);
     setFormNotes('');

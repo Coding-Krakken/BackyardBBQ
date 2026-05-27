@@ -130,78 +130,66 @@ Here's a simple overview of how everything connects:
 
 # 3 · Your Menu
 
-Your menu is organized into **7 categories** with **34 items** total. Every item has a name, description, price, photo, and optional add-ons.
+Your menu is organized into **4 categories** with **37 items** total. Every item has a name, description, price, photo, and optional add-ons.
 
 <br/>
 
-## 🥩 Mains / Platters
+## 🎉 Combos
 
 | Item | Price | Featured? |
 |------|-------|-----------|
-| Smoked Brisket | $24.00 | ⭐ Yes |
-| BBQ Rib Plate | $22.00 | ⭐ Yes |
-| Pulled Pork Platter | $18.00 | ⭐ Yes |
-| Smoked Chicken Quarter | $14.00 | |
-| Smoked Turkey Breast | $16.00 | |
-| Sausage Link Plate | $13.00 | |
-| BBQ Combo Platter | $28.00 | ⭐ Yes |
+| Half Rack Beef Rib Combo | $28.00 | ⭐ Yes |
+| 4 Beef Rib Combo | $24.00 | ⭐ Yes |
+| 3 Beef Rib Combo | $21.00 | ⭐ Yes |
 
-## 🥪 Sandwiches
+## 🥩 Meats
 
-| Item | Price | Available Add-Ons |
-|------|-------|-------------------|
-| Pulled Pork Sandwich | $16.00 | Add cheese (+$1.50), Extra meat (+$4.00) |
-| Brisket Sandwich | $18.00 | Add cheese (+$1.50), Extra meat (+$5.00) |
-| Chicken Sandwich | $14.00 | — |
-| Sausage Po'Boy | $15.00 | — |
-| Burnt Ends Sandwich | $19.00 | — |
+| Item | Price | Featured? |
+|------|-------|-----------|
+| Brisket | $26.00 | ⭐ Yes |
+| Beef Ribs | $32.00 | ⭐ Yes |
+| Pork Ribs | $24.00 | ⭐ Yes |
+| Beef Sausages | $13.00 | |
+| HotDogs | $6.00 | |
+| Hamburgers | $12.00 | |
+| Pulled Pork | $16.00 | |
+| Pulled Chicken | $14.00 | |
+| Whole Chicken | $22.00 | |
+| 1/2 Chicken | $12.00 | |
+| Breast Only Chicken | $10.00 | |
+| Thighs Only Chicken | $9.00 | |
+| Legs Only Chicken | $8.50 | |
+| Wings Only | $11.00 | |
+| Breast And Wing Chicken | $11.50 | |
+| Leg And Thigh Chicken | $9.50 | |
 
 ## 🥗 Sides
 
 | Item | Price | Featured? |
 |------|-------|-----------|
-| Loaded Mac & Cheese | $8.00 | ⭐ Yes |
-| Classic Coleslaw | $5.00 | |
-| Pit Beans | $6.00 | |
-| Cornbread | $4.00 | |
-| Collard Greens | $6.00 | |
-| Potato Salad | $5.00 | |
-| Fried Okra | $6.00 | |
+| Coleslaw | $4.00 | |
+| Potato Salad | $4.50 | |
+| Green Beans | $4.00 | |
+| Baked Beans | $4.50 | ⭐ Yes |
+| Tuna Salad | $5.00 | |
+| Mac & Cheese | $5.00 | ⭐ Yes |
+| Mac Salad | $4.00 | |
+| Sweet Garlic Butter Corn On The Cob | $3.50 | |
+| Collard Greens | $4.50 | |
+| Fries | $4.00 | |
 
 ## 🥤 Drinks
 
 | Item | Price | Available Add-Ons |
 |------|-------|-------------------|
 | Sweet Tea | $3.00 | Unsweetened option, Extra lemon (+$0.50) |
-| Fresh Lemonade | $3.50 | — |
-| Craft Root Beer | $4.00 | — |
-| Bottled Water | $2.00 | — |
-| Arnold Palmer | $3.50 | — |
-
-## 🍰 Desserts
-
-| Item | Price |
-|------|-------|
-| Banana Pudding | $7.00 |
-| Peach Cobbler | $8.00 |
-| Pecan Pie Slice | $7.50 |
-| Chocolate Brownie | $6.00 |
-
-## 🎉 Combos / Specials
-
-| Item | Price | Serves |
-|------|-------|--------|
-| 2-Meat Combo | $22.00 | 1 person |
-| Family Pack | $55.00 | 4–6 people |
-| Tailgate Pack | $75.00 | 6–8 people |
-
-## 🧒 Kids Menu
-
-| Item | Price |
-|------|-------|
-| Kids Pulled Pork | $9.00 |
-| Kids Chicken Tenders | $8.50 |
-| Kids Mac & Cheese Bowl | $8.00 |
+| Water | $2.00 | — |
+| Orange Soda | $3.00 | — |
+| Fruit Punch | $3.00 | — |
+| Sprite | $3.00 | — |
+| Root Beer | $3.00 | — |
+| Coke 16oz | $3.00 | — |
+| Pepsi 16oz | $3.00 | — |
 
 <br/>
 

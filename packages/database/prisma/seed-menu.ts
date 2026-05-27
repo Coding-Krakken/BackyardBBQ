@@ -25,200 +25,56 @@ async function seedMenu() {
 
   console.log(`Using location: ${location.name} (${location.id})`);
 
-  // Clear existing menu items for this location
-  await prisma.menuItem.deleteMany({
-    where: { locationId: location.id }
-  });
+  // Clear all existing menu items so the actual menu fully replaces any legacy/demo data.
+  await prisma.menuItem.deleteMany({});
 
   console.log('Creating menu items...');
 
   const menuItems = [
-    // MAINS / PLATTERS (7 items)
+    // COMBOS (3 items)
     {
-      name: 'Smoked Brisket',
-      description: '16-hour oak-smoked prime brisket with signature black pepper bark. Served sliced with house BBQ sauce.',
-      basePriceCents: 2400,
-      imageUrl: 'https://images.unsplash.com/photo-1529193591184-b1d58069ecdd?w=800&h=600&fit=crop',
-      category: 'mains',
-      sortOrder: 1,
-      isFeatured: true,
-      customizations: [
-        { name: 'Extra Sauce', priceCents: 100 },
-        { name: 'Double Portion', priceCents: 1200 }
-      ]
-    },
-    {
-      name: 'BBQ Rib Plate',
-      description: 'Full rack of St. Louis-style ribs with sticky lacquered glaze. Fall-off-the-bone tender.',
-      basePriceCents: 2200,
-      imageUrl: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=800&h=600&fit=crop',
-      category: 'mains',
-      sortOrder: 2,
-      isFeatured: true,
-      customizations: [
-        { name: 'Extra Sauce', priceCents: 100 },
-        { name: 'Half Rack', priceCents: -800 }
-      ]
-    },
-    {
-      name: 'Pulled Pork Platter',
-      description: 'Slow-smoked pork shoulder, hand-pulled and served with classic Carolina slaw.',
-      basePriceCents: 1800,
-      imageUrl: 'https://images.unsplash.com/photo-1558030006-450675393462?w=800&h=600&fit=crop',
-      category: 'mains',
-      sortOrder: 3,
-      isFeatured: true
-    },
-    {
-      name: 'Smoked Chicken Quarter',
-      description: 'Juicy quarter chicken with crispy skin and smoky flavor. Your choice of leg or breast.',
-      basePriceCents: 1400,
-      imageUrl: 'https://images.unsplash.com/photo-1562967914-608f82629710?w=800&h=600&fit=crop',
-      category: 'mains',
-      sortOrder: 4
-    },
-    {
-      name: 'Smoked Turkey Breast',
-      description: 'Tender, flavorful smoked turkey breast sliced to order.',
-      basePriceCents: 1600,
-      imageUrl: 'https://images.unsplash.com/photo-1587593810167-a84920ea0781?w=800&h=600&fit=crop',
-      category: 'mains',
-      sortOrder: 5
-    },
-    {
-      name: 'Sausage Link Plate',
-      description: 'House-made smoked sausage with signature spice blend. Two links per order.',
-      basePriceCents: 1300,
-      imageUrl: 'https://images.unsplash.com/photo-1612892483236-52d32a0e0ac1?w=800&h=600&fit=crop',
-      category: 'mains',
-      sortOrder: 6
-    },
-    {
-      name: 'BBQ Combo Platter',
-      description: 'Your choice of three meats. Perfect for sampling the best of our smokehouse.',
+      name: 'Half Rack Beef Rib Combo',
+      description: 'Slow-smoked half rack of beef ribs with bold bark, deep smoke flavor, and two homestyle sides.',
       basePriceCents: 2800,
-      imageUrl: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=800&h=600&fit=crop',
-      category: 'mains',
-      sortOrder: 7,
-      isFeatured: true
-    },
-
-    // SANDWICHES (5 items)
-    {
-      name: 'Pulled Pork Sandwich',
-      description: 'Hand-pulled pork shoulder piled high on brioche bun with ember aioli and crispy slaw.',
-      basePriceCents: 1600,
-      imageUrl: 'https://images.unsplash.com/photo-1553909489-cd47e0907980?w=800&h=600&fit=crop',
-      category: 'sandwiches',
+      imageUrl: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=1200&h=900&fit=crop',
+      category: 'combos',
       sortOrder: 1,
+      isFeatured: true,
       customizations: [
-        { name: 'Add Cheese', priceCents: 150 },
-        { name: 'Extra Meat', priceCents: 400 },
-        { name: 'Make it Spicy', priceCents: 0 }
+        { name: 'Extra BBQ Sauce', priceCents: 100 }
       ]
     },
     {
-      name: 'Brisket Sandwich',
-      description: 'Sliced brisket on Texas toast with pickles, onions, and house BBQ sauce.',
-      basePriceCents: 1800,
-      imageUrl: 'https://images.unsplash.com/photo-1509722747041-616f39b57569?w=800&h=600&fit=crop',
-      category: 'sandwiches',
+      name: '4 Beef Rib Combo',
+      description: 'Four juicy beef ribs smoked low and slow until tender, served with your choice of two classic sides.',
+      basePriceCents: 2400,
+      imageUrl: 'https://images.unsplash.com/photo-1529193591184-b1d58069ecdd?w=1200&h=900&fit=crop',
+      category: 'combos',
       sortOrder: 2,
+      isFeatured: true,
       customizations: [
-        { name: 'Add Cheese', priceCents: 150 },
-        { name: 'Extra Meat', priceCents: 500 }
+        { name: 'Extra BBQ Sauce', priceCents: 100 }
       ]
     },
     {
-      name: 'Chicken Sandwich',
-      description: 'Smoked chicken breast with honey mustard, lettuce, and tomato on brioche.',
-      basePriceCents: 1400,
-      imageUrl: 'https://images.unsplash.com/photo-1606755962773-d324e0a13086?w=800&h=600&fit=crop',
-      category: 'sandwiches',
-      sortOrder: 3
-    },
-    {
-      name: 'Sausage Po\' Boy',
-      description: 'Smoked sausage on French bread with peppers, onions, and Creole mustard.',
-      basePriceCents: 1500,
-      imageUrl: 'https://images.unsplash.com/photo-1615991736497-ec2e14ab3cb0?w=800&h=600&fit=crop',
-      category: 'sandwiches',
-      sortOrder: 4
-    },
-    {
-      name: 'Burnt Ends Sandwich',
-      description: 'Caramelized brisket burnt ends with pickles and BBQ sauce on pretzel bun.',
-      basePriceCents: 1900,
-      imageUrl: 'https://images.unsplash.com/photo-1481070555726-e2fe8357725c?w=800&h=600&fit=crop',
-      category: 'sandwiches',
-      sortOrder: 5
+      name: '3 Beef Rib Combo',
+      description: 'Three meaty beef ribs finished with our signature glaze and paired with two comfort-food sides.',
+      basePriceCents: 2100,
+      imageUrl: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=1200&h=900&fit=crop',
+      category: 'combos',
+      sortOrder: 3,
+      isFeatured: true,
+      customizations: [
+        { name: 'Extra BBQ Sauce', priceCents: 100 }
+      ]
     },
 
-    // SIDES (7 items)
-    {
-      name: 'Loaded Mac & Cheese',
-      description: 'Smoked gouda mac topped with burnt ends and crispy onions.',
-      basePriceCents: 800,
-      imageUrl: 'https://images.unsplash.com/photo-1543339494-b4cd4f7ba686?w=800&h=600&fit=crop',
-      category: 'sides',
-      sortOrder: 1,
-      isFeatured: true
-    },
-    {
-      name: 'Classic Coleslaw',
-      description: 'Creamy coleslaw with cabbage, carrots, and tangy dressing.',
-      basePriceCents: 500,
-      imageUrl: 'https://images.unsplash.com/photo-1600850306720-68005a7d13c7?w=800&h=600&fit=crop',
-      category: 'sides',
-      sortOrder: 2
-    },
-    {
-      name: 'Pit Beans',
-      description: 'Slow-cooked beans with bacon, molasses, and BBQ spices.',
-      basePriceCents: 600,
-      imageUrl: 'https://images.unsplash.com/photo-1552332386-f8dd00dc2f85?w=800&h=600&fit=crop',
-      category: 'sides',
-      sortOrder: 3
-    },
-    {
-      name: 'Cornbread',
-      description: 'Sweet, buttery cornbread baked fresh daily.',
-      basePriceCents: 400,
-      imageUrl: 'https://images.unsplash.com/photo-1618164436241-4473940d1f5c?w=800&h=600&fit=crop',
-      category: 'sides',
-      sortOrder: 4
-    },
-    {
-      name: 'Collard Greens',
-      description: 'Southern-style collard greens with smoked ham hock.',
-      basePriceCents: 600,
-      imageUrl: 'https://images.unsplash.com/photo-1598511757337-fe2cafc31ba0?w=800&h=600&fit=crop',
-      category: 'sides',
-      sortOrder: 5
-    },
-    {
-      name: 'Potato Salad',
-      description: 'Classic potato salad with mayo, mustard, and celery.',
-      basePriceCents: 500,
-      imageUrl: 'https://images.unsplash.com/photo-1505253758473-96b7015fcd40?w=800&h=600&fit=crop',
-      category: 'sides',
-      sortOrder: 6
-    },
-    {
-      name: 'Fried Okra',
-      description: 'Crispy fried okra with a hint of cayenne.',
-      basePriceCents: 600,
-      imageUrl: 'https://images.unsplash.com/photo-1633436798787-3fd4e0be80da?w=800&h=600&fit=crop',
-      category: 'sides',
-      sortOrder: 7
-    },
-
-    // DRINKS (5 items)
+    // DRINKS (8 items)
     {
       name: 'Sweet Tea',
-      description: 'Southern-style sweet tea brewed fresh daily.',
+      description: 'Fresh-brewed Southern sweet tea, chilled and perfectly balanced for smoky BBQ plates.',
       basePriceCents: 300,
-      imageUrl: 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=800&h=600&fit=crop',
+      imageUrl: 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=1200&h=900&fit=crop',
       category: 'drinks',
       sortOrder: 1,
       customizations: [
@@ -227,122 +83,285 @@ async function seedMenu() {
       ]
     },
     {
-      name: 'Fresh Lemonade',
-      description: 'House-made lemonade with real lemons.',
-      basePriceCents: 350,
-      imageUrl: 'https://images.unsplash.com/photo-1621506289937-a8e4df240d0b?w=800&h=600&fit=crop',
+      name: 'Water',
+      description: 'Ice-cold bottled water served chilled.',
+      basePriceCents: 200,
+      imageUrl: 'https://images.unsplash.com/photo-1548839140-29a749e1cf4d?w=1200&h=900&fit=crop',
       category: 'drinks',
       sortOrder: 2
     },
     {
-      name: 'Craft Root Beer',
-      description: 'Small-batch root beer with vanilla notes.',
-      basePriceCents: 400,
-      imageUrl: 'https://images.unsplash.com/photo-1581636625402-29b2a704ef13?w=800&h=600&fit=crop',
+      name: 'Orange Soda',
+      description: 'Bright citrus soda with a crisp, bubbly finish.',
+      basePriceCents: 300,
+      imageUrl: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=1200&h=900&fit=crop',
       category: 'drinks',
       sortOrder: 3
     },
     {
-      name: 'Bottled Water',
-      description: 'Chilled spring water.',
-      basePriceCents: 200,
-      imageUrl: 'https://images.unsplash.com/photo-1548839140-29a749e1cf4d?w=800&h=600&fit=crop',
+      name: 'Fruit Punch',
+      description: 'Sweet tropical fruit punch with a refreshing, smooth finish.',
+      basePriceCents: 300,
+      imageUrl: 'https://images.unsplash.com/photo-1622597467836-f3285f2131b8?w=1200&h=900&fit=crop',
       category: 'drinks',
       sortOrder: 4
     },
     {
-      name: 'Arnold Palmer',
-      description: 'Perfect blend of sweet tea and lemonade.',
-      basePriceCents: 350,
-      imageUrl: 'https://images.unsplash.com/photo-1497534547324-0ebb3f052e88?w=800&h=600&fit=crop',
+      name: 'Sprite',
+      description: 'Classic lemon-lime soda, cold and crisp.',
+      basePriceCents: 300,
+      imageUrl: 'https://images.unsplash.com/photo-1624517452488-04869289c4ca?w=1200&h=900&fit=crop',
       category: 'drinks',
       sortOrder: 5
     },
-
-    // DESSERTS (4 items)
     {
-      name: 'Banana Pudding',
-      description: 'Classic Southern banana pudding with vanilla wafers and whipped cream.',
-      basePriceCents: 700,
-      imageUrl: 'https://images.unsplash.com/photo-1488477181946-6428a0291777?w=800&h=600&fit=crop',
-      category: 'desserts',
+      name: 'Root Beer',
+      description: 'Smooth and creamy root beer with rich vanilla notes.',
+      basePriceCents: 300,
+      imageUrl: 'https://images.unsplash.com/photo-1629203851122-3726ecdf080e?w=1200&h=900&fit=crop',
+      category: 'drinks',
+      sortOrder: 6
+    },
+    {
+      name: 'Coke 16oz',
+      description: '16oz Coca-Cola served ice cold.',
+      basePriceCents: 300,
+      imageUrl: 'https://images.unsplash.com/photo-1596803244535-925769f38992?w=1200&h=900&fit=crop',
+      category: 'drinks',
+      sortOrder: 7
+    },
+    {
+      name: 'Pepsi 16oz',
+      description: '16oz Pepsi with bold cola flavor, served chilled.',
+      basePriceCents: 300,
+      imageUrl: 'https://images.unsplash.com/photo-1625772299848-391b6a87d7b3?w=1200&h=900&fit=crop',
+      category: 'drinks',
+      sortOrder: 8
+    },
+
+    // MEATS (16 items)
+    {
+      name: 'Beef Sausages',
+      description: 'House-smoked beef sausages with a snappy casing, juicy center, and deep pit flavor.',
+      basePriceCents: 1300,
+      imageUrl: 'https://images.unsplash.com/photo-1612392062798-2dbea6e9c097?w=1200&h=900&fit=crop',
+      category: 'meats',
       sortOrder: 1
     },
     {
-      name: 'Peach Cobbler',
-      description: 'Warm peach cobbler with buttery crust. Served with vanilla ice cream.',
-      basePriceCents: 800,
-      imageUrl: 'https://images.unsplash.com/photo-1486427944299-d1955d23e34d?w=800&h=600&fit=crop',
-      category: 'desserts',
-      sortOrder: 2
-    },
-    {
-      name: 'Pecan Pie Slice',
-      description: 'Traditional pecan pie with brown sugar and bourbon.',
-      basePriceCents: 750,
-      imageUrl: 'https://images.unsplash.com/photo-1535920527002-b35e96722eb9?w=800&h=600&fit=crop',
-      category: 'desserts',
-      sortOrder: 3
-    },
-    {
-      name: 'Chocolate Brownie',
-      description: 'Fudgy brownie with walnuts and chocolate chips.',
+      name: 'HotDogs',
+      description: 'All-beef hotdogs grilled and served on toasted buns with classic topping options.',
       basePriceCents: 600,
-      imageUrl: 'https://images.unsplash.com/photo-1607920591413-4ec007e70023?w=800&h=600&fit=crop',
-      category: 'desserts',
+      imageUrl: 'https://images.unsplash.com/photo-1612392062798-2dbea6e9c097?w=1200&h=900&fit=crop',
+      category: 'meats',
+      sortOrder: 2,
+      customizations: [
+        { name: 'Add Chili', priceCents: 200 },
+        { name: 'Add Cheese', priceCents: 150 }
+      ]
+    },
+    {
+      name: 'Hamburgers',
+      description: 'Juicy grilled burgers with smoky sear and fresh toppings.',
+      basePriceCents: 1200,
+      imageUrl: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=1200&h=900&fit=crop',
+      category: 'meats',
+      sortOrder: 3,
+      customizations: [
+        { name: 'Add Cheese', priceCents: 150 },
+        { name: 'Add Bacon', priceCents: 200 }
+      ]
+    },
+    {
+      name: 'Pulled Chicken',
+      description: 'Tender smoked chicken, hand-pulled and finished with light pit seasoning.',
+      basePriceCents: 1400,
+      imageUrl: 'https://images.unsplash.com/photo-1598103442097-8b74394b95c6?w=1200&h=900&fit=crop',
+      category: 'meats',
       sortOrder: 4
     },
-
-    // COMBOS / SPECIALS (3 items)
     {
-      name: '2-Meat Combo',
-      description: 'Your choice of two meats with two sides and cornbread.',
-      basePriceCents: 2200,
-      imageUrl: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=800&h=600&fit=crop',
-      category: 'combos',
-      sortOrder: 1
+      name: 'Pulled Pork',
+      description: 'Slow-smoked pork shoulder, juicy and full of sweet, savory smoke flavor.',
+      basePriceCents: 1600,
+      imageUrl: 'https://images.unsplash.com/photo-1558030006-450675393462?w=1200&h=900&fit=crop',
+      category: 'meats',
+      sortOrder: 5
     },
     {
-      name: 'Family Pack',
-      description: '2 lbs of meat (mix & match), 4 sides, and 6 pieces of cornbread. Feeds 4-6.',
-      basePriceCents: 5500,
-      imageUrl: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=800&h=600&fit=crop',
-      category: 'combos',
-      sortOrder: 2
+      name: 'Breast Only Chicken',
+      description: 'Lean smoked chicken breast sliced fresh with delicate smoke and natural juices.',
+      basePriceCents: 1000,
+      imageUrl: 'https://images.unsplash.com/photo-1587593810167-a84920ea0781?w=1200&h=900&fit=crop',
+      category: 'meats',
+      sortOrder: 6
     },
     {
-      name: 'Tailgate Pack',
-      description: '3 lbs of mixed meats, 6 sides, 12 pieces of cornbread. Feeds 6-8.',
-      basePriceCents: 7500,
-      imageUrl: 'https://images.unsplash.com/photo-1529193591184-b1d58069ecdd?w=800&h=600&fit=crop',
-      category: 'combos',
-      sortOrder: 3
-    },
-
-    // KIDS MENU (3 items)
-    {
-      name: 'Kids Pulled Pork',
-      description: 'Pulled pork slider with one side and a drink.',
+      name: 'Thighs Only Chicken',
+      description: 'Rich, tender smoked chicken thighs with bold seasoning and deep flavor.',
       basePriceCents: 900,
-      imageUrl: 'https://images.unsplash.com/photo-1553909489-cd47e0907980?w=800&h=600&fit=crop',
-      category: 'kids',
+      imageUrl: 'https://images.unsplash.com/photo-1562967914-608f82629710?w=1200&h=900&fit=crop',
+      category: 'meats',
+      sortOrder: 7
+    },
+    {
+      name: 'Legs Only Chicken',
+      description: 'Smoked chicken legs with crisped skin and juicy, flavorful meat.',
+      basePriceCents: 850,
+      imageUrl: 'https://images.unsplash.com/photo-1626645738196-c2a7c87a8f58?w=1200&h=900&fit=crop',
+      category: 'meats',
+      sortOrder: 8
+    },
+    {
+      name: 'Whole Chicken',
+      description: 'Whole bird smoked evenly for full flavor, crispy skin, and moist meat from end to end.',
+      basePriceCents: 2200,
+      imageUrl: 'https://images.unsplash.com/photo-1587593810167-a84920ea0781?w=1200&h=900&fit=crop',
+      category: 'meats',
+      sortOrder: 9
+    },
+    {
+      name: '1/2 Chicken',
+      description: 'Half smoked chicken, perfectly seasoned and pit-cooked until tender.',
+      basePriceCents: 1200,
+      imageUrl: 'https://images.unsplash.com/photo-1562967914-608f82629710?w=1200&h=900&fit=crop',
+      category: 'meats',
+      sortOrder: 10
+    },
+    {
+      name: 'Wings only',
+      description: 'Smoky chicken wings with crisp edges and juicy centers.',
+      basePriceCents: 1100,
+      imageUrl: 'https://images.unsplash.com/photo-1608039829572-78524f79c4c7?w=1200&h=900&fit=crop',
+      category: 'meats',
+      sortOrder: 11
+    },
+    {
+      name: 'Breast And Wing Chicken',
+      description: 'A balanced white-meat plate featuring smoked breast and wing cuts.',
+      basePriceCents: 1150,
+      imageUrl: 'https://images.unsplash.com/photo-1587593810167-a84920ea0781?w=1200&h=900&fit=crop',
+      category: 'meats',
+      sortOrder: 12
+    },
+    {
+      name: 'Leg And Thigh Chicken',
+      description: 'Dark-meat combo with smoky depth and extra juiciness.',
+      basePriceCents: 950,
+      imageUrl: 'https://images.unsplash.com/photo-1626645738196-c2a7c87a8f58?w=1200&h=900&fit=crop',
+      category: 'meats',
+      sortOrder: 13
+    },
+    {
+      name: 'Pork Ribs',
+      description: 'St. Louis-style pork ribs with sticky glaze and deep hickory smoke.',
+      basePriceCents: 2400,
+      imageUrl: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=1200&h=900&fit=crop',
+      category: 'meats',
+      sortOrder: 14,
+      isFeatured: true
+    },
+    {
+      name: 'Beef Ribs',
+      description: 'Thick-cut beef ribs with rich marbling, smoked until beautifully tender.',
+      basePriceCents: 3200,
+      imageUrl: 'https://images.unsplash.com/photo-1551218372-a8789b81b253?w=1200&h=900&fit=crop',
+      category: 'meats',
+      sortOrder: 15,
+      isFeatured: true
+    },
+    {
+      name: 'Brisket',
+      description: 'Signature brisket smoked low and slow for a peppery bark, rosy smoke ring, and buttery bite.',
+      basePriceCents: 2600,
+      imageUrl: 'https://images.unsplash.com/photo-1600891964092-4316c288032e?w=1200&h=900&fit=crop',
+      category: 'meats',
+      sortOrder: 16,
+      isFeatured: true
+    },
+
+    // SIDES (10 items)
+    {
+      name: 'Coleslaw',
+      description: 'Cool, crunchy slaw with a creamy tang that cuts perfectly through smoky meats.',
+      basePriceCents: 400,
+      imageUrl: 'https://images.unsplash.com/photo-1600850306720-68005a7d13c7?w=1200&h=900&fit=crop',
+      category: 'sides',
       sortOrder: 1
     },
     {
-      name: 'Kids Chicken Tenders',
-      description: 'Three smoked chicken tenders with one side and a drink.',
-      basePriceCents: 850,
-      imageUrl: 'https://images.unsplash.com/photo-1562967914-608f82629710?w=800&h=600&fit=crop',
-      category: 'kids',
+      name: 'Potato Salad',
+      description: 'Classic potato salad with creamy dressing and bright mustard notes.',
+      basePriceCents: 450,
+      imageUrl: 'https://images.unsplash.com/photo-1505253758473-96b7015fcd40?w=1200&h=900&fit=crop',
+      category: 'sides',
       sortOrder: 2
     },
     {
-      name: 'Kids Mac & Cheese Bowl',
-      description: 'Creamy mac & cheese bowl with a drink and cookie.',
-      basePriceCents: 800,
-      imageUrl: 'https://images.unsplash.com/photo-1543339494-b4cd4f7ba686?w=800&h=600&fit=crop',
-      category: 'kids',
+      name: 'Green Beans',
+      description: 'Southern-style green beans simmered with savory seasoning.',
+      basePriceCents: 400,
+      imageUrl: 'https://images.unsplash.com/photo-1585032226651-759b368d7246?w=1200&h=900&fit=crop',
+      category: 'sides',
       sortOrder: 3
+    },
+    {
+      name: 'Sweet Garlic Butter Corn On The Cob',
+      description: 'Grilled corn brushed with sweet garlic butter for rich, smoky sweetness.',
+      basePriceCents: 350,
+      imageUrl: 'https://images.unsplash.com/photo-1603570388624-7e06cdab0169?w=1200&h=900&fit=crop',
+      category: 'sides',
+      sortOrder: 4
+    },
+    {
+      name: 'Mac Salad',
+      description: 'Chilled macaroni salad with creamy dressing and a light tang.',
+      basePriceCents: 400,
+      imageUrl: 'https://images.unsplash.com/photo-1597140139392-e2de66b4a8b7?w=1200&h=900&fit=crop',
+      category: 'sides',
+      sortOrder: 5
+    },
+    {
+      name: 'Tuna Salad',
+      description: 'Fresh tuna salad made creamy and bright, served cold as a light side.',
+      basePriceCents: 500,
+      imageUrl: 'https://images.unsplash.com/photo-1559847844-d721426d6edc?w=1200&h=900&fit=crop',
+      category: 'sides',
+      sortOrder: 6
+    },
+    {
+      name: 'Baked Beans',
+      description: 'Sweet and smoky pit beans slow-cooked with BBQ spices.',
+      basePriceCents: 450,
+      imageUrl: 'https://images.unsplash.com/photo-1552332386-f8dd00dc2f85?w=1200&h=900&fit=crop',
+      category: 'sides',
+      sortOrder: 7,
+      isFeatured: true
+    },
+    {
+      name: 'Mac & Cheese',
+      description: 'Creamy baked macaroni and cheese with rich cheddar flavor and golden top.',
+      basePriceCents: 500,
+      imageUrl: 'https://images.unsplash.com/photo-1543339494-b4cd4f7ba686?w=1200&h=900&fit=crop',
+      category: 'sides',
+      sortOrder: 8,
+      isFeatured: true
+    },
+    {
+      name: 'Collard Greens',
+      description: 'Slow-simmered collard greens with savory, smoky depth.',
+      basePriceCents: 450,
+      imageUrl: 'https://images.unsplash.com/photo-1598511757337-fe2cafc31ba0?w=1200&h=900&fit=crop',
+      category: 'sides',
+      sortOrder: 9
+    },
+    {
+      name: 'Fries',
+      description: 'Golden fries, hot and crisp, salted and ready for dipping.',
+      basePriceCents: 400,
+      imageUrl: 'https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=1200&h=900&fit=crop',
+      category: 'sides',
+      sortOrder: 10
     }
   ];
 
@@ -366,6 +385,11 @@ async function seedMenu() {
   }
 
   console.log(`\nMenu seed complete! Created ${menuItems.length} items.`);
+  console.log('\nCategories:');
+  console.log('  - Combos: 3 items');
+  console.log('  - Meats: 16 items');
+  console.log('  - Sides: 10 items');
+  console.log('  - Drinks: 8 items');
 }
 
 seedMenu()

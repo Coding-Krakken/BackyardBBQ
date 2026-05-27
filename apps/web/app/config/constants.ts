@@ -3,16 +3,10 @@
 export const TAX_RATE = 0.08; // 8% sales tax
 
 export const CATEGORIES = [
-  { value: 'brisket', label: 'Brisket' },
-  { value: 'ribs', label: 'Ribs' },
-  { value: 'pulled-pork', label: 'Pulled Pork' },
-  { value: 'chicken', label: 'Chicken' },
-  { value: 'sides', label: 'Sides' },
-  { value: 'platters', label: 'Platters' },
-  { value: 'family-meals', label: 'Family Meals' },
+  { value: 'combos', label: 'Combos' },
   { value: 'drinks', label: 'Drinks' },
-  { value: 'desserts', label: 'Desserts' },
-  { value: 'catering-friendly', label: 'Catering-Friendly' }
+  { value: 'meats', label: 'Meats' },
+  { value: 'sides', label: 'Sides' }
 ] as const;
 
 export type CategoryValue = typeof CATEGORIES[number]['value'];

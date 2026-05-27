@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { MenuItemCard } from '../components/menu/MenuItemCard';
 import { MenuItemModal } from '../components/menu/MenuItemModal';
 import { CategoryNav } from '../components/menu/CategoryNav';
-import { CATEGORIES, MENU_BADGES } from '../config/constants';
+import { MENU_BADGES } from '../config/constants';
 import { useCart } from '../components/cart/CartContext';
 import { AnalyticsEvents, trackEvent } from '../lib/analytics';
 
@@ -40,21 +40,12 @@ export function MenuClient({ itemsByCategory }: MenuClientProps) {
 
   const normalize = (value: string | null) => (value ?? '').toLowerCase();
 
-  const categorizeForFilter = (item: MenuItem) => {
-    const category = normalize(item.category);
-    const haystack = `${normalize(item.name)} ${normalize(item.description)}`;
+  const categorizeForFilter = (item: MenuItem) => normalize(item.category);
 
-    if (haystack.includes('brisket')) return 'brisket';
-    if (haystack.includes('rib')) return 'ribs';
-    if (haystack.includes('pulled pork') || haystack.includes('pork shoulder')) return 'pulled-pork';
-    if (haystack.includes('chicken') || haystack.includes('wing')) return 'chicken';
-    if (category.includes('side')) return 'sides';
-    if (category.includes('platter') || category.includes('main')) return 'platters';
-    if (haystack.includes('family') || haystack.includes('tray') || haystack.includes('feeds')) return 'family-meals';
-    if (category.includes('drink') || haystack.includes('tea') || haystack.includes('soda')) return 'drinks';
-    if (category.includes('dessert') || haystack.includes('banana pudding') || haystack.includes('cobbler')) return 'desserts';
-    return 'catering-friendly';
-  };
+  const navCategories = useMemo(
+    () => itemsByCategory.map((group) => ({ value: group.category, label: group.label })),
+    [itemsByCategory]
+  );
 
   const getBadges = (item: MenuItem) => {
     const haystack = `${normalize(item.name)} ${normalize(item.description)}`;
@@ -131,14 +122,14 @@ export function MenuClient({ itemsByCategory }: MenuClientProps) {
         <input
           id="menu-search-input"
           className="menu-search-input"
-          placeholder="Search brisket, ribs, family trays, and more"
+          placeholder="Search combos, meats, sides, drinks, and more"
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
         />
       </section>
 
       <CategoryNav
-        categories={CATEGORIES.map((category) => ({ value: category.value, label: category.label }))}
+        categories={navCategories}
         activeCategory={activeCategory}
         onCategoryChange={setActiveCategory}
       />

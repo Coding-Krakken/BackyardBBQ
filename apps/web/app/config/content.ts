@@ -1,9 +1,4 @@
-import { galleryImages, menuImages } from "./images";
-
-// Feature flags
-export const featureFlags = {
-  isDineInEnabled: process.env.NEXT_PUBLIC_ENABLE_DINE_IN === "true"
-} as const;
+import { galleryImages } from "./images";
 
 const orderOnlineUrl = process.env.NEXT_PUBLIC_ORDER_ONLINE_URL ?? "/menu";
 const doordashUrl = process.env.NEXT_PUBLIC_DOORDASH_URL ?? "https://www.doordash.com";
@@ -13,6 +8,10 @@ const uberEatsUrl =
   "https://www.ubereats.com";
 const grubhubUrl = process.env.NEXT_PUBLIC_GRUBHUB_URL ?? "https://www.grubhub.com";
 const cateringInquiryUrl = process.env.NEXT_PUBLIC_CATERING_INQUIRY_URL ?? "/catering";
+
+export const featureFlags = {
+  isDineInEnabled: process.env.NEXT_PUBLIC_ENABLE_DINE_IN === "true"
+} as const;
 
 export const businessInfo = {
   phone: process.env.NEXT_PUBLIC_PHONE ?? "+1-555-BBQ-KING",
@@ -53,45 +52,6 @@ export const heroContent = {
     }
   })
 };
-
-export const menuItems = [
-  {
-    name: "Smoked Brisket",
-    description: "16-hour oak-smoked prime brisket with black pepper bark.",
-    price: "$24",
-    image: menuImages.brisket
-  },
-  {
-    name: "BBQ Rib Plate",
-    description: "Sticky lacquered ribs with charred corn and pit beans.",
-    price: "$22",
-    image: menuImages.ribs
-  },
-  {
-    name: "Pulled Pork Sandwich",
-    description: "Hand-pulled pork shoulder, slaw, and ember aioli brioche.",
-    price: "$16",
-    image: menuImages.pulledPork
-  },
-  {
-    name: "Loaded Mac Bowl",
-    description: "Smoked gouda mac with burnt ends and crispy onions.",
-    price: "$18",
-    image: menuImages.loadedMac
-  },
-  {
-    name: "Burnt Ends",
-    description: "Caramelized brisket cubes kissed by hickory smoke.",
-    price: "$19",
-    image: menuImages.burntEnds
-  },
-  {
-    name: "Smoked Wings",
-    description: "Crisp smoked wings tossed in chili-honey glaze.",
-    price: "$15",
-    image: menuImages.wings
-  }
-] as const;
 
 export const testimonials = [
   {
