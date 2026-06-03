@@ -14,7 +14,7 @@ export const featureFlags = {
 } as const;
 
 export const businessInfo = {
-  phone: process.env.NEXT_PUBLIC_PHONE ?? "+1-555-BBQ-KING",
+  phone: process.env.NEXT_PUBLIC_PHONE ?? "+1 (315) 641-5189",
   email: process.env.NEXT_PUBLIC_EMAIL ?? "hello@backyardbbqking.com",
   location: process.env.NEXT_PUBLIC_LOCATION ?? "Syracuse, New York",
   hours: process.env.NEXT_PUBLIC_HOURS ?? "Tue-Sat 11am-9pm, Sun 12pm-8pm",

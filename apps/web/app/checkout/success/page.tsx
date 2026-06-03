@@ -215,7 +215,7 @@ function CheckoutSuccessContent() {
               </p>
               <ul>
                 <li>Email: hello@backyardbbqking.com</li>
-                <li>Phone: +1-555-BBQ-KING</li>
+                <li>Phone: +1 (315) 641-5189</li>
               </ul>
               <div className="cta-row" style={{ marginTop: "2rem" }}>
                 <Link href="/checkout" className="btn btn-primary">

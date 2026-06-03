@@ -945,7 +945,7 @@ The following information is displayed on your customer-facing website. If any o
 
 | Field | Current Value |
 |-------|---------------|
-| **Phone** | +1-555-BBQ-KING |
+| **Phone** | +1 (315) 641-5189 |
 | **Email** | hello@backyardbbqking.com |
 | **Location** | Syracuse, New York |
 | **Hours (Smokehouse)** | Tue – Sat: 11am – 9pm · Sun: 12pm – 8pm |
