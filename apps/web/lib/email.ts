@@ -3,7 +3,7 @@ import { Resend } from "resend";
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "Backyard BBQ King <noreply@send.backyardbbqking.com>";
-const OWNER_EMAIL = process.env.CATERING_OWNER_EMAIL || "hello@backyardbbqking.com";
+const OWNER_EMAIL = process.env.CATERING_OWNER_EMAIL || "derek@backyardbbqking.com";
 
 interface CateringInquiryEmailData {
   referenceNumber: string;
