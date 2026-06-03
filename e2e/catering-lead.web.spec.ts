@@ -1,28 +1,38 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("Catering lead flow", () => {
-  test("progresses through wizard and submits inquiry", async ({ page }) => {
+  test("submits inquiry form and displays confirmation", async ({ page }) => {
     await page.goto("/catering", { waitUntil: "domcontentloaded" });
-    const wizardPanel = page.locator(".wizard-panel");
 
-    await page.getByRole("button", { name: "Get Catering Quote" }).first().click({ force: true });
+    const form = page.locator(".inquiry-form");
+    await expect(form).toBeVisible();
 
-    await wizardPanel.getByLabel("Event date").fill("2026-07-10");
-    await wizardPanel.getByRole("button", { name: "Continue" }).click();
-    await expect(wizardPanel.getByRole("heading", { name: "Step 2 of 4" })).toBeVisible();
+    // Fill event details
+    await form.locator("input[type='date']").fill("2026-07-10");
+    await form.locator("input[type='number']").fill("60");
+    await form.locator("input[type='text']").first().fill("Riverside Park Event Center");
 
-    await wizardPanel.getByLabel("Guest count").fill("60");
-    await wizardPanel.getByRole("button", { name: "Continue" }).click();
-    await expect(wizardPanel.getByRole("heading", { name: "Step 3 of 4" })).toBeVisible();
+    // Fill food preferences
+    await form.locator("textarea").first().fill("Brisket, pulled pork, and ribs with all the classic sides. Need a gluten-free option.");
 
-    await wizardPanel.getByLabel("Name").fill("Jordan Smoke");
-    await wizardPanel.getByLabel("Email").fill("jordan@example.com");
-    await wizardPanel.getByLabel("Phone").fill("+1 555-222-3333");
-    await wizardPanel.getByRole("button", { name: "Continue" }).click();
-    await expect(wizardPanel.getByRole("heading", { name: "Step 4 of 4" })).toBeVisible();
+    // Fill contact information
+    await form.locator("input[type='text']").nth(1).fill("Jordan Smoke");
+    await form.locator("input[type='email']").fill("jordan@example.com");
+    await form.locator("input[type='tel']").fill("+1 555-222-3333");
 
-    await wizardPanel.getByRole("button", { name: "Submit Catering Quote" }).click();
+    await page.getByRole("button", { name: "Submit Catering Inquiry" }).click();
 
-    await expect(page.getByRole("heading", { name: "Quote Request Submitted" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Inquiry Submitted!" })).toBeVisible({ timeout: 10000 });
+    await expect(page.locator(".reference")).toContainText(/CAT-/);
+  });
+
+  test("validates required fields before submission", async ({ page }) => {
+    await page.goto("/catering", { waitUntil: "domcontentloaded" });
+
+    await page.getByRole("button", { name: "Submit Catering Inquiry" }).click();
+
+    // Should show validation errors, not navigate away
+    await expect(page).toHaveURL(/\/catering$/);
+    await expect(page.locator(".field-error").first()).toBeVisible();
   });
 });

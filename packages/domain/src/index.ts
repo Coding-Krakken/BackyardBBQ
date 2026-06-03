@@ -137,5 +137,29 @@ export interface CateringInquiry {
   location: string;
 }
 
+// Catering inquiry form validation
+export const cateringInquiryFormSchema = z.object({
+  eventDate: z.string().min(1, "Event date is required"),
+  partySize: z.number().int().min(10, "Minimum 10 guests required"),
+  eventLocation: z.string().min(3, "Please provide an event location"),
+  foodPreferences: z.string().min(10, "Please describe what you'd like for food (at least 10 characters)"),
+  contactName: z.string().min(2, "Name must be at least 2 characters"),
+  contactEmail: z.string().email("Please enter a valid email address"),
+  contactPhone: z.string().min(7, "Please enter a valid phone number"),
+  additionalNotes: z.string().max(2000).optional(),
+});
+
+export type CateringInquiryFormData = z.infer<typeof cateringInquiryFormSchema>;
+
+export const inquiryStatusSchema = z.enum([
+  "pending",
+  "contacted",
+  "booked",
+  "declined",
+  "cancelled",
+]);
+
+export type InquiryStatus = z.infer<typeof inquiryStatusSchema>;
+
 // Re-export payment status constants
 export * from "./constants";

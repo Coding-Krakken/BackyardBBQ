@@ -1,25 +1,19 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
+import { cateringInquiryFormSchema } from "@bbq/domain";
+import { prisma } from "@bbq/database";
+import { sendCateringInquiryNotification, sendCateringConfirmation } from "../../../../lib/email";
 
-const inquirySchema = z.object({
-  eventDate: z.string().min(1),
-  eventType: z.string().min(1),
-  eventAddress: z.string().optional(),
-  partySize: z.number().int().min(1),
-  packageName: z.string().min(1),
-  contactName: z.string().min(2),
-  contactEmail: z.string().email(),
-  contactPhone: z.string().min(7),
-  notes: z.string().max(2000).optional(),
-  estimatedSubtotalCents: z.number().int().min(0),
-  estimatedDepositCents: z.number().int().min(0),
-  estimatedBalanceCents: z.number().int().min(0)
-});
+function generateReferenceNumber(): string {
+  const date = new Date();
+  const datePart = date.toISOString().slice(0, 10).replace(/-/g, "");
+  const randomPart = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `CAT-${datePart}-${randomPart}`;
+}
 
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Record<string, unknown>;
-    const parsed = inquirySchema.safeParse(body);
+    const parsed = cateringInquiryFormSchema.safeParse(body);
 
     if (!parsed.success) {
       return NextResponse.json(
@@ -28,20 +22,53 @@ export async function POST(request: Request) {
       );
     }
 
-    // TODO: Persist to a dedicated CateringInquiry model and trigger CRM/email workflow.
-    const inquiryId = `inq_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const { eventDate, partySize, eventLocation, foodPreferences, contactName, contactEmail, contactPhone, additionalNotes } = parsed.data;
+
+    const referenceNumber = generateReferenceNumber();
+
+    const inquiry = await prisma.cateringInquiry.create({
+      data: {
+        referenceNumber,
+        eventDate: new Date(eventDate),
+        partySize,
+        eventLocation,
+        foodPreferences,
+        contactName,
+        contactEmail,
+        contactPhone,
+        additionalNotes: additionalNotes || null,
+        status: "pending",
+      },
+    });
+
+    // Send emails (non-blocking — don't fail the request if email fails)
+    const emailData = {
+      referenceNumber,
+      eventDate,
+      partySize,
+      eventLocation,
+      foodPreferences,
+      contactName,
+      contactEmail,
+      contactPhone,
+      additionalNotes,
+    };
+
+    void sendCateringInquiryNotification(emailData);
+    void sendCateringConfirmation(emailData);
 
     return NextResponse.json(
       {
-        inquiryId,
-        message: "Catering inquiry submitted. We will confirm availability and follow up shortly."
+        referenceNumber: inquiry.referenceNumber,
+        message: "Catering inquiry submitted. We'll be in touch within 24 hours."
       },
       { status: 201 }
     );
   } catch (error) {
+    console.error("[catering/inquiries] Error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unable to submit inquiry." },
-      { status: 400 }
+      { status: 500 }
     );
   }
 }

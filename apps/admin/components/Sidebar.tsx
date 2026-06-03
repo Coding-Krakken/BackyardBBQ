@@ -19,6 +19,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Overview', href: '/dashboard', roles: ['owner', 'admin', 'manager', 'staff', 'accounting'], icon: '◉', section: 'Main' },
   { label: 'Orders', href: '/dashboard/orders', roles: ['owner', 'admin', 'manager', 'staff'], icon: '⊞', section: 'Main' },
   { label: 'Bookings', href: '/dashboard/bookings', roles: ['owner', 'admin', 'manager', 'staff'], icon: '◈', section: 'Main' },
+  { label: 'Catering', href: '/dashboard/catering', roles: ['owner', 'admin', 'manager'], icon: '⊘', section: 'Main' },
   { label: 'Customers', href: '/dashboard/customers', roles: ['owner', 'admin', 'manager'], icon: '◎', section: 'Main' },
   { label: 'Menu', href: '/dashboard/menu', roles: ['owner', 'admin', 'manager'], icon: '☰', section: 'Manage' },
   { label: 'Analytics', href: '/dashboard/analytics', roles: ['owner', 'admin', 'manager'], icon: '◑', section: 'Manage' },

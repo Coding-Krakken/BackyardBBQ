@@ -37,6 +37,14 @@ enum BookingStatus {
   cancelled
 }
 
+enum InquiryStatus {
+  pending
+  contacted
+  booked
+  declined
+  cancelled
+}
+
 enum PaymentStatus {
   requires_payment_method
   requires_confirmation
@@ -394,4 +402,24 @@ model OnboardingProgress {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   customer        Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+}
+
+model CateringInquiry {
+  id              String        @id @default(cuid())
+  referenceNumber String        @unique
+  eventDate       DateTime
+  partySize       Int
+  eventLocation   String
+  foodPreferences String
+  contactName     String
+  contactEmail    String
+  contactPhone    String
+  additionalNotes String?
+  status          InquiryStatus @default(pending)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([status])
+  @@index([eventDate])
+  @@index([createdAt])
 }

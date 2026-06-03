@@ -21,6 +21,13 @@
     "/api/admin/catering/bookings/[id]/status": {
       "PATCH": ["owner", "admin", "manager", "staff"]
     },
+    "/api/admin/catering/inquiries": {
+      "GET": ["owner", "admin", "manager"]
+    },
+    "/api/admin/catering/inquiries/[id]": {
+      "GET": ["owner", "admin", "manager"],
+      "PATCH": ["owner", "admin", "manager"]
+    },
     "/api/admin/payments": {
       "GET": ["owner", "admin", "accounting"]
     },

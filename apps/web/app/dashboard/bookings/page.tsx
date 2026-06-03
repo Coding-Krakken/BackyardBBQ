@@ -270,17 +270,8 @@ function BookingCard({
         </button>
         {booking.status === "approved" && (
           <>
-            {(booking.depositDueCents ?? booking.depositCents ?? 0) > 0 ? (
-              <Link
-                href={`/catering/bookings/${booking.id}/deposit`}
-                className="btn btn-primary"
-                style={{ flex: "1", minWidth: "160px" }}
-              >
-                Pay Deposit
-              </Link>
-            ) : null}
             <Link href="/catering" className="btn btn-ghost" style={{ flex: "1", minWidth: "120px" }}>
-              Modify Booking
+              Contact About Booking
             </Link>
           </>
         )}

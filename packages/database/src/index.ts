@@ -28,7 +28,7 @@ function getResolvedDatabaseUrl(urlValue: string | undefined): string | undefine
 
 const resolvedDatabaseUrl = getResolvedDatabaseUrl(process.env.DATABASE_URL);
 
-export const prisma = globalThis.__bbqPrisma
+export const prisma: PrismaClient = globalThis.__bbqPrisma
   ?? new PrismaClient(
     resolvedDatabaseUrl
       ? { datasources: { db: { url: resolvedDatabaseUrl } } }

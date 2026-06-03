@@ -1,32 +1,35 @@
 import { expect, test } from "@playwright/test";
 
-test.describe("@catering Guest catering checkout readiness", () => {
-  test("renders catering lead funnel and quote entry action", async ({ page }) => {
+test.describe("@catering Guest catering inquiry flow", () => {
+  test("renders catering inquiry form with required fields", async ({ page }) => {
     const response = await page.goto("/catering", { waitUntil: "domcontentloaded" });
 
     expect(response?.ok()).toBeTruthy();
-    await expect(page.getByRole("button", { name: "Get Catering Quote" }).first()).toBeVisible();
     await expect(page.locator("body")).toContainText(/catering/i);
+    await expect(page.getByRole("heading", { name: "Custom BBQ Catering for Your Event" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Submit Catering Inquiry" })).toBeVisible();
   });
 
-  test("submits catering quote and keeps checkout path available", async ({ page }) => {
+  test("submits catering inquiry and redirects to confirmation", async ({ page }) => {
     await page.goto("/catering", { waitUntil: "domcontentloaded" });
 
-    const wizardPanel = page.locator(".wizard-panel");
-    await page.getByRole("button", { name: "Get Catering Quote" }).first().click({ force: true });
+    const form = page.locator(".inquiry-form");
 
-    await wizardPanel.getByLabel("Event date").fill("2026-08-14");
-    await wizardPanel.getByRole("button", { name: "Continue" }).click();
-    await wizardPanel.getByLabel("Guest count").fill("48");
-    await wizardPanel.getByRole("button", { name: "Continue" }).click();
-    await wizardPanel.getByLabel("Name").fill("Casey Ember");
-    await wizardPanel.getByLabel("Email").fill("casey@example.com");
-    await wizardPanel.getByLabel("Phone").fill("+1 555-818-2233");
-    await wizardPanel.getByRole("button", { name: "Continue" }).click();
-    await wizardPanel.getByRole("button", { name: "Submit Catering Quote" }).click();
+    await form.locator("input[type='date']").fill("2026-08-14");
+    await form.locator("input[type='number']").fill("48");
+    await form.locator("input[type='text']").first().fill("City Park Pavilion, Austin TX");
+    await form.locator("textarea").first().fill("Pulled pork and brisket with mac & cheese, coleslaw, and cornbread for 48 guests");
+    await form.locator("input[type='text']").nth(1).fill("Casey Ember");
+    await form.locator("input[type='email']").fill("casey@example.com");
+    await form.locator("input[type='tel']").fill("+1 555-818-2233");
 
-    await expect(page.getByRole("heading", { name: "Quote Request Submitted" })).toBeVisible();
+    await page.getByRole("button", { name: "Submit Catering Inquiry" }).click();
 
+    await expect(page.getByRole("heading", { name: "Inquiry Submitted!" })).toBeVisible({ timeout: 10000 });
+    await expect(page.locator(".reference")).toContainText(/CAT-/);
+  });
+
+  test("checkout path remains available", async ({ page }) => {
     const checkoutResponse = await page.goto("/checkout", { waitUntil: "domcontentloaded" });
     expect(checkoutResponse?.ok()).toBeTruthy();
     await expect(page).toHaveURL(/\/checkout/);
