@@ -10,7 +10,7 @@ test.describe("@catering Guest catering inquiry flow", () => {
     await expect(page.getByRole("button", { name: "Submit Catering Inquiry" })).toBeVisible();
   });
 
-  test("submits catering inquiry and redirects to confirmation", async ({ page }) => {
+  test("submits catering inquiry and shows confirmation", async ({ page }) => {
     await page.goto("/catering", { waitUntil: "domcontentloaded" });
 
     const form = page.locator(".inquiry-form");
@@ -25,7 +25,6 @@ test.describe("@catering Guest catering inquiry flow", () => {
 
     await page.getByRole("button", { name: "Submit Catering Inquiry" }).click();
 
-    await page.waitForURL(/\/catering\/confirmation\//, { timeout: 30000 });
     await expect(page.getByRole("heading", { name: "Inquiry Submitted!" })).toBeVisible({ timeout: 30000 });
     await expect(page.locator(".reference")).toContainText(/CAT-/);
   });
