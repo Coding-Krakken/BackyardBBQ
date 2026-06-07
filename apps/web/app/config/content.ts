@@ -34,7 +34,7 @@ export const orderingLinks = {
 
 export const heroContent = {
   eyebrow: "Texas-Style Smokehouse + Premium Catering + Food Truck",
-  headline: "Welcome To Backyard BBQ",
+  headline: "Welcome To Backyard BBQ King",
   description:
     "Where we serve mouthwatering smoked meats, premium sides, and warm hospitality in a cinematic atmosphere.",
   primaryCta: {
@@ -57,8 +57,8 @@ export const testimonials = [
   {
     quote:
       "Best brisket I've ever had. Tender, smoky, and served with concierge-level hospitality for our corporate retreat.",
-    name: "Alyssa M.",
-    role: "Operations Director"
+    name: "Derrick F.",
+    role: "Owner"
   },
   {
     quote:
