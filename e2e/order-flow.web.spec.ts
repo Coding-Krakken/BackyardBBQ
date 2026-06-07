@@ -15,7 +15,7 @@ test.describe("Order flow", () => {
         await proceedToCheckout.click();
 
         await expect(page.getByRole("heading", { name: "Checkout" })).toBeVisible();
-        await expect(page.getByRole("button", { name: "Continue to Secure Payment" })).toBeVisible();
+        await expect(page.getByRole("button", { name: "Continue to Payment" })).toBeVisible();
         return;
       }
 

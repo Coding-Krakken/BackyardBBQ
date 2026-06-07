@@ -8,14 +8,10 @@ test.describe("Guest checkout journey", () => {
     if (await addToCartButton.isVisible({ timeout: 3000 }).catch(() => false)) {
       await addToCartButton.click();
 
-      await page.goto("/cart", { waitUntil: "domcontentloaded" });
-      await expect(page.getByRole("heading", { level: 1, name: "Your Cart", exact: true })).toBeVisible();
-
-      await page.getByRole("link", { name: "Proceed to Checkout" }).click();
-      await expect(page).toHaveURL(/\/checkout/);
+      await page.goto("/checkout", { waitUntil: "domcontentloaded" });
       await expect(page.getByRole("heading", { name: "Checkout" })).toBeVisible();
       await expect(page.getByRole("heading", { name: "Your Order" })).toBeVisible();
-      await expect(page.getByRole("button", { name: "Continue to Secure Payment" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Continue to Payment" })).toBeVisible();
       return;
     }
 

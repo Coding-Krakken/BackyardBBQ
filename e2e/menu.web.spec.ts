@@ -6,8 +6,8 @@ test.describe("Web menu experience", () => {
 
     await expect(page.getByRole("heading", { name: "Slow-Smoked BBQ, Sides & More" })).toBeVisible();
     await expect(page.locator(".category-nav").getByRole("button", { name: "All Items", exact: true })).toBeVisible();
-    await expect(page.locator(".category-nav").getByRole("button", { name: "Brisket", exact: true })).toBeVisible();
-    await expect(page.getByPlaceholder("Search brisket, ribs, family trays, and more")).toBeVisible();
+    await expect(page.locator(".category-nav").getByRole("button", { name: "Meats", exact: true })).toBeVisible();
+    await expect(page.getByPlaceholder("Search combos, meats, sides, drinks, and more")).toBeVisible();
   });
 
   test("opens a menu item detail modal when items are available", async ({ page }) => {

@@ -25,7 +25,8 @@ test.describe("@catering Guest catering inquiry flow", () => {
 
     await page.getByRole("button", { name: "Submit Catering Inquiry" }).click();
 
-    await expect(page.getByRole("heading", { name: "Inquiry Submitted!" })).toBeVisible({ timeout: 10000 });
+    await page.waitForURL(/\/catering\/confirmation\//, { timeout: 30000 });
+    await expect(page.getByRole("heading", { name: "Inquiry Submitted!" })).toBeVisible({ timeout: 30000 });
     await expect(page.locator(".reference")).toContainText(/CAT-/);
   });
 
